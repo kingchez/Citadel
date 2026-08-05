@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getN8nBaseUrl } from "@/lib/n8n";
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,9 +13,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const n8nBaseUrl = process.env.N8N_BASE_URL;
-    if (!n8nBaseUrl) {
-      return NextResponse.json({ error: "N8N_BASE_URL is not configured." }, { status: 500 });
+    let n8nBaseUrl: string;
+    try {
+      n8nBaseUrl = getN8nBaseUrl();
+    } catch (err) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
     }
 
     // This just enqueues into the retries table - the retry cron picks it up

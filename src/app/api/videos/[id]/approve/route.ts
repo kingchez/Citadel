@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getN8nBaseUrl } from "@/lib/n8n";
 
 // One-click approve only ever means "move to the next state," never a
 // per-segment action - matches the pipeline's "single click for the whole
@@ -30,9 +31,11 @@ export async function POST(
       );
     }
 
-    const n8nBaseUrl = process.env.N8N_BASE_URL;
-    if (!n8nBaseUrl) {
-      return NextResponse.json({ error: "N8N_BASE_URL is not configured." }, { status: 500 });
+    let n8nBaseUrl: string;
+    try {
+      n8nBaseUrl = getN8nBaseUrl();
+    } catch (err) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
     }
 
     const nextStatus = NEXT_STATUS[currentStatus];
