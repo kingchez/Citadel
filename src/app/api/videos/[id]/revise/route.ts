@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getN8nBaseUrl } from "@/lib/n8n";
+import { getSupabaseAdmin } from "@/lib/supabase";
 
 /**
  * Submitted from the video-output popup: Kingsley watches the finished
  * render, types what needs to change, and this downgrades the video to
- * `revision_requested` with the notes attached. This calls the same generic
- * `update-video` webhook every other part of the pipeline already uses -
- * no dedicated n8n workflow needed for the write itself. Picking the note
- * up and actually fixing the video is a future agent step, not built yet.
+ * `revision_requested` with the notes attached. Pure database write - no
+ * orchestration needed - so it goes directly to Supabase rather than
+ * through an n8n webhook. Picking the note up and actually fixing the
+ * video is a future agent step, not built yet.
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -19,31 +19,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Revision notes cannot be empty." }, { status: 400 });
     }
 
-    let n8nBaseUrl: string;
-    try {
-      n8nBaseUrl = getN8nBaseUrl();
-    } catch (err) {
-      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
-    }
-
-    const res = await fetch(`${n8nBaseUrl}/webhook/update-video`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        video_id: id,
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("videos")
+      .update({
         status: "revision_requested",
         revision_notes: notes.trim(),
         revision_requested_at: new Date().toISOString(),
-      }),
-    });
+      })
+      .eq("id", id)
+      .select()
+      .single();
 
-    if (!res.ok) {
-      const text = await res.text();
-      return NextResponse.json({ error: `Pipeline rejected the revision request: ${text}` }, { status: 502 });
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const updated = await res.json();
-    return NextResponse.json({ video: updated });
+    return NextResponse.json({ video: data });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Unknown error" },

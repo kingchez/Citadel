@@ -1,41 +1,58 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getN8nBaseUrl } from "@/lib/n8n";
+import { getSupabaseAdmin } from "@/lib/supabase";
 
+/**
+ * Enqueues a single-segment/service retry into the `retries` table - the
+ * dispatch cron in the Retries workflow picks it up whenever the VPS is
+ * free. This is just a guarded insert (don't double-queue the same target),
+ * so it goes straight to Supabase rather than through n8n's own queue
+ * webhook - n8n's job starts at "interpret what's pending and dispatch it,"
+ * not "receive this write on Citadel's behalf."
+ */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const { video_id, service, target } = body ?? {};
 
     if (!video_id || !service) {
-      return NextResponse.json(
-        { error: "Both video_id and service are required." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Both video_id and service are required." }, { status: 400 });
     }
 
-    let n8nBaseUrl: string;
-    try {
-      n8nBaseUrl = getN8nBaseUrl();
-    } catch (err) {
-      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    const supabase = getSupabaseAdmin();
+
+    // Dedup guard: don't queue the same target twice while a retry for it
+    // is still outstanding.
+    let existingQuery = supabase
+      .from("retries")
+      .select("id")
+      .eq("video_id", video_id)
+      .eq("service", service)
+      .in("status", ["pending", "dispatched"]);
+
+    existingQuery = target
+      ? existingQuery.eq("target", JSON.stringify(target))
+      : existingQuery.is("target", null);
+
+    const { data: existing, error: existingError } = await existingQuery.maybeSingle();
+
+    if (existingError) {
+      return NextResponse.json({ error: existingError.message }, { status: 500 });
+    }
+    if (existing) {
+      return NextResponse.json({ retry: existing, alreadyQueued: true });
     }
 
-    // This just enqueues into the retries table - the retry cron picks it up
-    // whenever the VPS is actually free. Nothing dispatches synchronously
-    // from this call.
-    const res = await fetch(`${n8nBaseUrl}/webhook/retry`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ video_id, service, target: target ?? null }),
-    });
+    const { data, error } = await supabase
+      .from("retries")
+      .insert({ video_id, service, target: target ?? null, status: "pending", attempt_count: 0 })
+      .select()
+      .single();
 
-    if (!res.ok) {
-      const text = await res.text();
-      return NextResponse.json({ error: `Could not queue retry: ${text}` }, { status: 502 });
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const queued = await res.json();
-    return NextResponse.json({ retry: queued });
+    return NextResponse.json({ retry: data });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Unknown error" },

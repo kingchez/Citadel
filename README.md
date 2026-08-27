@@ -17,17 +17,19 @@ or n8n directly. Built so more projects can slot into the same shell later
   errors / in-progress / needs-review / done, search by title/channel/status.
 - **Video detail**: every script segment with its own real status/error,
   audio playback right in the browser (proxied from Google Drive so it
-  streams instead of opening a new tab), single-segment retry (goes
-  through the `retries` table, same as before), and multi-select
-  redo — selecting some-or-all segments and clicking Redo calls the new
-  **Citadel Manual Redo** lane in the Retries workflow, which bypasses the
-  `retries` table entirely (no attempt_count, no exhaustion, no alerts for
-  "I didn't like this take").
+  streams instead of opening a new tab), single-segment retry (queues a row
+  directly into the `retries` table — the dispatch cron in n8n picks it up),
+  and multi-select redo — selecting some-or-all segments and clicking Redo
+  writes directly to `videos.active_retry`, which the **Citadel Manual
+  Redo** dispatch lane in the Retries workflow watches and acts on. Neither
+  of these goes through an n8n webhook: Citadel writes the database change
+  itself, and n8n's job starts at "notice this state and do something about
+  it," not "receive writes on Citadel's behalf."
 - **Video output review**: clicking "View Output" opens a popup that
   autoplays the rendered video (also proxied from Drive) with a notes box
-  underneath. Submitting notes moves the video to the new
-  `revision_requested` status with the notes attached — picking that up
-  and actually fixing it is a future agent step, not built yet.
+  underneath. Submitting notes writes the new `revision_requested` status
+  and the notes directly to Supabase — picking that up and actually fixing
+  it is a future agent step, not built yet.
 - **Notifications**: derived live from real error fields on `videos`
   (per-segment, per-clip, per-asset, render, and stuck-delivery states) —
   not a separate stored table, so there's nothing to keep in sync. Read/
@@ -35,6 +37,16 @@ or n8n directly. Built so more projects can slot into the same shell later
 
 Everything talks to Supabase and n8n through Citadel's own API routes
 (`src/app/api/*`) — the browser never holds Supabase credentials.
+
+**Architecture principle**: pure database changes (status transitions,
+queueing a retry, revision notes) are written directly from Citadel's API
+routes to Supabase using the service-role key. n8n workflows exist to
+*interpret* the current state of the database and route items to whatever
+action their state calls for (dispatch to Chatterbox, render, etc.) — not
+to act as a passthrough for writes Citadel can make itself. n8n webhooks
+are still the right tool for anything that needs n8n to actually *do*
+something external (call a service, upload a file) — just not for a plain
+column update.
 
 ## Setup
 
