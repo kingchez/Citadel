@@ -1,68 +1,221 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
-  LayoutGrid,
-  CircleAlert,
-  Clock,
-  CheckCircle2,
-  ClipboardCheck,
   Castle,
+  Grid,
+  AlertTriangle,
+  Clock,
+  ClipboardCheck,
+  CheckCircle,
+  ChevronDown,
+  LogOut,
+  Sun,
+  Moon,
+  LayoutDashboard,
+  Video,
+  FolderKanban,
 } from "lucide-react";
+import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
-import { ThemeToggle } from "./theme-toggle";
+import type { VideoRow } from "@/lib/types";
+import { ERROR_STATUSES, IN_PROGRESS_STATUSES, REVIEW_STATUSES, DONE_STATUSES } from "@/lib/types";
 
-const NAV_ITEMS = [
-  { href: "/", label: "All videos", icon: LayoutGrid, view: null },
-  { href: "/?view=review", label: "Needs review", icon: ClipboardCheck, view: "review" },
-  { href: "/?view=progress", label: "In progress", icon: Clock, view: "progress" },
-  { href: "/?view=errors", label: "Errors", icon: CircleAlert, view: "errors" },
-  { href: "/?view=done", label: "Done", icon: CheckCircle2, view: "done" },
+interface ProjectDef {
+  key: string;
+  label: string;
+  icon: typeof Video;
+  items: { label: string; href: string; icon: typeof Grid; countKey?: keyof Counts }[];
+}
+
+interface Counts {
+  errors: number;
+  progress: number;
+  review: number;
+  done: number;
+}
+
+const PROJECTS: ProjectDef[] = [
+  {
+    key: "video-pipeline",
+    label: "Video Pipeline",
+    icon: Video,
+    items: [
+      { label: "Dashboard", href: "/pipeline/dashboard", icon: LayoutDashboard },
+      { label: "All Videos", href: "/pipeline/videos", icon: Grid },
+      { label: "Errors", href: "/pipeline/videos?view=errors", icon: AlertTriangle, countKey: "errors" },
+      { label: "In Progress", href: "/pipeline/videos?view=progress", icon: Clock, countKey: "progress" },
+      { label: "Needs Review", href: "/pipeline/videos?view=review", icon: ClipboardCheck, countKey: "review" },
+      { label: "Done", href: "/pipeline/videos?view=done", icon: CheckCircle, countKey: "done" },
+    ],
+  },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const currentView = searchParams.get("view");
+  const router = useRouter();
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  const [expandedProjects, setExpandedProjects] = useState<string[]>(["video-pipeline"]);
+  const [counts, setCounts] = useState<Counts>({ errors: 0, progress: 0, review: 0, done: 0 });
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- standard hydration-safe mounted check
+    setMounted(true);
+    fetch("/api/videos")
+      .then((r) => r.json())
+      .then((data: { videos?: VideoRow[] }) => {
+        const videos = data.videos || [];
+        setCounts({
+          errors: videos.filter((v) => ERROR_STATUSES.includes(v.status)).length,
+          progress: videos.filter((v) => IN_PROGRESS_STATUSES.includes(v.status)).length,
+          review: videos.filter((v) => REVIEW_STATUSES.includes(v.status) || v.status === "revision_requested").length,
+          done: videos.filter((v) => DONE_STATUSES.includes(v.status)).length,
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  const toggleProject = (key: string) => {
+    setExpandedProjects((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  };
+
+  const isActive = (href: string) => {
+    const [path, query] = href.split("?");
+    if (pathname !== path) return false;
+    if (!query) return !searchParams.get("view");
+    const view = new URLSearchParams(query).get("view");
+    return searchParams.get("view") === view;
+  };
+
+  const handleLogout = async () => {
+    await fetch("/api/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  };
+
+  const isDark = mounted ? resolvedTheme === "dark" : true;
 
   return (
-    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-border bg-surface">
-      <div className="flex items-center gap-2 px-5 py-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-accent-text-on">
-          <Castle className="h-4.5 w-4.5" strokeWidth={2.25} />
-        </div>
-        <span className="text-[15px] font-semibold tracking-tight text-text">Citadel</span>
+    <aside className="fixed left-0 top-0 h-screen w-64 bg-[var(--bg)] border-r border-[var(--border)] flex flex-col overflow-y-auto z-40">
+      {/* Logo Area */}
+      <div className="p-5 border-b border-[var(--border)]">
+        <Link href="/pipeline/dashboard" className="flex items-center gap-3" aria-label="Citadel Home">
+          <div className="relative p-2 rounded-xl bg-[var(--color-purple-soft)] glow-purple">
+            <Castle className="w-6 h-6 text-[var(--color-purple)]" />
+            <div className="absolute inset-0 rounded-xl bg-[var(--color-purple)]/30 blur-xl animate-pulse-glow" />
+          </div>
+          <div>
+            <span className="text-xl font-bold tracking-widest text-[var(--text)]">CITADEL</span>
+            <span className="text-[10px] text-[var(--text-faint)] uppercase tracking-wider block mt-0.5">
+              Command Center
+            </span>
+          </div>
+        </Link>
       </div>
 
-      <nav className="flex-1 space-y-0.5 px-3">
-        {NAV_ITEMS.map((item) => {
-          const Icon = item.icon;
-          const isActive = pathname === "/" && currentView === item.view;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] font-medium transition-colors duration-150",
-                isActive
-                  ? "bg-accent-soft text-accent"
-                  : "text-text-muted hover:bg-bg hover:text-text"
-              )}
-              style={{ transitionTimingFunction: "var(--ease-out)" }}
-            >
-              <Icon className="h-4 w-4" strokeWidth={2} />
-              {item.label}
-            </Link>
-          );
-        })}
+      {/* Navigation */}
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto" aria-label="Main navigation">
+        <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)]">
+          Workspace
+        </div>
+
+        <div className="pl-1 space-y-1">
+          <div className="flex items-center gap-2 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)]">
+            <FolderKanban className="w-3.5 h-3.5" />
+            Projects
+          </div>
+
+          {PROJECTS.map((project) => {
+            const ProjectIcon = project.icon;
+            const expanded = expandedProjects.includes(project.key);
+            return (
+              <div key={project.key} className="space-y-0.5">
+                <button
+                  type="button"
+                  onClick={() => toggleProject(project.key)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-raised)] transition-all duration-150"
+                  aria-expanded={expanded}
+                >
+                  <ProjectIcon className="w-4.5 h-4.5 text-[var(--color-purple)] flex-shrink-0" />
+                  <span className="flex-1 text-left truncate">{project.label}</span>
+                  <ChevronDown
+                    className={cn(
+                      "w-4 h-4 text-[var(--text-faint)] transition-transform duration-200",
+                      expanded && "rotate-180"
+                    )}
+                  />
+                </button>
+
+                {expanded && (
+                  <div className="pl-3 space-y-0.5 animate-slide-down border-l border-[var(--border)] ml-4">
+                    {project.items.map((item) => {
+                      const active = isActive(item.href);
+                      const Icon = item.icon;
+                      const count = item.countKey ? counts[item.countKey] : undefined;
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className={cn(
+                            "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 sidebar-item",
+                            active
+                              ? "bg-[var(--surface-raised)] text-[var(--text)] border-l-2 border-[var(--color-purple)] -ml-px"
+                              : "text-[var(--text-muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--text)]"
+                          )}
+                          aria-current={active ? "page" : undefined}
+                        >
+                          <Icon className={cn("w-4 h-4 flex-shrink-0", active && "text-[var(--color-purple)]")} />
+                          <span className="flex-1 truncate">{item.label}</span>
+                          {!!count && (
+                            <span
+                              className={cn(
+                                "badge text-[10px] px-2 py-0.5",
+                                active ? "badge-purple" : "badge-gray"
+                              )}
+                            >
+                              {count}
+                            </span>
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Future projects placeholder */}
+          <div className="px-3 py-2.5 rounded-xl bg-[var(--surface-raised)]/50 border border-[var(--border)] text-center text-xs text-[var(--text-faint)] mt-2">
+            More projects will appear here
+          </div>
+        </div>
       </nav>
 
-      <div className="flex items-center justify-between border-t border-border px-4 py-4">
-        <span className="text-xs text-text-faint">Video pipeline</span>
-        <ThemeToggle />
+      {/* Bottom: Theme toggle + Logout */}
+      <div className="p-3 border-t border-[var(--border)] space-y-2">
+        <button
+          onClick={() => setTheme(isDark ? "light" : "dark")}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--text)] transition-all duration-150"
+          aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {isDark ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+          <span>{isDark ? "Dark Mode" : "Light Mode"}</span>
+        </button>
+
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--color-red-soft)] hover:text-[var(--color-red)] border border-transparent hover:border-[var(--color-red)]/30 transition-all duration-150"
+        >
+          <LogOut className="w-5 h-5" />
+          <span>Logout</span>
+        </button>
       </div>
     </aside>
   );
 }
-

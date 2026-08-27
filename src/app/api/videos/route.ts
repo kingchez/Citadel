@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("videos")
       .select(
-        "id, title, channel, status, video_type, with_product, created_at, updated_at, script_segments, voice_timing, media_assets, error_details"
+        "id, title, channel, status, video_type, with_product, created_at, updated_at, script_segments, voice_timing, media_assets, error_details, output_drive_link, revision_notes, revision_requested_at"
       )
       .order("created_at", { ascending: false });
 

@@ -17,9 +17,14 @@ export type VideoStatus =
   | "rendering"
   | "render_error"
   | "production_review"
+  | "revision_requested"
   | "retrying"
   | "done"
-  | "shipped";
+  | "shipped"
+  | "chatterbox_delivery_stuck"
+  | "whisperx_delivery_stuck"
+  | "render_delivery_stuck"
+  | "autobrowse_delivery_stuck";
 
 export type VideoType = "vertical-shorts" | "horizontal-long";
 
@@ -54,6 +59,12 @@ export interface MediaAssetEntry {
   [key: string]: unknown;
 }
 
+export interface ActiveRetry {
+  source?: string;
+  segment_indices?: number[];
+  requested_at?: string;
+}
+
 export interface VideoRow {
   id: string;
   title: string;
@@ -70,9 +81,13 @@ export interface VideoRow {
   render_job_id?: string;
   output_drive_link?: string;
   error_details?: string;
-  active_retry?: unknown;
+  revision_notes?: string;
+  revision_requested_at?: string;
+  active_retry?: ActiveRetry | null;
   vps_in_use?: boolean;
+  vps_status?: string;
   vps_job_triggered_at?: string;
+  retry_batch_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -94,10 +109,7 @@ export interface RetryRow {
 }
 
 /** Review checkpoints where a one-click approve is meaningful. */
-export const REVIEW_STATUSES: VideoStatus[] = [
-  "media_review",
-  "production_review",
-];
+export const REVIEW_STATUSES: VideoStatus[] = ["media_review", "production_review"];
 
 /** Statuses that represent an item actively waiting on external work. */
 export const IN_PROGRESS_STATUSES: VideoStatus[] = [
@@ -114,4 +126,72 @@ export const ERROR_STATUSES: VideoStatus[] = [
   "render_error",
   "partial_voiceover",
   "partial_voice_timing",
+  "chatterbox_delivery_stuck",
+  "whisperx_delivery_stuck",
+  "render_delivery_stuck",
+  "autobrowse_delivery_stuck",
 ];
+
+/** Statuses that mean "finished," for the Done tab and dashboard stat. */
+export const DONE_STATUSES: VideoStatus[] = ["done", "shipped"];
+
+export const STATUS_LABELS: Record<VideoStatus, string> = {
+  planning: "Planning",
+  script_written: "Script Written",
+  waiting_voiceover: "Waiting Voiceover",
+  partial_voiceover: "Partial Voiceover",
+  voiceover_error: "Voiceover Error",
+  voiceover_done: "Voiceover Done",
+  waiting_voice_timing: "Waiting Voice Timing",
+  partial_voice_timing: "Partial Voice Timing",
+  voice_timing_error: "Voice Timing Error",
+  voice_timing_done: "Voice Timing Done",
+  scenes_planned: "Scenes Planned",
+  awaiting_media: "Awaiting Media",
+  media_review: "Media Review",
+  media_ready: "Media Ready",
+  final_scene_planned: "Scene Planned",
+  rendering: "Rendering",
+  render_error: "Render Error",
+  production_review: "Production Review",
+  revision_requested: "Revision Requested",
+  retrying: "Retrying",
+  done: "Done",
+  shipped: "Shipped",
+  chatterbox_delivery_stuck: "Chatterbox Delivery Stuck",
+  whisperx_delivery_stuck: "WhisperX Delivery Stuck",
+  render_delivery_stuck: "Render Delivery Stuck",
+  autobrowse_delivery_stuck: "Media Delivery Stuck",
+};
+
+/** purple | cyan | green | amber | red - matches Citadel's five status colors. */
+export type StatusColor = "purple" | "cyan" | "green" | "amber" | "red";
+
+export const STATUS_COLORS: Record<VideoStatus, StatusColor> = {
+  planning: "purple",
+  script_written: "purple",
+  waiting_voiceover: "cyan",
+  partial_voiceover: "amber",
+  voiceover_error: "red",
+  voiceover_done: "green",
+  waiting_voice_timing: "cyan",
+  partial_voice_timing: "amber",
+  voice_timing_error: "red",
+  voice_timing_done: "cyan",
+  scenes_planned: "purple",
+  awaiting_media: "cyan",
+  media_review: "amber",
+  media_ready: "green",
+  final_scene_planned: "purple",
+  rendering: "amber",
+  render_error: "red",
+  production_review: "amber",
+  revision_requested: "red",
+  retrying: "amber",
+  done: "green",
+  shipped: "green",
+  chatterbox_delivery_stuck: "red",
+  whisperx_delivery_stuck: "red",
+  render_delivery_stuck: "red",
+  autobrowse_delivery_stuck: "red",
+};
