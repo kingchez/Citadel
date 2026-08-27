@@ -56,7 +56,25 @@ export interface MediaAssetEntry {
   video_generation_prompt?: string;
   image_prompt?: string;
   animation_prompt?: string;
+  /** Freeform note Kingsley leaves for whichever agent handles this asset -
+   * set directly from the Media tab in Citadel. */
+  citadel_note?: string;
+  /** Set when the asset was swapped by hand through Citadel rather than
+   * fetched by the pipeline - the resulting shape is otherwise identical to
+   * an automated fetch (driveFileId/status/source) so downstream nodes
+   * don't need to care who provided it. */
+  replaced_via_citadel_at?: string;
   [key: string]: unknown;
+}
+
+export type RevisionStatus = "pending" | "resolved";
+
+export interface RevisionEntry {
+  id: string;
+  note: string;
+  status: RevisionStatus;
+  created_at: string;
+  resolved_at?: string | null;
 }
 
 export interface ActiveRetry {
@@ -81,8 +99,7 @@ export interface VideoRow {
   render_job_id?: string;
   output_drive_link?: string;
   error_details?: string;
-  revision_notes?: string;
-  revision_requested_at?: string;
+  revision_history?: RevisionEntry[];
   active_retry?: ActiveRetry | null;
   vps_in_use?: boolean;
   vps_status?: string;

@@ -6,6 +6,7 @@ import type { ScriptSegment, VideoRow } from "@/lib/types";
 import { StatusBadge } from "@/components/status-badge";
 import { SegmentRow, AudioPlayerBar } from "@/components/segment-row";
 import { VideoOutputModal } from "@/components/video-output-modal";
+import { MediaAssetCard } from "@/components/media-asset-card";
 import { formatTimeAgo } from "@/lib/utils";
 import {
   ArrowLeft,
@@ -21,6 +22,7 @@ import {
   Clock,
   Layers,
   MessageSquareWarning,
+  Image as ImageIcon,
 } from "lucide-react";
 
 interface VideoDetailProps {
@@ -39,6 +41,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [showOutputModal, setShowOutputModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<"segments" | "media">("segments");
 
   const loadVideo = () => {
     fetch(`/api/videos/${id}`)
@@ -81,6 +84,9 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
   }
 
   const segments: ScriptSegment[] = video.script_segments || [];
+  const mediaEntries = Object.entries(video.media_assets || {});
+  const revisionHistory = video.revision_history || [];
+  const pendingRevisions = revisionHistory.filter((r) => r.status === "pending");
   const allSelected = segments.length > 0 && selectedIndices.size === segments.length;
   const someSelected = selectedIndices.size > 0 && !allSelected;
   const playingSegment = segments.find((s) => s.index === playingIndex);
@@ -155,6 +161,17 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
     }
   };
 
+  const handleResolveRevision = async (entryId: string) => {
+    try {
+      const res = await fetch(`/api/videos/${video.id}/revision/${entryId}/resolve`, { method: "POST" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || "Could not resolve");
+      showFeedback("Marked resolved");
+      loadVideo();
+    } catch (err) {
+      showFeedback(err instanceof Error ? err.message : "Could not resolve");
+    }
+  };
+
   const handlePlay = (index: number) => setPlayingIndex((prev) => (prev === index ? null : index));
 
   return (
@@ -223,19 +240,6 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
           </div>
         )}
 
-        {video.status === "revision_requested" && video.revision_notes && (
-          <div className="flex items-start gap-3 p-4 rounded-xl bg-[var(--color-amber-soft)] border border-[var(--color-amber)]/40">
-            <MessageSquareWarning className="w-5 h-5 text-[var(--color-amber)] flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold text-[var(--color-amber)]">Revision Requested</p>
-              <p className="text-sm text-[var(--text-muted)] mt-1 whitespace-pre-wrap">{video.revision_notes}</p>
-              {video.revision_requested_at && (
-                <p className="text-[11px] text-[var(--text-faint)] mt-1">{formatTimeAgo(video.revision_requested_at)}</p>
-              )}
-            </div>
-          </div>
-        )}
-
         {segments.length > 0 && (
           <div className="flex items-center gap-4 pt-2 flex-wrap">
             <div className="flex items-center gap-2">
@@ -256,6 +260,54 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
         )}
       </div>
 
+      {revisionHistory.length > 0 && (
+        <div className="card p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <MessageSquareWarning className="w-5 h-5 text-[var(--color-amber)]" />
+            <h2 className="font-semibold text-[var(--text)]">Revision History</h2>
+            {pendingRevisions.length > 0 && <span className="badge badge-amber">{pendingRevisions.length} pending</span>}
+          </div>
+
+          <div className="space-y-2">
+            {revisionHistory
+              .slice()
+              .reverse()
+              .map((entry) => (
+                <div
+                  key={entry.id}
+                  className={`flex items-start gap-3 p-3 rounded-xl border ${
+                    entry.status === "pending"
+                      ? "bg-[var(--color-amber-soft)]/40 border-[var(--color-amber)]/30"
+                      : "bg-[var(--surface-raised)] border-[var(--border)]"
+                  }`}
+                >
+                  {entry.status === "resolved" ? (
+                    <CheckCircle2 className="w-5 h-5 text-[var(--color-green)] flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <Clock className="w-5 h-5 text-[var(--color-amber)] flex-shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-[var(--text)]">{entry.note}</p>
+                    <p className="text-[11px] text-[var(--text-faint)] mt-1">
+                      {formatTimeAgo(entry.created_at)}
+                      {entry.status === "resolved" && entry.resolved_at && ` · resolved ${formatTimeAgo(entry.resolved_at)}`}
+                    </p>
+                  </div>
+                  {entry.status === "pending" && (
+                    <button
+                      onClick={() => handleResolveRevision(entry.id)}
+                      className="btn-secondary text-xs py-1.5 px-3 flex-shrink-0"
+                      title="Manual override until the fixing agent exists"
+                    >
+                      Mark resolved
+                    </button>
+                  )}
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
       {feedback && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-xl bg-[var(--color-purple-soft)] border border-[var(--color-purple)]/60 shadow-2xl animate-slide-down">
           <RefreshCw className="w-4 h-4 text-[var(--color-purple)]" />
@@ -263,7 +315,30 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
         </div>
       )}
 
-      {segments.length > 0 && (
+      {(segments.length > 0 || mediaEntries.length > 0) && (
+        <div className="flex items-center gap-1 p-1.5 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-fit">
+          <button onClick={() => setActiveTab("segments")} className={`tab flex items-center gap-2 ${activeTab === "segments" ? "tab-active" : ""}`}>
+            <Layers className="w-4 h-4" />
+            Voiceover Segments
+            {segments.length > 0 && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeTab === "segments" ? "bg-white/20 text-white" : "bg-[var(--border)] text-[var(--text-faint)]"}`}>
+                {segments.length}
+              </span>
+            )}
+          </button>
+          <button onClick={() => setActiveTab("media")} className={`tab flex items-center gap-2 ${activeTab === "media" ? "tab-active" : ""}`}>
+            <ImageIcon className="w-4 h-4" />
+            Media Assets
+            {mediaEntries.length > 0 && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeTab === "media" ? "bg-white/20 text-white" : "bg-[var(--border)] text-[var(--text-faint)]"}`}>
+                {mediaEntries.length}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {activeTab === "segments" && segments.length > 0 && (
         <div className="card overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)] bg-[var(--surface-raised)]/50 flex-wrap gap-2">
             <div className="flex items-center gap-3">
@@ -338,32 +413,53 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
         </div>
       )}
 
-      {segments.length === 0 && (
-        <div className="card p-10 text-center">
-          <Clock className="w-12 h-12 mx-auto mb-3 text-[var(--border-strong)]" />
-          <p className="text-[var(--text-muted)] font-medium">No segments yet</p>
-          <p className="text-sm text-[var(--text-faint)] mt-1">Segments will appear here once the voiceover generation starts.</p>
+      {activeTab === "media" && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {mediaEntries.length === 0 ? (
+            <div className="col-span-full card p-10 text-center">
+              <ImageIcon className="w-12 h-12 mx-auto mb-3 text-[var(--border-strong)]" />
+              <p className="text-[var(--text-muted)] font-medium">No media assets yet</p>
+              <p className="text-sm text-[var(--text-faint)] mt-1">These populate once the pipeline starts sourcing media.</p>
+            </div>
+          ) : (
+            mediaEntries
+              .sort(([a], [b]) => Number(a) - Number(b))
+              .map(([key, asset]) => (
+                <MediaAssetCard key={key} videoId={video.id} mediaKey={key} asset={asset} onUpdated={loadVideo} />
+              ))
+          )}
         </div>
       )}
 
-      <details className="card group">
-        <summary className="flex items-center justify-between px-5 py-4 cursor-pointer list-none select-none hover:bg-[var(--surface-raised)] transition-colors rounded-xl">
-          <span className="font-semibold text-[var(--text)]">Full Script</span>
-          <span className="text-sm text-[var(--text-faint)] group-open:hidden">Click to expand</span>
-          <span className="text-sm text-[var(--text-faint)] hidden group-open:inline">Click to collapse</span>
-        </summary>
-        <div className="px-5 pb-5 pt-2 border-t border-[var(--border)]">
-          <p className="text-sm text-[var(--text-muted)] whitespace-pre-wrap leading-relaxed font-mono">
-            {segments.map((s) => s.text).filter(Boolean).join("\n\n") || "No script text available."}
-          </p>
+      {segments.length === 0 && mediaEntries.length === 0 && (
+        <div className="card p-10 text-center">
+          <Clock className="w-12 h-12 mx-auto mb-3 text-[var(--border-strong)]" />
+          <p className="text-[var(--text-muted)] font-medium">Nothing here yet</p>
+          <p className="text-sm text-[var(--text-faint)] mt-1">Segments and media will appear once the pipeline starts processing this video.</p>
         </div>
-      </details>
+      )}
+
+      {segments.length > 0 && (
+        <details className="card group">
+          <summary className="flex items-center justify-between px-5 py-4 cursor-pointer list-none select-none hover:bg-[var(--surface-raised)] transition-colors rounded-xl">
+            <span className="font-semibold text-[var(--text)]">Full Script</span>
+            <span className="text-sm text-[var(--text-faint)] group-open:hidden">Click to expand</span>
+            <span className="text-sm text-[var(--text-faint)] hidden group-open:inline">Click to collapse</span>
+          </summary>
+          <div className="px-5 pb-5 pt-2 border-t border-[var(--border)]">
+            <p className="text-sm text-[var(--text-muted)] whitespace-pre-wrap leading-relaxed font-mono">
+              {segments.map((s) => s.text).filter(Boolean).join("\n\n") || "No script text available."}
+            </p>
+          </div>
+        </details>
+      )}
 
       {showOutputModal && video.output_drive_link && (
         <VideoOutputModal
           videoId={video.id}
           title={video.title}
           outputDriveLink={video.output_drive_link}
+          revisionHistory={revisionHistory}
           onClose={() => setShowOutputModal(false)}
           onRevisionSubmitted={() => {
             loadVideo();

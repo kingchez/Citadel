@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import type { RevisionEntry } from "@/lib/types";
 
 /**
  * Submitted from the video-output popup: Kingsley watches the finished
- * render, types what needs to change, and this downgrades the video to
- * `revision_requested` with the notes attached. Pure database write - no
- * orchestration needed - so it goes directly to Supabase rather than
- * through an n8n webhook. Picking the note up and actually fixing the
- * video is a future agent step, not built yet.
+ * render, types what needs to change, and this appends a new entry to the
+ * conversation-style `revision_history` and moves the video back to
+ * `revision_requested`. Pure database write - no orchestration needed - so
+ * it goes directly to Supabase. A future agent (not built yet) will pick up
+ * `pending` entries, fix them, and flip them to `resolved`.
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -20,13 +21,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const supabase = getSupabaseAdmin();
+
+    const { data: existing, error: fetchError } = await supabase
+      .from("videos")
+      .select("revision_history")
+      .eq("id", id)
+      .single();
+
+    if (fetchError) {
+      return NextResponse.json({ error: fetchError.message }, { status: 500 });
+    }
+
+    const history: RevisionEntry[] = existing?.revision_history || [];
+    const entry: RevisionEntry = {
+      id: `rev_${Date.now().toString(36)}`,
+      note: notes.trim(),
+      status: "pending",
+      created_at: new Date().toISOString(),
+      resolved_at: null,
+    };
+
     const { data, error } = await supabase
       .from("videos")
-      .update({
-        status: "revision_requested",
-        revision_notes: notes.trim(),
-        revision_requested_at: new Date().toISOString(),
-      })
+      .update({ status: "revision_requested", revision_history: [...history, entry] })
       .eq("id", id)
       .select()
       .single();

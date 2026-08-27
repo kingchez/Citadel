@@ -1,18 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { X, MessageSquareWarning, Loader2 } from "lucide-react";
-import { extractDriveFileId } from "@/lib/utils";
+import { X, MessageSquareWarning, Loader2, CheckCircle2, Clock } from "lucide-react";
+import { extractDriveFileId, formatTimeAgo } from "@/lib/utils";
+import type { RevisionEntry } from "@/lib/types";
 
 interface VideoOutputModalProps {
   videoId: string;
   title: string;
   outputDriveLink: string;
+  revisionHistory: RevisionEntry[];
   onClose: () => void;
   onRevisionSubmitted: () => void;
 }
 
-export function VideoOutputModal({ videoId, title, outputDriveLink, onClose, onRevisionSubmitted }: VideoOutputModalProps) {
+export function VideoOutputModal({
+  videoId,
+  title,
+  outputDriveLink,
+  revisionHistory,
+  onClose,
+  onRevisionSubmitted,
+}: VideoOutputModalProps) {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -35,6 +44,7 @@ export function VideoOutputModal({ videoId, title, outputDriveLink, onClose, onR
         throw new Error(data.error || "Could not submit revision.");
       }
       setSubmitted(true);
+      setNotes("");
       onRevisionSubmitted();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -75,11 +85,38 @@ export function VideoOutputModal({ videoId, title, outputDriveLink, onClose, onR
           )}
         </div>
 
+        {revisionHistory.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Revision history</p>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {revisionHistory.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="flex items-start gap-2.5 p-3 rounded-lg bg-[var(--surface-raised)] border border-[var(--border)]"
+                >
+                  {entry.status === "resolved" ? (
+                    <CheckCircle2 className="w-4 h-4 text-[var(--color-green)] flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <Clock className="w-4 h-4 text-[var(--color-amber)] flex-shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-[var(--text)]">{entry.note}</p>
+                    <p className="text-[10px] text-[var(--text-faint)] mt-1">
+                      {formatTimeAgo(entry.created_at)}
+                      {entry.status === "resolved" && entry.resolved_at && ` · resolved ${formatTimeAgo(entry.resolved_at)}`}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {submitted ? (
           <div className="flex items-center gap-3 p-4 rounded-xl bg-[var(--color-amber-soft)] border border-[var(--color-amber)]/40">
             <MessageSquareWarning className="w-5 h-5 text-[var(--color-amber)] flex-shrink-0" />
             <p className="text-sm text-[var(--text)]">
-              Revision requested — this item has been moved back to <strong>Revision Requested</strong> with your notes attached.
+              Added to the revision history — this item has been moved back to <strong>Revision Requested</strong>.
             </p>
           </div>
         ) : (
