@@ -2,9 +2,9 @@
 
 import { useState, useMemo, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import type { VideoRow } from "@/lib/types";
-import { ERROR_STATUSES, IN_PROGRESS_STATUSES, REVIEW_STATUSES, DONE_STATUSES } from "@/lib/types";
+import { hasAnyError, isInProgress, needsReview, isDone } from "@/lib/video-stats";
 import { StatusBadge, StatusDot } from "@/components/status-badge";
 import { formatTimeAgo } from "@/lib/utils";
 import { Search, ChevronRight, AlertTriangle, Tag, Film } from "lucide-react";
@@ -20,13 +20,13 @@ const TABS = [
 function matchesView(video: VideoRow, view: string): boolean {
   switch (view) {
     case "errors":
-      return ERROR_STATUSES.includes(video.status);
+      return hasAnyError(video);
     case "progress":
-      return IN_PROGRESS_STATUSES.includes(video.status);
+      return isInProgress(video);
     case "review":
-      return REVIEW_STATUSES.includes(video.status) || video.status === "revision_requested";
+      return needsReview(video);
     case "done":
-      return DONE_STATUSES.includes(video.status);
+      return isDone(video);
     default:
       return true;
   }
@@ -57,17 +57,21 @@ function VideoRowItem({ video }: { video: VideoRow }) {
             </span>
           )}
         </div>
-        <p className="text-xs text-[var(--text-faint)] mt-0.5">
-          {video.channel}
+        <p className="text-xs text-[var(--text-faint)] mt-0.5 flex items-center gap-1.5 flex-wrap">
+          <span>{video.channel}</span>
           {video.with_product && (
             <>
-              <span className="mx-1.5">·</span>
+              <span>·</span>
               <span className="text-[var(--color-purple)]">
                 <Tag className="w-3 h-3 inline mr-0.5" />
                 Affiliate
               </span>
             </>
           )}
+          <span>·</span>
+          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--surface-raised)] border border-[var(--border)]">
+            {video.id}
+          </span>
         </p>
       </div>
 
@@ -92,11 +96,20 @@ function VideoRowItem({ video }: { video: VideoRow }) {
 
 function VideosContent() {
   const searchParams = useSearchParams();
-  const initialView = searchParams.get("view") || "all";
-  const [activeTab, setActiveTab] = useState(initialView);
+  const router = useRouter();
+  const pathname = usePathname();
+  const activeTab = searchParams.get("view") || "all";
   const [search, setSearch] = useState("");
   const [videos, setVideos] = useState<VideoRow[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const setActiveTab = (tab: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === "all") params.delete("view");
+    else params.set("view", tab);
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
+  };
 
   useEffect(() => {
     fetch("/api/videos")
@@ -110,7 +123,11 @@ function VideosContent() {
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(
-        (v) => v.title.toLowerCase().includes(q) || v.channel.toLowerCase().includes(q) || v.status.toLowerCase().includes(q)
+        (v) =>
+          v.title.toLowerCase().includes(q) ||
+          v.channel.toLowerCase().includes(q) ||
+          v.status.toLowerCase().includes(q) ||
+          v.id.toLowerCase().includes(q)
       );
     }
     return list;
@@ -164,7 +181,7 @@ function VideosContent() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by title, channel, or status..."
+          placeholder="Search by title, channel, status, or database ID..."
           className="input-field pl-11 py-3"
         />
         {search && (

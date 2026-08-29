@@ -3,13 +3,8 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
 import { formatTimeAgo } from "@/lib/utils";
-import {
-  ERROR_STATUSES,
-  IN_PROGRESS_STATUSES,
-  REVIEW_STATUSES,
-  DONE_STATUSES,
-  type VideoRow,
-} from "@/lib/types";
+import { DONE_STATUSES, type VideoRow } from "@/lib/types";
+import { computeVideoCounts, parseVpsService, hasAnyError } from "@/lib/video-stats";
 import { Activity, ArrowRight, AlertTriangle, CheckCircle2, Clock, Zap, ChevronRight } from "lucide-react";
 
 function getGreeting() {
@@ -26,20 +21,19 @@ export default async function DashboardPage() {
   const { data } = await supabase
     .from("videos")
     .select(
-      "id, title, channel, status, video_type, with_product, created_at, updated_at, vps_in_use, vps_status, error_details"
+      "id, title, channel, status, video_type, with_product, created_at, updated_at, vps_in_use, vps_status, vps_current_service, error_details, script_segments, voice_timing, media_assets, revision_history"
     )
     .order("updated_at", { ascending: false });
 
   const videos = (data || []) as VideoRow[];
+  const counts = computeVideoCounts(videos);
 
-  const errorCount = videos.filter((v) => ERROR_STATUSES.includes(v.status)).length;
-  const progressCount = videos.filter((v) => IN_PROGRESS_STATUSES.includes(v.status)).length;
-  const reviewCount = videos.filter((v) => REVIEW_STATUSES.includes(v.status) || v.status === "revision_requested").length;
-  const doneCount = videos.filter((v) => DONE_STATUSES.includes(v.status)).length;
-
+  // Recent Activity is simply the same video list this page already loaded,
+  // sorted by most recently updated (the query above already orders that
+  // way) - not a separate log or table of its own.
   const recentActivity = videos.slice(0, 6);
-  const busy = videos.some((v) => v.vps_in_use);
   const activeJob = videos.find((v) => v.vps_in_use);
+  const vpsService = parseVpsService(activeJob?.vps_status);
 
   const doneWithTimestamps = videos.filter((v) => DONE_STATUSES.includes(v.status));
   const avgTurnaroundHours =
@@ -69,10 +63,10 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Total Videos" value={videos.length} icon="Film" color="purple" link="/pipeline/videos" />
-        <StatCard title="Errors" value={errorCount} icon="AlertTriangle" color="red" link="/pipeline/videos?view=errors" />
-        <StatCard title="In Progress" value={progressCount} icon="Clock" color="cyan" link="/pipeline/videos?view=progress" />
-        <StatCard title="Needs Review" value={reviewCount} icon="ClipboardCheck" color="amber" link="/pipeline/videos?view=review" />
+        <StatCard title="Total Videos" value={counts.total} icon="Film" color="purple" link="/pipeline/videos" />
+        <StatCard title="Errors" value={counts.errors} icon="AlertTriangle" color="red" link="/pipeline/videos?view=errors" />
+        <StatCard title="In Progress" value={counts.progress} icon="Clock" color="cyan" link="/pipeline/videos?view=progress" />
+        <StatCard title="Needs Review" value={counts.review} icon="ClipboardCheck" color="amber" link="/pipeline/videos?view=review" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
@@ -87,29 +81,27 @@ export default async function DashboardPage() {
               <span
                 className="w-2.5 h-2.5 rounded-full flex-shrink-0 inline-block"
                 style={{
-                  backgroundColor: busy ? "var(--color-amber)" : "var(--color-green)",
-                  boxShadow: `0 0 6px ${busy ? "var(--color-amber-glow)" : "var(--color-green-glow)"}`,
+                  backgroundColor: vpsService ? vpsService.color : "var(--color-green)",
+                  boxShadow: `0 0 6px ${vpsService ? vpsService.color : "var(--color-green-glow)"}`,
                 }}
               />
               <div>
                 <p className="text-sm font-semibold text-[var(--text)]">VPS</p>
-                <p className="text-[11px] text-[var(--text-faint)]">
-                  {busy ? activeJob?.vps_status || "Working" : "Idle"}
-                </p>
+                <p className="text-[11px] text-[var(--text-faint)]">{vpsService ? vpsService.label : "Idle"}</p>
               </div>
             </div>
             <span
               className="text-[11px] font-semibold uppercase tracking-wide"
-              style={{ color: busy ? "var(--color-amber)" : "var(--color-green)" }}
+              style={{ color: vpsService ? vpsService.color : "var(--color-green)" }}
             >
-              {busy ? "Busy" : "Idle"}
+              {vpsService ? "Busy" : "Idle"}
             </span>
           </div>
 
           <div className="divider" />
           <div className="grid grid-cols-2 gap-3">
             <div className="p-3 rounded-xl bg-[var(--color-green-soft)] border border-[var(--color-green)]/20 text-center">
-              <p className="text-xl font-bold text-[var(--color-green)]">{doneCount}</p>
+              <p className="text-xl font-bold text-[var(--color-green)]">{counts.done}</p>
               <p className="text-[10px] text-[var(--text-faint)] uppercase tracking-wider mt-0.5">Finished</p>
             </div>
             <div className="p-3 rounded-xl bg-[var(--color-cyan-soft)] border border-[var(--color-cyan)]/20 text-center">
@@ -135,7 +127,7 @@ export default async function DashboardPage() {
           <div className="space-y-1">
             {recentActivity.length === 0 && <p className="text-sm text-[var(--text-faint)] py-4 text-center">No videos yet.</p>}
             {recentActivity.map((video) => {
-              const isError = ERROR_STATUSES.includes(video.status);
+              const isError = hasAnyError(video);
               const isDone = DONE_STATUSES.includes(video.status);
               return (
                 <Link

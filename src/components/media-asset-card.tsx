@@ -162,7 +162,7 @@ export function MediaAssetCard({ videoId, mediaKey, asset, onUpdated }: MediaAss
           className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 disabled:opacity-50"
         >
           {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-          {uploading ? "Uploading..." : "Replace media"}
+          {uploading ? "Uploading..." : asset.driveFileId ? "Replace media" : "Upload media"}
         </button>
         {uploadError && <p className="text-xs text-[var(--color-red)] mt-1.5">{uploadError}</p>}
       </div>

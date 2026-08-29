@@ -33,6 +33,11 @@ export interface ScriptSegment {
   text?: string;
   voiceover_drive_file_id?: string;
   error?: string;
+  /** Set when the text was edited in Citadel after this segment already had
+   * a voiceover, and the person declined the "retry now?" prompt. A
+   * standing reminder until they click retry - cleared automatically the
+   * moment a successful retry rebuilds this segment. */
+  edited_pending_retry?: boolean;
 }
 
 export interface VoiceTimingEntry {

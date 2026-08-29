@@ -135,6 +135,8 @@ body {
   outline-offset: 2px;
 }
 
+@layer components {
+
 .glass {
   background: color-mix(in srgb, var(--surface) 80%, transparent);
   backdrop-filter: blur(12px);
@@ -354,3 +356,5 @@ input[type="checkbox"].custom-checkbox:focus-visible {
   z-index: 50;
 }
 .tooltip:hover::after { opacity: 1; transform: translateX(-50%) translateY(-8px); }
+
+}

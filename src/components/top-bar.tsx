@@ -13,15 +13,26 @@ const breadcrumbMap: Record<string, string> = {
   "/notifications": "Notifications",
 };
 
+/** Only emits crumbs for routes that actually exist. The literal "/pipeline"
+ * segment isn't a page on its own (Video Pipeline's real routes live at
+ * /pipeline/dashboard and /pipeline/videos), so it's deliberately skipped
+ * rather than shown as a dead link. */
 function getBreadcrumbs(pathname: string) {
-  const parts = pathname.split("/").filter(Boolean);
-  const breadcrumbs = [{ label: "Workspace", href: "/pipeline/dashboard" }];
-  let currentPath = "";
-  for (const part of parts) {
-    currentPath += `/${part}`;
-    const label = breadcrumbMap[currentPath] || part.charAt(0).toUpperCase() + part.slice(1);
-    breadcrumbs.push({ label, href: currentPath });
+  const breadcrumbs: { label: string; href: string }[] = [{ label: "Workspace", href: "/pipeline/dashboard" }];
+
+  if (pathname.startsWith("/pipeline/videos")) {
+    breadcrumbs.push({ label: "Video Pipeline", href: "/pipeline/videos" });
+    const idMatch = pathname.match(/^\/pipeline\/videos\/([^/]+)/);
+    if (idMatch) {
+      breadcrumbs.push({ label: idMatch[1], href: pathname });
+    }
+  } else if (pathname.startsWith("/pipeline/dashboard")) {
+    breadcrumbs.push({ label: "Video Pipeline", href: "/pipeline/videos" });
+    breadcrumbs.push({ label: "Dashboard", href: "/pipeline/dashboard" });
+  } else if (breadcrumbMap[pathname]) {
+    breadcrumbs.push({ label: breadcrumbMap[pathname], href: pathname });
   }
+
   return breadcrumbs;
 }
 

@@ -77,6 +77,15 @@ export function SegmentRow({ segment, selected, onSelect, onRetry, onPlay, isPla
               <p className="text-xs text-[var(--color-red)] font-mono leading-relaxed">{segment.error}</p>
             </div>
           )}
+
+          {segment.edited_pending_retry && (
+            <div className="mt-2 flex items-center gap-2 p-2.5 rounded-lg bg-[var(--color-amber-soft)]/60 border border-[var(--color-amber)]/30">
+              <AlertCircle className="w-4 h-4 text-[var(--color-amber)] flex-shrink-0" />
+              <p className="text-xs text-[var(--color-amber)] font-medium">
+                Text was edited after this segment&apos;s audio was generated — audio no longer matches. Click retry to regenerate.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="flex-shrink-0 flex items-center gap-2 pt-0.5">
@@ -127,10 +136,11 @@ interface AudioPlayerProps {
   segmentIndex: number;
   segmentText: string;
   fileId: string;
+  src?: string;
   onClose: () => void;
 }
 
-export function AudioPlayerBar({ segmentIndex, segmentText, fileId, onClose }: AudioPlayerProps) {
+export function AudioPlayerBar({ segmentIndex, segmentText, fileId, src, onClose }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -165,7 +175,7 @@ export function AudioPlayerBar({ segmentIndex, segmentText, fileId, onClose }: A
     <div className="flex items-center gap-4 p-4 bg-[var(--bg)] border border-[var(--border)] rounded-xl mt-3">
       <audio
         ref={audioRef}
-        src={`/api/drive/${fileId}`}
+        src={src || `/api/drive/${fileId}`}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onEnded={() => {

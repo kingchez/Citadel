@@ -22,7 +22,7 @@ import {
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import type { VideoRow } from "@/lib/types";
-import { ERROR_STATUSES, IN_PROGRESS_STATUSES, REVIEW_STATUSES, DONE_STATUSES } from "@/lib/types";
+import { computeVideoCounts } from "@/lib/video-stats";
 
 interface ProjectDef {
   key: string;
@@ -70,12 +70,8 @@ export function Sidebar() {
       .then((r) => r.json())
       .then((data: { videos?: VideoRow[] }) => {
         const videos = data.videos || [];
-        setCounts({
-          errors: videos.filter((v) => ERROR_STATUSES.includes(v.status)).length,
-          progress: videos.filter((v) => IN_PROGRESS_STATUSES.includes(v.status)).length,
-          review: videos.filter((v) => REVIEW_STATUSES.includes(v.status) || v.status === "revision_requested").length,
-          done: videos.filter((v) => DONE_STATUSES.includes(v.status)).length,
-        });
+        const counts = computeVideoCounts(videos);
+        setCounts({ errors: counts.errors, progress: counts.progress, review: counts.review, done: counts.done });
       })
       .catch(() => {});
   }, []);

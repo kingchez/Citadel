@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { SegmentRow, AudioPlayerBar } from "@/components/segment-row";
 import { VideoOutputModal } from "@/components/video-output-modal";
 import { MediaAssetCard } from "@/components/media-asset-card";
+import { ScriptEditor } from "@/components/script-editor";
 import { formatTimeAgo } from "@/lib/utils";
 import {
   ArrowLeft,
@@ -42,6 +43,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
   const [showOutputModal, setShowOutputModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"segments" | "media">("segments");
+  const [audioBlobUrls, setAudioBlobUrls] = useState<Record<string, string>>({});
 
   const loadVideo = () => {
     fetch(`/api/videos/${id}`)
@@ -62,6 +64,55 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
     loadVideo();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Prefetch every segment's audio as soon as the video (and its file ids)
+  // are known, so clicking play is instant instead of downloading on
+  // demand. Blob URLs are revoked whenever the file id set changes and on
+  // unmount (navigating away), so nothing lingers in memory.
+  useEffect(() => {
+    const fileIds = Array.from(
+      new Set((video?.script_segments || []).map((s) => s.voiceover_drive_file_id).filter((v): v is string => !!v))
+    );
+    if (fileIds.length === 0) return;
+
+    let cancelled = false;
+    const objectUrls: string[] = [];
+
+    (async () => {
+      const entries = await Promise.all(
+        fileIds.map(async (fileId) => {
+          try {
+            const res = await fetch(`/api/drive/${fileId}`);
+            if (!res.ok) return null;
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            objectUrls.push(url);
+            return [fileId, url] as const;
+          } catch {
+            return null;
+          }
+        })
+      );
+      if (cancelled) {
+        objectUrls.forEach((u) => URL.revokeObjectURL(u));
+        return;
+      }
+      const map: Record<string, string> = {};
+      for (const entry of entries) {
+        if (entry) map[entry[0]] = entry[1];
+      }
+      setAudioBlobUrls(map);
+    })();
+
+    return () => {
+      cancelled = true;
+      objectUrls.forEach((u) => URL.revokeObjectURL(u));
+    };
+    // Re-run only when the actual set of file ids changes, not on every
+    // video refetch (redo/retry swaps ids in place, which this still
+    // catches since the join below changes).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [(video?.script_segments || []).map((s) => s.voiceover_drive_file_id).join(",")]);
 
   const showFeedback = (msg: string, ms = 3500) => {
     setFeedback(msg);
@@ -203,6 +254,14 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
               )}
               <span className="text-[var(--border-strong)]">·</span>
               <span className="text-xs text-[var(--text-faint)]">Updated {formatTimeAgo(video.updated_at)}</span>
+              <span className="text-[var(--border-strong)]">·</span>
+              <button
+                onClick={() => navigator.clipboard?.writeText(video.id)}
+                className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--surface-raised)] border border-[var(--border)] text-[var(--text-faint)] hover:text-[var(--text)] hover:border-[var(--border-strong)] transition-colors"
+                title="Click to copy database ID"
+              >
+                {video.id}
+              </button>
             </div>
           </div>
 
@@ -406,6 +465,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
                 segmentIndex={playingSegment.index}
                 segmentText={playingSegment.text || ""}
                 fileId={playingSegment.voiceover_drive_file_id}
+                src={audioBlobUrls[playingSegment.voiceover_drive_file_id]}
                 onClose={() => setPlayingIndex(null)}
               />
             </div>
@@ -447,9 +507,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
             <span className="text-sm text-[var(--text-faint)] hidden group-open:inline">Click to collapse</span>
           </summary>
           <div className="px-5 pb-5 pt-2 border-t border-[var(--border)]">
-            <p className="text-sm text-[var(--text-muted)] whitespace-pre-wrap leading-relaxed font-mono">
-              {segments.map((s) => s.text).filter(Boolean).join("\n\n") || "No script text available."}
-            </p>
+            <ScriptEditor videoId={video.id} segments={segments} onUpdated={loadVideo} />
           </div>
         </details>
       )}
