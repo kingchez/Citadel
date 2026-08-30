@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { RotateCcw, Play, Pause, ChevronDown, ChevronUp, AlertCircle, CheckCircle2 } from "lucide-react";
+import { RotateCcw, RotateCw, Play, Pause, ChevronDown, ChevronUp, AlertCircle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ScriptSegment } from "@/lib/types";
 
@@ -12,13 +12,17 @@ interface SegmentRowProps {
   onRetry: (index: number) => void;
   onPlay: (index: number) => void;
   isPlaying: boolean;
+  /** True when there's a pending/dispatched retry row for this segment -
+   * i.e. it's genuinely queued to be regenerated, whether that retry came
+   * from the retry icon or from approving a retry after an edit. */
+  retryQueued?: boolean;
 }
 
-export function SegmentRow({ segment, selected, onSelect, onRetry, onPlay, isPlaying }: SegmentRowProps) {
+export function SegmentRow({ segment, selected, onSelect, onRetry, onPlay, isPlaying, retryQueued }: SegmentRowProps) {
   const [expanded, setExpanded] = useState(false);
   const hasAudio = !!segment.voiceover_drive_file_id;
   const isError = !!segment.error;
-  const isSuccess = !isError && hasAudio;
+  const isSuccess = !isError && hasAudio && !retryQueued;
   const text = segment.text || "";
 
   return (
@@ -78,7 +82,7 @@ export function SegmentRow({ segment, selected, onSelect, onRetry, onPlay, isPla
             </div>
           )}
 
-          {segment.edited_pending_retry && (
+          {segment.edited_pending_retry && !retryQueued && (
             <div className="mt-2 flex items-center gap-2 p-2.5 rounded-lg bg-[var(--color-amber-soft)]/60 border border-[var(--color-amber)]/30">
               <AlertCircle className="w-4 h-4 text-[var(--color-amber)] flex-shrink-0" />
               <p className="text-xs text-[var(--color-amber)] font-medium">
@@ -86,10 +90,23 @@ export function SegmentRow({ segment, selected, onSelect, onRetry, onPlay, isPla
               </p>
             </div>
           )}
+
+          {retryQueued && (
+            <div className="mt-2 flex items-center gap-2 p-2.5 rounded-lg bg-[var(--color-amber-soft)]/40 border border-[var(--color-amber)]/20">
+              <RotateCw className="w-4 h-4 text-[var(--color-amber)] flex-shrink-0" />
+              <p className="text-xs text-[var(--color-amber)] font-medium">
+                Queued for retry — the audio you hear below is still the old version until this finishes.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="flex-shrink-0 flex items-center gap-2 pt-0.5">
-          {isSuccess ? (
+          {retryQueued ? (
+            <span title="Retry queued">
+              <RotateCw className="w-5 h-5 text-[var(--color-amber)]" />
+            </span>
+          ) : isSuccess ? (
             <CheckCircle2 className="w-5 h-5 text-[var(--color-green)]" />
           ) : isError ? (
             <AlertCircle className="w-5 h-5 text-[var(--color-red)]" />

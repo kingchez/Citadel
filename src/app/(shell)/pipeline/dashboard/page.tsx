@@ -4,8 +4,15 @@ import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
 import { formatTimeAgo } from "@/lib/utils";
 import { DONE_STATUSES, type VideoRow } from "@/lib/types";
-import { computeVideoCounts, parseVpsService, hasAnyError } from "@/lib/video-stats";
+import { computeVideoCounts, hasAnyError } from "@/lib/video-stats";
 import { Activity, ArrowRight, AlertTriangle, CheckCircle2, Clock, Zap, ChevronRight } from "lucide-react";
+
+const PIPELINE_SERVICES = [
+  { key: "chatterbox", label: "Chatterbox (voiceover)" },
+  { key: "whisperx", label: "WhisperX (timing)" },
+  { key: "render", label: "Render Server" },
+  { key: "autobrowse", label: "AutoBrowse (media)" },
+] as const;
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -33,7 +40,6 @@ export default async function DashboardPage() {
   // way) - not a separate log or table of its own.
   const recentActivity = videos.slice(0, 6);
   const activeJob = videos.find((v) => v.vps_in_use);
-  const vpsService = parseVpsService(activeJob?.vps_current_service);
 
   const doneWithTimestamps = videos.filter((v) => DONE_STATUSES.includes(v.status));
   const avgTurnaroundHours =
@@ -76,26 +82,38 @@ export default async function DashboardPage() {
             <h2 className="font-semibold text-[var(--text)]">Pipeline Health</h2>
           </div>
 
-          <div className="flex items-center justify-between p-3 rounded-xl bg-[var(--surface-raised)] border border-[var(--border)]">
-            <div className="flex items-center gap-3">
-              <span
-                className="w-2.5 h-2.5 rounded-full flex-shrink-0 inline-block"
-                style={{
-                  backgroundColor: vpsService ? vpsService.color : "var(--color-green)",
-                  boxShadow: `0 0 6px ${vpsService ? vpsService.color : "var(--color-green-glow)"}`,
-                }}
-              />
-              <div>
-                <p className="text-sm font-semibold text-[var(--text)]">VPS</p>
-                <p className="text-[11px] text-[var(--text-faint)]">{vpsService ? vpsService.label : "Idle"}</p>
-              </div>
-            </div>
-            <span
-              className="text-[11px] font-semibold uppercase tracking-wide"
-              style={{ color: vpsService ? vpsService.color : "var(--color-green)" }}
-            >
-              {vpsService ? "Busy" : "Idle"}
-            </span>
+          <div className="space-y-2">
+            {PIPELINE_SERVICES.map((service) => {
+              const inUse = activeJob?.vps_current_service === service.key;
+              return (
+                <div
+                  key={service.key}
+                  className="flex items-center justify-between p-3 rounded-xl bg-[var(--surface-raised)] border border-[var(--border)]"
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full flex-shrink-0 inline-block"
+                      style={{
+                        backgroundColor: inUse ? "var(--color-amber)" : "var(--color-green)",
+                        boxShadow: `0 0 6px ${inUse ? "var(--color-amber-glow)" : "var(--color-green-glow)"}`,
+                      }}
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text)]">{service.label}</p>
+                      {inUse && activeJob && (
+                        <p className="text-[11px] text-[var(--text-faint)] truncate max-w-[200px]">{activeJob.title}</p>
+                      )}
+                    </div>
+                  </div>
+                  <span
+                    className="text-[11px] font-semibold uppercase tracking-wide flex-shrink-0"
+                    style={{ color: inUse ? "var(--color-amber)" : "var(--color-green)" }}
+                  >
+                    {inUse ? "In use" : "Idle"}
+                  </span>
+                </div>
+              );
+            })}
           </div>
 
           <div className="divider" />

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
-import type { ScriptSegment, VideoRow } from "@/lib/types";
+import type { ScriptSegment, VideoRow, RetryRow } from "@/lib/types";
 import { StatusBadge } from "@/components/status-badge";
 import { SegmentRow, AudioPlayerBar } from "@/components/segment-row";
 import { VideoOutputModal } from "@/components/video-output-modal";
@@ -35,6 +35,7 @@ const APPROVABLE_STATUSES = new Set(["media_review", "production_review", "done"
 export default function VideoDetailPage({ params }: VideoDetailProps) {
   const { id } = use(params);
   const [video, setVideo] = useState<VideoRow | null>(null);
+  const [retries, setRetries] = useState<RetryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
@@ -54,8 +55,9 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
         }
         return r.json();
       })
-      .then((data: { video?: VideoRow } | null) => {
+      .then((data: { video?: VideoRow; retries?: RetryRow[] } | null) => {
         if (data?.video) setVideo(data.video);
+        if (data?.retries) setRetries(data.retries);
       })
       .finally(() => setLoading(false));
   };
@@ -166,6 +168,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || "Retry failed");
       showFeedback(`Segment ${index + 1} queued for retry`);
+      loadVideo();
     } catch (err) {
       showFeedback(err instanceof Error ? err.message : "Retry failed");
     }
@@ -455,6 +458,12 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
                 onRetry={handleRetryOne}
                 onPlay={handlePlay}
                 isPlaying={playingIndex === seg.index}
+                retryQueued={retries.some(
+                  (r) =>
+                    r.service === "chatterbox" &&
+                    r.target?.segment_index === seg.index &&
+                    (r.status === "pending" || r.status === "dispatched")
+                )}
               />
             ))}
           </div>

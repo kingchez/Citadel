@@ -8,6 +8,13 @@ import { getSupabaseAdmin } from "@/lib/supabase";
  * so it goes straight to Supabase rather than through n8n's own queue
  * webhook - n8n's job starts at "interpret what's pending and dispatch it,"
  * not "receive this write on Citadel's behalf."
+ *
+ * If this is a chatterbox retry for a specific segment that was carrying an
+ * `edited_pending_retry` warning, that flag is cleared here too. The
+ * warning's whole job was "remind them to click retry" - once they've
+ * clicked it, its job is done. It shouldn't linger until the async job
+ * actually finishes (which could be a long wait, and would read as "you
+ * still haven't retried this" when they already have).
  */
 export async function POST(request: NextRequest) {
   try {
@@ -19,6 +26,21 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin();
+
+    if (service === "chatterbox" && typeof target?.segment_index === "number") {
+      const { data: video } = await supabase
+        .from("videos")
+        .select("script_segments")
+        .eq("id", video_id)
+        .single();
+      const segments = video?.script_segments || [];
+      const idx = segments.findIndex((s: { index: number }) => s.index === target.segment_index);
+      if (idx !== -1 && segments[idx].edited_pending_retry) {
+        const updated = [...segments];
+        updated[idx] = { ...updated[idx], edited_pending_retry: undefined };
+        await supabase.from("videos").update({ script_segments: updated }).eq("id", video_id);
+      }
+    }
 
     // Dedup guard: don't queue the same target twice while a retry for it
     // is still outstanding.
