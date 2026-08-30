@@ -33,7 +33,7 @@ export default async function DashboardPage() {
   // way) - not a separate log or table of its own.
   const recentActivity = videos.slice(0, 6);
   const activeJob = videos.find((v) => v.vps_in_use);
-  const vpsService = parseVpsService(activeJob?.vps_status);
+  const vpsService = parseVpsService(activeJob?.vps_current_service);
 
   const doneWithTimestamps = videos.filter((v) => DONE_STATUSES.includes(v.status));
   const avgTurnaroundHours =

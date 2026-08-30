@@ -11,24 +11,21 @@ const VPS_SERVICE_MAP: Record<string, VpsServiceInfo> = {
   whisperx: { label: "WhisperX (timing)", color: "var(--color-cyan)" },
   render: { label: "Render Server", color: "var(--color-amber)" },
   autobrowse: { label: "AutoBrowse (media)", color: "var(--color-green)" },
-  citadel_redo: { label: "Chatterbox (Citadel redo)", color: "var(--color-purple)" },
 };
 
 /**
- * Which service currently holds the VPS lock, derived from `vps_status`
- * rather than a separate column. Every dispatch lane across both the main
- * pipeline and the Retries workflow already sets `vps_status` to
- * `dispatching_<service>` (optionally `_retry`) the moment it locks the
- * VPS, and clears it back to null the moment it releases - verified
- * consistent across every lock/release node in both workflows. A second
- * column mirroring the same information would only be another thing that
- * can drift out of sync with the ~30 write sites that would need to keep
- * it updated; this reads the value that's already there.
+ * Which service currently holds the VPS lock, read from
+ * `videos.vps_current_service`. That field is set once at the real lock
+ * point (alongside vps_in_use going true) and only cleared at the real
+ * release point (vps_in_use going back to false) - unlike vps_status,
+ * which is intentionally cleared much earlier, right after the job is
+ * handed off, while the async job itself keeps running. Both fields are
+ * left exactly as they were; this one was added purely to give an
+ * always-accurate answer to "what's actually running right now."
  */
-export function parseVpsService(vpsStatus: string | null | undefined): VpsServiceInfo | null {
-  if (!vpsStatus || !vpsStatus.startsWith("dispatching_")) return null;
-  const raw = vpsStatus.replace(/^dispatching_/, "").replace(/_retry$/, "");
-  return VPS_SERVICE_MAP[raw] || { label: raw, color: "var(--text-muted)" };
+export function parseVpsService(currentService: string | null | undefined): VpsServiceInfo | null {
+  if (!currentService) return null;
+  return VPS_SERVICE_MAP[currentService] || { label: currentService, color: "var(--text-muted)" };
 }
 export interface VideoCounts {
   total: number;

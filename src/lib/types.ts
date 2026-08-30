@@ -108,6 +108,7 @@ export interface VideoRow {
   active_retry?: ActiveRetry | null;
   vps_in_use?: boolean;
   vps_status?: string;
+  vps_current_service?: string | null;
   vps_job_triggered_at?: string;
   retry_batch_id?: string;
   created_at: string;
