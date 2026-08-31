@@ -94,8 +94,8 @@ export default async function DashboardPage() {
                     <span
                       className="w-2.5 h-2.5 rounded-full flex-shrink-0 inline-block"
                       style={{
-                        backgroundColor: inUse ? "var(--color-amber)" : "var(--color-green)",
-                        boxShadow: `0 0 6px ${inUse ? "var(--color-amber-glow)" : "var(--color-green-glow)"}`,
+                        backgroundColor: inUse ? "var(--color-green)" : "var(--text-faint)",
+                        boxShadow: inUse ? "0 0 6px var(--color-green-glow)" : "none",
                       }}
                     />
                     <div>
@@ -107,7 +107,7 @@ export default async function DashboardPage() {
                   </div>
                   <span
                     className="text-[11px] font-semibold uppercase tracking-wide flex-shrink-0"
-                    style={{ color: inUse ? "var(--color-amber)" : "var(--color-green)" }}
+                    style={{ color: inUse ? "var(--color-green)" : "var(--text-faint)" }}
                   >
                     {inUse ? "In use" : "Idle"}
                   </span>
