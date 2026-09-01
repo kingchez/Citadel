@@ -74,6 +74,12 @@ export interface MediaAssetEntry {
 
 export type RevisionStatus = "pending" | "resolved";
 
+export interface ProductEntry {
+  index: number;
+  asin: string;
+  source_url?: string;
+  added_at: string;
+}
 export interface RevisionEntry {
   id: string;
   note: string;
@@ -96,7 +102,8 @@ export interface VideoRow {
   video_type: VideoType;
   notes?: unknown;
   with_product?: boolean;
-  product_ids?: string[];
+  product_ids?: ProductEntry[];
+  product_output_url?: string;
   script_segments?: ScriptSegment[];
   voice_timing?: VoiceTimingEntry[];
   scenes?: unknown;

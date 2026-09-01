@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { SegmentRow, AudioPlayerBar } from "@/components/segment-row";
 import { VideoOutputModal } from "@/components/video-output-modal";
 import { MediaAssetCard } from "@/components/media-asset-card";
+import { AffiliateProductsTab } from "@/components/affiliate-products-tab";
 import { ScriptEditor } from "@/components/script-editor";
 import { formatTimeAgo } from "@/lib/utils";
 import {
@@ -24,6 +25,7 @@ import {
   Layers,
   MessageSquareWarning,
   Image as ImageIcon,
+  ShoppingCart,
 } from "lucide-react";
 
 interface VideoDetailProps {
@@ -43,7 +45,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [showOutputModal, setShowOutputModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"segments" | "media">("segments");
+  const [activeTab, setActiveTab] = useState<"segments" | "media" | "products">("segments");
   const [audioBlobUrls, setAudioBlobUrls] = useState<Record<string, string>>({});
 
   const loadVideo = () => {
@@ -138,6 +140,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
 
   const segments: ScriptSegment[] = video.script_segments || [];
   const mediaEntries = Object.entries(video.media_assets || {});
+  const products = video.product_ids || [];
   const revisionHistory = video.revision_history || [];
   const pendingRevisions = revisionHistory.filter((r) => r.status === "pending");
   const allSelected = segments.length > 0 && selectedIndices.size === segments.length;
@@ -377,28 +380,35 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
         </div>
       )}
 
-      {(segments.length > 0 || mediaEntries.length > 0) && (
-        <div className="flex items-center gap-1 p-1.5 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-fit">
-          <button onClick={() => setActiveTab("segments")} className={`tab flex items-center gap-2 ${activeTab === "segments" ? "tab-active" : ""}`}>
-            <Layers className="w-4 h-4" />
-            Voiceover Segments
-            {segments.length > 0 && (
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeTab === "segments" ? "bg-white/20 text-white" : "bg-[var(--border)] text-[var(--text-faint)]"}`}>
-                {segments.length}
-              </span>
-            )}
-          </button>
-          <button onClick={() => setActiveTab("media")} className={`tab flex items-center gap-2 ${activeTab === "media" ? "tab-active" : ""}`}>
-            <ImageIcon className="w-4 h-4" />
-            Media Assets
-            {mediaEntries.length > 0 && (
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeTab === "media" ? "bg-white/20 text-white" : "bg-[var(--border)] text-[var(--text-faint)]"}`}>
-                {mediaEntries.length}
-              </span>
-            )}
-          </button>
-        </div>
-      )}
+      <div className="flex items-center gap-1 p-1.5 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-fit flex-wrap">
+        <button onClick={() => setActiveTab("segments")} className={`tab flex items-center gap-2 ${activeTab === "segments" ? "tab-active" : ""}`}>
+          <Layers className="w-4 h-4" />
+          Voiceover Segments
+          {segments.length > 0 && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeTab === "segments" ? "bg-white/20 text-white" : "bg-[var(--border)] text-[var(--text-faint)]"}`}>
+              {segments.length}
+            </span>
+          )}
+        </button>
+        <button onClick={() => setActiveTab("media")} className={`tab flex items-center gap-2 ${activeTab === "media" ? "tab-active" : ""}`}>
+          <ImageIcon className="w-4 h-4" />
+          Media Assets
+          {mediaEntries.length > 0 && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeTab === "media" ? "bg-white/20 text-white" : "bg-[var(--border)] text-[var(--text-faint)]"}`}>
+              {mediaEntries.length}
+            </span>
+          )}
+        </button>
+        <button onClick={() => setActiveTab("products")} className={`tab flex items-center gap-2 ${activeTab === "products" ? "tab-active" : ""}`}>
+          <ShoppingCart className="w-4 h-4" />
+          Affiliate Products
+          {products.length > 0 && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeTab === "products" ? "bg-white/20 text-white" : "bg-[var(--border)] text-[var(--text-faint)]"}`}>
+              {products.length}
+            </span>
+          )}
+        </button>
+      </div>
 
       {activeTab === "segments" && segments.length > 0 && (
         <div className="card overflow-hidden">
@@ -500,7 +510,11 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
         </div>
       )}
 
-      {segments.length === 0 && mediaEntries.length === 0 && (
+      {activeTab === "products" && (
+        <AffiliateProductsTab videoId={video.id} products={products} onUpdated={loadVideo} />
+      )}
+
+      {segments.length === 0 && mediaEntries.length === 0 && products.length === 0 && activeTab !== "products" && (
         <div className="card p-10 text-center">
           <Clock className="w-12 h-12 mx-auto mb-3 text-[var(--border-strong)]" />
           <p className="text-[var(--text-muted)] font-medium">Nothing here yet</p>
