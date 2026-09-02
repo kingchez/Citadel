@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { ShoppingCart, ExternalLink, X, Pencil, Check, Loader2, PackagePlus, Trash2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ShoppingCart, ExternalLink, X, Pencil, Check, Loader2, PackagePlus, Trash2, Link2 } from "lucide-react";
 import type { ProductEntry } from "@/lib/types";
 import { buildAmazonProductUrl } from "@/lib/amazon";
 import { formatTimeAgo } from "@/lib/utils";
@@ -9,10 +9,11 @@ import { formatTimeAgo } from "@/lib/utils";
 interface AffiliateProductsTabProps {
   videoId: string;
   products: ProductEntry[];
+  productOutputUrl?: string;
   onUpdated: () => void;
 }
 
-export function AffiliateProductsTab({ videoId, products, onUpdated }: AffiliateProductsTabProps) {
+export function AffiliateProductsTab({ videoId, products, productOutputUrl, onUpdated }: AffiliateProductsTabProps) {
   const [rawInput, setRawInput] = useState("");
   const [adding, setAdding] = useState(false);
   const [addResult, setAddResult] = useState<{ added: number; skippedDuplicates: number; failed: string[] } | null>(null);
@@ -21,6 +22,13 @@ export function AffiliateProductsTab({ videoId, products, onUpdated }: Affiliate
   const [editDraft, setEditDraft] = useState("");
   const [savingList, setSavingList] = useState(false);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
+  const [outputUrlDraft, setOutputUrlDraft] = useState(productOutputUrl || "");
+  const [savingOutputUrl, setSavingOutputUrl] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing local draft when the saved value changes externally (e.g. after a reload)
+    setOutputUrlDraft(productOutputUrl || "");
+  }, [productOutputUrl]);
 
   const handleAdd = async () => {
     if (!rawInput.trim()) return;
@@ -45,13 +53,15 @@ export function AffiliateProductsTab({ videoId, products, onUpdated }: Affiliate
     }
   };
 
-  const replaceList = async (next: ProductEntry[]) => {
+  const replaceList = async (next: ProductEntry[], outputUrl?: string) => {
     setSavingList(true);
     try {
+      const payload: { products: ProductEntry[]; product_output_url?: string } = { products: next };
+      if (outputUrl !== undefined) payload.product_output_url = outputUrl;
       const res = await fetch(`/api/videos/${videoId}/products`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ products: next }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || "Could not update products.");
       onUpdated();
@@ -59,6 +69,15 @@ export function AffiliateProductsTab({ videoId, products, onUpdated }: Affiliate
       setError(err instanceof Error ? err.message : "Could not update products.");
     } finally {
       setSavingList(false);
+    }
+  };
+
+  const handleSaveOutputUrl = async () => {
+    setSavingOutputUrl(true);
+    try {
+      await replaceList(products, outputUrlDraft);
+    } finally {
+      setSavingOutputUrl(false);
     }
   };
 
@@ -122,6 +141,33 @@ export function AffiliateProductsTab({ videoId, products, onUpdated }: Affiliate
           >
             {adding && <Loader2 className="w-4 h-4 animate-spin" />}
             Add Products
+          </button>
+        </div>
+      </div>
+
+      <div className="card p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <Link2 className="w-5 h-5 text-[var(--color-purple)]" />
+          <h3 className="font-semibold text-[var(--text)]">Product Output URL</h3>
+        </div>
+        <p className="text-xs text-[var(--text-faint)]">
+          Optional — a single link for this video&apos;s affiliate output (e.g. a storefront page or aggregated link),
+          separate from the individual product ASINs above.
+        </p>
+        <div className="flex items-center gap-2">
+          <input
+            value={outputUrlDraft}
+            onChange={(e) => setOutputUrlDraft(e.target.value)}
+            placeholder="https://..."
+            className="input-field text-sm py-2 font-mono flex-1"
+          />
+          <button
+            onClick={handleSaveOutputUrl}
+            disabled={savingOutputUrl || outputUrlDraft === (productOutputUrl || "")}
+            className="btn-secondary text-sm py-2 px-4 flex items-center gap-1.5 disabled:opacity-50 flex-shrink-0"
+          >
+            {savingOutputUrl && <Loader2 className="w-4 h-4 animate-spin" />}
+            Save
           </button>
         </div>
       </div>

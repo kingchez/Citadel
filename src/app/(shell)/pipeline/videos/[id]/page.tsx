@@ -511,7 +511,12 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
       )}
 
       {activeTab === "products" && (
-        <AffiliateProductsTab videoId={video.id} products={products} onUpdated={loadVideo} />
+        <AffiliateProductsTab
+          videoId={video.id}
+          products={products}
+          productOutputUrl={video.product_output_url}
+          onUpdated={loadVideo}
+        />
       )}
 
       {segments.length === 0 && mediaEntries.length === 0 && products.length === 0 && activeTab !== "products" && (

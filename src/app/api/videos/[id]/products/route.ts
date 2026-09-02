@@ -8,12 +8,17 @@ import type { ProductEntry } from "@/lib/types";
  * array). with_product is always recomputed from the resulting length,
  * never set independently, so the affiliate tag can never drift out of
  * sync with whether there are actually any products.
+ *
+ * product_output_url is optional and independent of the product list -
+ * pass it whenever it's being edited, omit it to leave it untouched.
  */
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const body = await request.json().catch(() => ({}));
     const products: unknown = body?.products;
+    const hasOutputUrl = Object.prototype.hasOwnProperty.call(body ?? {}, "product_output_url");
+    const productOutputUrl: string | null | undefined = body?.product_output_url;
 
     if (!Array.isArray(products)) {
       return NextResponse.json({ error: "products must be an array." }, { status: 400 });
@@ -30,13 +35,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Every product needs a non-empty ASIN." }, { status: 400 });
     }
 
+    const updates: Record<string, unknown> = { product_ids: cleaned, with_product: cleaned.length > 0 };
+    if (hasOutputUrl) {
+      updates.product_output_url = productOutputUrl?.trim() || null;
+    }
+
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("videos")
-      .update({ product_ids: cleaned, with_product: cleaned.length > 0 })
-      .eq("id", id)
-      .select()
-      .single();
+    const { data, error } = await supabase.from("videos").update(updates).eq("id", id).select().single();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
