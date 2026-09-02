@@ -24,6 +24,7 @@ export function AffiliateProductsTab({ videoId, products, productOutputUrl, onUp
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [outputUrlDraft, setOutputUrlDraft] = useState(productOutputUrl || "");
   const [savingOutputUrl, setSavingOutputUrl] = useState(false);
+  const [outputUrlJustSaved, setOutputUrlJustSaved] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing local draft when the saved value changes externally (e.g. after a reload)
@@ -53,7 +54,7 @@ export function AffiliateProductsTab({ videoId, products, productOutputUrl, onUp
     }
   };
 
-  const replaceList = async (next: ProductEntry[], outputUrl?: string) => {
+  const replaceList = async (next: ProductEntry[], outputUrl?: string): Promise<boolean> => {
     setSavingList(true);
     try {
       const payload: { products: ProductEntry[]; product_output_url?: string } = { products: next };
@@ -65,8 +66,10 @@ export function AffiliateProductsTab({ videoId, products, productOutputUrl, onUp
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || "Could not update products.");
       onUpdated();
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update products.");
+      return false;
     } finally {
       setSavingList(false);
     }
@@ -75,7 +78,11 @@ export function AffiliateProductsTab({ videoId, products, productOutputUrl, onUp
   const handleSaveOutputUrl = async () => {
     setSavingOutputUrl(true);
     try {
-      await replaceList(products, outputUrlDraft);
+      const success = await replaceList(products, outputUrlDraft);
+      if (success) {
+        setOutputUrlJustSaved(true);
+        setTimeout(() => setOutputUrlJustSaved(false), 2000);
+      }
     } finally {
       setSavingOutputUrl(false);
     }
@@ -164,10 +171,18 @@ export function AffiliateProductsTab({ videoId, products, productOutputUrl, onUp
           <button
             onClick={handleSaveOutputUrl}
             disabled={savingOutputUrl || outputUrlDraft === (productOutputUrl || "")}
-            className="btn-secondary text-sm py-2 px-4 flex items-center gap-1.5 disabled:opacity-50 flex-shrink-0"
+            className={`text-sm py-2 px-4 flex items-center gap-1.5 disabled:opacity-50 flex-shrink-0 transition-colors ${
+              outputUrlJustSaved
+                ? "bg-[var(--color-green)] text-white rounded-xl font-medium"
+                : "btn-secondary"
+            }`}
           >
-            {savingOutputUrl && <Loader2 className="w-4 h-4 animate-spin" />}
-            Save
+            {savingOutputUrl ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : outputUrlJustSaved ? (
+              <Check className="w-4 h-4" />
+            ) : null}
+            {savingOutputUrl ? "Saving..." : outputUrlJustSaved ? "Saved" : "Save"}
           </button>
         </div>
       </div>
