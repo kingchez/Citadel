@@ -18,24 +18,20 @@ import {
   LayoutDashboard,
   Video,
   FolderKanban,
+  Newspaper,
+  Inbox,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import type { VideoRow } from "@/lib/types";
+import type { NewsEvent } from "@/lib/news-types";
 import { computeVideoCounts } from "@/lib/video-stats";
 
 interface ProjectDef {
   key: string;
   label: string;
   icon: typeof Video;
-  items: { label: string; href: string; icon: typeof Grid; countKey?: keyof Counts }[];
-}
-
-interface Counts {
-  errors: number;
-  progress: number;
-  review: number;
-  done: number;
+  items: { label: string; href: string; icon: typeof Grid; countKey?: string }[];
 }
 
 const PROJECTS: ProjectDef[] = [
@@ -46,10 +42,21 @@ const PROJECTS: ProjectDef[] = [
     items: [
       { label: "Dashboard", href: "/pipeline/dashboard", icon: LayoutDashboard },
       { label: "All Videos", href: "/pipeline/videos", icon: Grid },
-      { label: "Errors", href: "/pipeline/videos?view=errors", icon: AlertTriangle, countKey: "errors" },
-      { label: "In Progress", href: "/pipeline/videos?view=progress", icon: Clock, countKey: "progress" },
-      { label: "Needs Review", href: "/pipeline/videos?view=review", icon: ClipboardCheck, countKey: "review" },
-      { label: "Done", href: "/pipeline/videos?view=done", icon: CheckCircle, countKey: "done" },
+      { label: "Errors", href: "/pipeline/videos?view=errors", icon: AlertTriangle, countKey: "video.errors" },
+      { label: "In Progress", href: "/pipeline/videos?view=progress", icon: Clock, countKey: "video.progress" },
+      { label: "Needs Review", href: "/pipeline/videos?view=review", icon: ClipboardCheck, countKey: "video.review" },
+      { label: "Done", href: "/pipeline/videos?view=done", icon: CheckCircle, countKey: "video.done" },
+    ],
+  },
+  {
+    key: "news-pipeline",
+    label: "News Pipeline",
+    icon: Newspaper,
+    items: [
+      { label: "Dashboard", href: "/news/dashboard", icon: LayoutDashboard },
+      { label: "All Events", href: "/news/events", icon: Grid },
+      { label: "Needs Review", href: "/news/events?view=needs_review", icon: Inbox, countKey: "news.needsReview" },
+      { label: "Reviewed", href: "/news/events?view=reviewed", icon: CheckCircle, countKey: "news.reviewed" },
     ],
   },
 ];
@@ -60,18 +67,36 @@ export function Sidebar() {
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const [expandedProjects, setExpandedProjects] = useState<string[]>(["video-pipeline"]);
-  const [counts, setCounts] = useState<Counts>({ errors: 0, progress: 0, review: 0, done: 0 });
+  const [expandedProjects, setExpandedProjects] = useState<string[]>(["video-pipeline", "news-pipeline"]);
+  const [counts, setCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- standard hydration-safe mounted check
     setMounted(true);
+
     fetch("/api/videos")
       .then((r) => r.json())
       .then((data: { videos?: VideoRow[] }) => {
-        const videos = data.videos || [];
-        const counts = computeVideoCounts(videos);
-        setCounts({ errors: counts.errors, progress: counts.progress, review: counts.review, done: counts.done });
+        const videoCounts = computeVideoCounts(data.videos || []);
+        setCounts((prev) => ({
+          ...prev,
+          "video.errors": videoCounts.errors,
+          "video.progress": videoCounts.progress,
+          "video.review": videoCounts.review,
+          "video.done": videoCounts.done,
+        }));
+      })
+      .catch(() => {});
+
+    fetch("/api/news/events")
+      .then((r) => r.json())
+      .then((data: { events?: NewsEvent[] }) => {
+        const events = data.events || [];
+        setCounts((prev) => ({
+          ...prev,
+          "news.needsReview": events.filter((e) => e.status === "unprocessed" || e.status === "processing").length,
+          "news.reviewed": events.filter((e) => e.status === "reviewed").length,
+        }));
       })
       .catch(() => {});
   }, []);

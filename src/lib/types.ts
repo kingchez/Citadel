@@ -101,6 +101,8 @@ export interface VideoRow {
   status: VideoStatus;
   video_type: VideoType;
   notes?: unknown;
+  priority?: boolean;
+  source_event_id?: number | null;
   with_product?: boolean;
   product_ids?: ProductEntry[];
   product_output_url?: string;
