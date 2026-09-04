@@ -4,7 +4,9 @@ import { useEffect, useState, use, useCallback } from "react";
 import Link from "next/link";
 import type { NewsEvent } from "@/lib/news-types";
 import { extractThumbnailCandidates, EVENT_STATUS_LABELS } from "@/lib/news-types";
+import { loadQueue, type QueueEntry } from "@/lib/news-queue-cache";
 import { formatTimeAgo } from "@/lib/utils";
+import { ThumbnailLightbox } from "@/components/thumbnail-lightbox";
 import {
   ArrowLeft,
   ChevronLeft,
@@ -17,6 +19,7 @@ import {
   Image as ImageIcon,
   Loader2,
   ExternalLink,
+  Maximize2,
 } from "lucide-react";
 
 interface EventDetailProps {
@@ -31,40 +34,67 @@ const CHANNELS = [
 export default function EventDetailPage({ params }: EventDetailProps) {
   const { id } = use(params);
   const [event, setEvent] = useState<NewsEvent | null>(null);
-  const [allEvents, setAllEvents] = useState<NewsEvent[]>([]);
+  const [queue, setQueue] = useState<QueueEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+
+  // Separate loading flags per action, so clicking a thumbnail doesn't make
+  // the "Mark Reviewed" button look like it's loading, and vice versa.
+  const [savingThumbnail, setSavingThumbnail] = useState(false);
+  const [savingStatus, setSavingStatus] = useState<"reviewed" | "paused" | null>(null);
+  const [savingField, setSavingField] = useState(false);
+
   const [feedback, setFeedback] = useState<string | null>(null);
   const [customThumbUrl, setCustomThumbUrl] = useState("");
   const [showConvert, setShowConvert] = useState(false);
   const [convertChannel, setConvertChannel] = useState("The Daily Signal");
   const [convertType, setConvertType] = useState<"vertical-shorts" | "horizontal-long">("vertical-shorts");
   const [converting, setConverting] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
-  const load = useCallback(() => {
-    fetch("/api/news/events")
-      .then((r) => r.json())
-      .then((data: { events?: NewsEvent[] }) => {
-        const events = data.events || [];
-        setAllEvents(events);
-        const found = events.find((e) => String(e.id) === id);
-        setEvent(found || null);
+  const loadEvent = useCallback(() => {
+    fetch(`/api/news/events/${id}`)
+      .then(async (r) => {
+        if (r.status === 404) {
+          setNotFound(true);
+          return null;
+        }
+        return r.json();
+      })
+      .then((data: { event?: NewsEvent } | null) => {
+        if (data?.event) setEvent(data.event);
       })
       .finally(() => setLoading(false));
   }, [id]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    loadEvent();
+
+    // Prev/next reads the queue order cached by the events list page - no
+    // need to re-fetch and re-sort all 25+ events (with full article
+    // bodies) just to find neighbors. Falls back to a one-time full fetch
+    // only if the cache is empty (e.g. a bookmarked/direct link).
+    const cached = loadQueue();
+    if (cached.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reading a synchronous browser API (sessionStorage) on mount, not derived from props/state
+      setQueue(cached);
+    } else {
+      fetch("/api/news/events")
+        .then((r) => r.json())
+        .then((data: { events?: NewsEvent[] }) => {
+          setQueue((data.events || []).map((e) => ({ id: e.id, social_headline: e.social_headline, event_title: e.event_title })));
+        })
+        .catch(() => {});
+    }
+  }, [id, loadEvent]);
 
   const showFeedback = (msg: string, ms = 3000) => {
     setFeedback(msg);
     setTimeout(() => setFeedback(null), ms);
   };
 
-  const patch = async (fields: Partial<NewsEvent>) => {
-    if (!event) return;
-    setSaving(true);
+  const patch = async (fields: Partial<NewsEvent>): Promise<boolean> => {
+    if (!event) return false;
     try {
       const res = await fetch(`/api/news/events/${event.id}`, {
         method: "PATCH",
@@ -78,9 +108,33 @@ export default function EventDetailPage({ params }: EventDetailProps) {
     } catch (err) {
       showFeedback(err instanceof Error ? err.message : "Could not save.");
       return false;
-    } finally {
-      setSaving(false);
     }
+  };
+
+  const handleSelectThumbnail = async (url: string) => {
+    if (!event) return;
+    const previous = event.thumbnail;
+    // Optimistic update - the border/preview reflects the click instantly
+    // instead of waiting on a round trip.
+    setEvent({ ...event, thumbnail: url });
+    setSavingThumbnail(true);
+    const ok = await patch({ thumbnail: url });
+    setSavingThumbnail(false);
+    if (!ok) {
+      setEvent((e) => (e ? { ...e, thumbnail: previous } : e));
+    }
+  };
+
+  const handleFieldBlur = async (fields: Partial<NewsEvent>) => {
+    setSavingField(true);
+    await patch(fields);
+    setSavingField(false);
+  };
+
+  const handleSetStatus = async (status: "reviewed" | "paused") => {
+    setSavingStatus(status);
+    await patch({ status });
+    setSavingStatus(null);
   };
 
   const handleConvert = async () => {
@@ -96,7 +150,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
       if (!res.ok) throw new Error(data.error || "Could not create video.");
       showFeedback("Video created with priority — it'll be picked up ahead of the current queue.", 4500);
       setShowConvert(false);
-      load();
+      loadEvent();
     } catch (err) {
       showFeedback(err instanceof Error ? err.message : "Could not create video.");
     } finally {
@@ -108,7 +162,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
     return <div className="p-6 max-w-4xl mx-auto text-[var(--text-faint)]">Loading...</div>;
   }
 
-  if (!event) {
+  if (notFound || !event) {
     return (
       <div className="p-6 max-w-4xl mx-auto text-center py-20">
         <p className="text-[var(--text-muted)]">Event not found.</p>
@@ -119,13 +173,14 @@ export default function EventDetailPage({ params }: EventDetailProps) {
     );
   }
 
-  const currentIndex = allEvents.findIndex((e) => e.id === event.id);
-  const prevEvent = currentIndex > 0 ? allEvents[currentIndex - 1] : null;
-  const nextEvent = currentIndex >= 0 && currentIndex < allEvents.length - 1 ? allEvents[currentIndex + 1] : null;
+  const currentIndex = queue.findIndex((e) => e.id === event.id);
+  const prevEvent = currentIndex > 0 ? queue[currentIndex - 1] : null;
+  const nextEvent = currentIndex >= 0 && currentIndex < queue.length - 1 ? queue[currentIndex + 1] : null;
 
   const thumbCandidates = Array.from(
     new Set([...extractThumbnailCandidates(event.usablethumbnails), event.alt_thumbnail].filter((v): v is string => !!v))
   );
+  const lightboxImages = Array.from(new Set([event.thumbnail, ...thumbCandidates].filter((v): v is string => !!v)));
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -134,25 +189,27 @@ export default function EventDetailPage({ params }: EventDetailProps) {
           <ArrowLeft className="w-4 h-4" />
           Back to Events
         </Link>
-        <div className="flex items-center gap-2">
-          <Link
-            href={prevEvent ? `/news/events/${prevEvent.id}` : "#"}
-            className={`btn-ghost p-2 ${!prevEvent ? "opacity-30 pointer-events-none" : ""}`}
-            aria-label="Previous event"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </Link>
-          <span className="text-xs text-[var(--text-faint)]">
-            {currentIndex + 1} of {allEvents.length}
-          </span>
-          <Link
-            href={nextEvent ? `/news/events/${nextEvent.id}` : "#"}
-            className={`btn-ghost p-2 ${!nextEvent ? "opacity-30 pointer-events-none" : ""}`}
-            aria-label="Next event"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </Link>
-        </div>
+        {queue.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Link
+              href={prevEvent ? `/news/events/${prevEvent.id}` : "#"}
+              className={`btn-ghost p-2 ${!prevEvent ? "opacity-30 pointer-events-none" : ""}`}
+              aria-label="Previous event"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </Link>
+            <span className="text-xs text-[var(--text-faint)]">
+              {currentIndex + 1} of {queue.length}
+            </span>
+            <Link
+              href={nextEvent ? `/news/events/${nextEvent.id}` : "#"}
+              className={`btn-ghost p-2 ${!nextEvent ? "opacity-30 pointer-events-none" : ""}`}
+              aria-label="Next event"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </Link>
+          </div>
+        )}
       </div>
 
       <div className="card p-6 space-y-4">
@@ -203,10 +260,13 @@ export default function EventDetailPage({ params }: EventDetailProps) {
       )}
 
       <div className="card p-5 space-y-3">
-        <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Social Headline</label>
+        <div className="flex items-center justify-between">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Social Headline</label>
+          {savingField && <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--text-faint)]" />}
+        </div>
         <input
           defaultValue={event.social_headline || ""}
-          onBlur={(e) => e.target.value !== (event.social_headline || "") && patch({ social_headline: e.target.value })}
+          onBlur={(e) => e.target.value !== (event.social_headline || "") && handleFieldBlur({ social_headline: e.target.value })}
           className="input-field"
           placeholder="Headline for social posts..."
         />
@@ -216,7 +276,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
         <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Snapshot Summary</label>
         <textarea
           defaultValue={event.snapshot_summary || ""}
-          onBlur={(e) => e.target.value !== (event.snapshot_summary || "") && patch({ snapshot_summary: e.target.value })}
+          onBlur={(e) => e.target.value !== (event.snapshot_summary || "") && handleFieldBlur({ snapshot_summary: e.target.value })}
           rows={3}
           className="input-field resize-none"
           placeholder="Quick summary of the event..."
@@ -231,7 +291,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
             defaultValue={event.article?.title || ""}
             onBlur={(e) =>
               e.target.value !== (event.article?.title || "") &&
-              patch({ article: { ...event.article, title: e.target.value } })
+              handleFieldBlur({ article: { ...event.article, title: e.target.value } })
             }
             className="input-field"
           />
@@ -241,7 +301,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
           <input
             defaultValue={event.article?.dek || ""}
             onBlur={(e) =>
-              e.target.value !== (event.article?.dek || "") && patch({ article: { ...event.article, dek: e.target.value } })
+              e.target.value !== (event.article?.dek || "") && handleFieldBlur({ article: { ...event.article, dek: e.target.value } })
             }
             className="input-field"
           />
@@ -252,7 +312,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
             defaultValue={event.article?.body || ""}
             onBlur={(e) =>
               e.target.value !== (event.article?.body || "") &&
-              patch({ article: { ...event.article, body: e.target.value } })
+              handleFieldBlur({ article: { ...event.article, body: e.target.value } })
             }
             rows={8}
             className="input-field resize-none font-mono text-sm"
@@ -261,31 +321,53 @@ export default function EventDetailPage({ params }: EventDetailProps) {
       </div>
 
       <div className="card p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <ImageIcon className="w-5 h-5 text-[var(--color-purple)]" />
-          <h3 className="text-sm font-semibold text-[var(--text)]">Thumbnail</h3>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ImageIcon className="w-5 h-5 text-[var(--color-purple)]" />
+            <h3 className="text-sm font-semibold text-[var(--text)]">Thumbnail</h3>
+          </div>
+          {savingThumbnail && (
+            <span className="flex items-center gap-1.5 text-xs text-[var(--text-faint)]">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Saving...
+            </span>
+          )}
         </div>
 
         {event.thumbnail && (
-          <div className="rounded-xl overflow-hidden border-2 border-[var(--color-purple)] w-fit">
+          <button
+            onClick={() => setLightboxIndex(Math.max(0, lightboxImages.indexOf(event.thumbnail!)))}
+            className="relative group rounded-xl overflow-hidden border-2 border-[var(--color-purple)] w-fit block"
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={event.thumbnail} alt="Selected thumbnail" className="max-h-48" />
-          </div>
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+              <Maximize2 className="w-6 h-6 text-white" />
+            </div>
+          </button>
         )}
 
         {thumbCandidates.length > 0 && (
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
             {thumbCandidates.map((url) => (
-              <button
-                key={url}
-                onClick={() => patch({ thumbnail: url })}
-                className={`rounded-lg overflow-hidden border-2 transition-colors ${
-                  event.thumbnail === url ? "border-[var(--color-purple)]" : "border-[var(--border)] hover:border-[var(--border-strong)]"
-                }`}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt="Thumbnail candidate" className="w-full h-24 object-cover" />
-              </button>
+              <div key={url} className="relative group">
+                <button
+                  onClick={() => handleSelectThumbnail(url)}
+                  className={`w-full rounded-lg overflow-hidden border-2 transition-colors block ${
+                    event.thumbnail === url ? "border-[var(--color-purple)]" : "border-[var(--border)] hover:border-[var(--border-strong)]"
+                  }`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt="Thumbnail candidate" className="w-full h-24 object-cover" />
+                </button>
+                <button
+                  onClick={() => setLightboxIndex(Math.max(0, lightboxImages.indexOf(url)))}
+                  className="absolute top-1.5 right-1.5 p-1.5 rounded-lg bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                  aria-label="Expand thumbnail"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             ))}
           </div>
         )}
@@ -300,7 +382,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
           <button
             onClick={() => {
               if (customThumbUrl.trim()) {
-                patch({ thumbnail: customThumbUrl.trim() });
+                handleSelectThumbnail(customThumbUrl.trim());
                 setCustomThumbUrl("");
               }
             }}
@@ -312,27 +394,51 @@ export default function EventDetailPage({ params }: EventDetailProps) {
       </div>
 
       <div className="flex items-center justify-end gap-3">
-        {event.status !== "paused" && (
+        {event.status === "paused" ? (
+          <span className="inline-flex items-center gap-2 py-2.5 px-5 rounded-xl bg-[var(--surface-raised)] border border-[var(--border)] text-sm font-semibold text-[var(--text-faint)]">
+            <PauseCircle className="w-4 h-4" />
+            Paused
+          </span>
+        ) : (
           <button
-            onClick={() => patch({ status: "paused" })}
-            disabled={saving}
+            onClick={() => handleSetStatus("paused")}
+            disabled={savingStatus !== null}
             className="btn-secondary flex items-center gap-2 py-2.5 px-5 disabled:opacity-50"
           >
-            <PauseCircle className="w-4 h-4" />
+            {savingStatus === "paused" ? <Loader2 className="w-4 h-4 animate-spin" /> : <PauseCircle className="w-4 h-4" />}
             Pause
           </button>
         )}
-        {event.status !== "reviewed" && (
+
+        {event.status === "reviewed" ? (
+          <span className="inline-flex items-center gap-2 py-2.5 px-5 rounded-xl bg-[var(--color-green)] text-white text-sm font-semibold">
+            <CheckCircle2 className="w-4 h-4" />
+            Reviewed
+          </span>
+        ) : (
           <button
-            onClick={() => patch({ status: "reviewed" })}
-            disabled={saving}
+            onClick={() => handleSetStatus("reviewed")}
+            disabled={savingStatus !== null}
             className="inline-flex items-center gap-2 py-2.5 px-5 rounded-xl bg-[var(--color-green)] text-white hover:opacity-90 transition-opacity text-sm font-semibold disabled:opacity-50"
           >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+            {savingStatus === "reviewed" ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
             Mark Reviewed
           </button>
         )}
       </div>
+
+      {lightboxIndex !== null && lightboxImages.length > 0 && (
+        <ThumbnailLightbox
+          images={lightboxImages}
+          startIndex={lightboxIndex}
+          selectedUrl={event.thumbnail}
+          onClose={() => setLightboxIndex(null)}
+          onSelect={(url) => {
+            handleSelectThumbnail(url);
+            setLightboxIndex(null);
+          }}
+        />
+      )}
 
       {showConvert && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm" onClick={() => setShowConvert(false)}>
@@ -344,11 +450,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
             </p>
             <div className="space-y-2">
               <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Channel</label>
-              <select
-                value={convertChannel}
-                onChange={(e) => setConvertChannel(e.target.value)}
-                className="input-field"
-              >
+              <select value={convertChannel} onChange={(e) => setConvertChannel(e.target.value)} className="input-field">
                 {CHANNELS.map((c) => (
                   <option key={c} value={c}>
                     {c}

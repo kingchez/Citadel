@@ -6,6 +6,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import type { NewsEvent } from "@/lib/news-types";
 import { EVENT_STATUS_LABELS, EVENT_STATUS_COLORS } from "@/lib/news-types";
 import { formatTimeAgo } from "@/lib/utils";
+import { saveQueue } from "@/lib/news-queue-cache";
 import { Search, ChevronRight, Clock, Video, Newspaper, TrendingUp } from "lucide-react";
 
 const TABS = [
@@ -103,7 +104,11 @@ function EventsContent() {
   useEffect(() => {
     fetch("/api/news/events")
       .then((r) => r.json())
-      .then((data: { events?: NewsEvent[] }) => setEvents(data.events || []))
+      .then((data: { events?: NewsEvent[] }) => {
+        const list = data.events || [];
+        setEvents(list);
+        saveQueue(list.map((e) => ({ id: e.id, social_headline: e.social_headline, event_title: e.event_title })));
+      })
       .finally(() => setLoading(false));
   }, []);
 
