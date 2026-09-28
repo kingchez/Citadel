@@ -10,6 +10,8 @@ import { NotificationBell } from "./notification-bell";
 const breadcrumbMap: Record<string, string> = {
   "/pipeline/dashboard": "Dashboard",
   "/pipeline/videos": "Video Pipeline",
+  "/pipeline/new": "Add Video",
+  "/pipeline/repurpose": "Repurpose Queue",
   "/news/dashboard": "Dashboard",
   "/news/events": "News Pipeline",
   "/notifications": "Notifications",

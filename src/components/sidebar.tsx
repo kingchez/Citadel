@@ -20,6 +20,8 @@ import {
   FolderKanban,
   Newspaper,
   Inbox,
+  Plus,
+  Repeat,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
@@ -46,6 +48,8 @@ const PROJECTS: ProjectDef[] = [
       { label: "In Progress", href: "/pipeline/videos?view=progress", icon: Clock, countKey: "video.progress" },
       { label: "Needs Review", href: "/pipeline/videos?view=review", icon: ClipboardCheck, countKey: "video.review" },
       { label: "Done", href: "/pipeline/videos?view=done", icon: CheckCircle, countKey: "video.done" },
+      { label: "Add Video", href: "/pipeline/new", icon: Plus },
+      { label: "Repurpose Queue", href: "/pipeline/repurpose", icon: Repeat, countKey: "repurpose.active" },
     ],
   },
   {
@@ -85,6 +89,14 @@ export function Sidebar() {
           "video.review": videoCounts.review,
           "video.done": videoCounts.done,
         }));
+      })
+      .catch(() => {});
+
+    fetch("/api/repurpose")
+      .then((r) => r.json())
+      .then((data: { items?: { status: string }[] }) => {
+        const active = (data.items || []).filter((i) => i.status !== "handed_off" && i.status !== "cancelled").length;
+        setCounts((prev) => ({ ...prev, "repurpose.active": active }));
       })
       .catch(() => {});
 
