@@ -28,16 +28,14 @@ export interface RepurposeRow {
   video_type: VideoType;
   status: RepurposeStatus;
   source_video_url: string;
-  source_video_file_id: string | null; // set only for Google Drive links
   intro_mode: RepurposeIntroMode;
   new_intro_url: string | null;
-  new_intro_file_id: string | null;
   new_intro_start_seconds: number | null;
   with_product: boolean;
   product_ids: ProductEntry[];
   notes: unknown;
-  video_only_drive_file_id: string | null;
-  audio_drive_file_id: string | null;
+  video_only_url: string | null;
+  audio_url: string | null;
   voice_timing: unknown;
   error_details: string | null;
   video_id: string | null;

@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("repurpose_videos")
       .select(
-        "id, title, channel, video_type, status, source_video_url, source_video_file_id, intro_mode, new_intro_url, new_intro_file_id, new_intro_start_seconds, with_product, product_ids, video_only_drive_file_id, audio_drive_file_id, error_details, video_id, created_at, updated_at"
+        "id, title, channel, video_type, status, source_video_url, intro_mode, new_intro_url, new_intro_start_seconds, with_product, product_ids, video_only_url, audio_url, error_details, video_id, created_at, updated_at"
       )
       .order("created_at", { ascending: false });
 
