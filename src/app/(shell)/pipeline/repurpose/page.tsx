@@ -26,12 +26,12 @@ function RepurposeRowItem({ item }: { item: RepurposeRow }) {
               ? `New intro from ${formatSeconds(Number(item.new_intro_start_seconds))}`
               : "Original intro"}
           </span>
-          {item.with_product && (
+          {item.video?.with_product && (
             <>
               <span>·</span>
               <span className="text-[var(--color-purple)]">
                 <Tag className="w-3 h-3 inline mr-0.5" />
-                {item.product_ids.length} product{item.product_ids.length === 1 ? "" : "s"}
+                {(item.video.product_ids ?? []).length} product{(item.video.product_ids ?? []).length === 1 ? "" : "s"}
               </span>
             </>
           )}

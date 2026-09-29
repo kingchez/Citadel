@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { resolveVideoSource } from "@/lib/video-source";
-import { parseProductInput } from "@/lib/product-input";
+import { addProductsToVideo } from "@/lib/add-products-to-video";
 import { parseTimeToSeconds } from "@/lib/repurpose-utils";
 import { SUPPORTED_CHANNELS, type SubtitleChoice } from "@/lib/repurpose-types";
 
@@ -20,6 +20,8 @@ function bad(message: string, extra?: Record<string, unknown>) {
  *                        plus a linked row in `videos` at `planning`, created
  *                        together in one transaction. The videos row is the
  *                        one that later carries the VPS lock.
+ * Products are never written here directly: after the video row exists they
+ * are added with the same handler the videos page uses (lib/add-products-to-video).
  * Subtitles answer follows the manual: yes/no is written to notes, "later"
  * writes nothing so the planning agent still asks before scene planning.
  */
@@ -41,11 +43,6 @@ export async function POST(request: NextRequest) {
     }
     if (!VIDEO_TYPES.includes(videoType)) return bad("video_type must be 'vertical-shorts' or 'horizontal-long'.");
 
-    const { products, failed } = await parseProductInput(body?.products_raw);
-    if (failed.length > 0) {
-      return bad("Some product links/ASINs couldn't be read. Nothing was saved.", { failed });
-    }
-
     const notes: Record<string, unknown> = {};
     if (subtitles === "yes") {
       notes.subtitles = "yes";
@@ -57,21 +54,21 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdmin();
 
     if (mode === "new") {
-      const insert: Record<string, unknown> = {
-        title,
-        channel,
-        status: "planning",
-        video_type: videoType,
-        notes: { ...notes, source: "citadel_add_video" },
-      };
-      if (products.length > 0) {
-        insert.product_ids = products;
-        insert.with_product = true;
-      }
-
-      const { data, error } = await supabase.from("videos").insert(insert).select("id, title, status").single();
+      const { data, error } = await supabase
+        .from("videos")
+        .insert({
+          title,
+          channel,
+          status: "planning",
+          video_type: videoType,
+          notes: { ...notes, source: "citadel_add_video" },
+        })
+        .select("id, title, status")
+        .single();
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      return NextResponse.json({ mode, video: data });
+
+      const products = await addProductsToVideo(data.id, body?.products_raw);
+      return NextResponse.json({ mode, video: data, products });
     }
 
     // mode === "repurpose"
@@ -102,16 +99,19 @@ export async function POST(request: NextRequest) {
       p_intro_mode: introMode,
       p_new_intro_url: newIntroUrl,
       p_new_intro_start_seconds: newIntroStart,
-      p_product_ids: products,
       p_notes: { ...notes, source: "citadel_add_video" },
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     const created = Array.isArray(data) ? data[0] : data;
+    // Products go straight onto the linked videos row, through the exact
+    // same logic the videos page uses.
+    const products = await addProductsToVideo(created?.video_id, body?.products_raw);
     return NextResponse.json({
       mode,
       item: { id: created?.repurpose_id, status: "pending_split" },
       video: { id: created?.video_id, status: "planning" },
+      products,
     });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });

@@ -67,6 +67,7 @@ export default function AddVideoPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [failedLines, setFailedLines] = useState<string[]>([]);
+  const [notice, setNotice] = useState<{ message: string; lines: string[]; href: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/channels")
@@ -118,8 +119,20 @@ export default function AddVideoPage() {
         setFailedLines(data.failed || []);
         return;
       }
-      if (data.mode === "new") router.push(`/pipeline/videos/${data.video.id}`);
-      else router.push("/pipeline/repurpose");
+      const href = data.mode === "new" ? `/pipeline/videos/${data.video.id}` : "/pipeline/repurpose";
+      const p = data.products as { error?: string; failed?: string[] } | null;
+      if (p && (p.error || (p.failed && p.failed.length > 0))) {
+        // Created fine, but some/all products need attention - say so before leaving the page.
+        setNotice({
+          message: p.error
+            ? `Video created, but the products couldn't be added: ${p.error} You can add them from the video page.`
+            : "Video created. These product links/ASINs couldn't be read (the rest were added):",
+          lines: p.failed || [],
+          href,
+        });
+        return;
+      }
+      router.push(href);
     } catch {
       setError("Network error - nothing was saved.");
     } finally {
@@ -266,6 +279,24 @@ export default function AddVideoPage() {
           </>
         )}
 
+        {notice && (
+          <div className="rounded-xl bg-[var(--color-amber-soft)] border border-[var(--color-amber)]/30 px-4 py-3 text-sm text-[var(--color-amber)] space-y-2">
+            <p>{notice.message}</p>
+            {notice.lines.length > 0 && (
+              <ul className="font-mono text-xs list-disc pl-5">
+                {notice.lines.map((l) => (
+                  <li key={l} className="break-all">
+                    {l}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button type="button" className="btn-primary text-xs" onClick={() => router.push(notice.href)}>
+              Continue
+            </button>
+          </div>
+        )}
+
         {error && (
           <div className="rounded-xl bg-[var(--color-red-soft)] border border-[var(--color-red)]/30 px-4 py-3 text-sm text-[var(--color-red)] space-y-1">
             <p>{error}</p>
@@ -282,7 +313,7 @@ export default function AddVideoPage() {
         )}
 
         <div className="flex justify-end">
-          <button type="button" className="btn-primary flex items-center gap-2" disabled={!canSubmit || submitting} onClick={submit}>
+          <button type="button" className="btn-primary flex items-center gap-2" disabled={!canSubmit || submitting || !!notice} onClick={submit}>
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             {mode === "repurpose" ? "Add to repurpose queue" : "Add video"}
           </button>

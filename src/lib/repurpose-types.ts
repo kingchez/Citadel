@@ -31,8 +31,6 @@ export interface RepurposeRow {
   intro_mode: RepurposeIntroMode;
   new_intro_url: string | null;
   new_intro_start_seconds: number | null;
-  with_product: boolean;
-  product_ids: ProductEntry[];
   notes: unknown;
   video_only_url: string | null;
   audio_url: string | null;
@@ -41,6 +39,8 @@ export interface RepurposeRow {
   video_id: string | null;
   created_at: string;
   updated_at: string;
+  /** Linked videos row - products live there, not on the repurpose row. */
+  video: { with_product: boolean | null; product_ids: ProductEntry[] | null } | null;
 }
 
 export const REPURPOSE_STATUS_LABELS: Record<RepurposeStatus, string> = {
