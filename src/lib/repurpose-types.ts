@@ -28,7 +28,7 @@ export interface RepurposeRow {
   video_type: VideoType;
   status: RepurposeStatus;
   source_video_url: string;
-  source_video_file_id: string;
+  source_video_file_id: string | null; // set only for Google Drive links
   intro_mode: RepurposeIntroMode;
   new_intro_url: string | null;
   new_intro_file_id: string | null;

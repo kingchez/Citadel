@@ -187,12 +187,12 @@ export default function AddVideoPage() {
 
             {mode === "repurpose" && (
               <>
-                <Field label="Original video (Google Drive link)" hint="Link to the video file itself, shared so anyone with the link can view.">
+                <Field label="Original video link" hint="Google Drive, or a direct link to the video file (storage bucket, CDN...). It must be reachable without signing in.">
                   <input
                     className="input-field text-sm font-mono"
                     value={sourceUrl}
                     onChange={(e) => setSourceUrl(e.target.value)}
-                    placeholder="https://drive.google.com/file/d/…"
+                    placeholder="https://…/video.mp4  or  https://drive.google.com/file/d/…"
                   />
                 </Field>
 
@@ -209,12 +209,12 @@ export default function AddVideoPage() {
 
                 {introMode === "replace" && (
                   <div className="space-y-4 pl-4 border-l border-[var(--border)]">
-                    <Field label="New intro video (Google Drive link)">
+                    <Field label="New intro video link">
                       <input
                         className="input-field text-sm font-mono"
                         value={introUrl}
                         onChange={(e) => setIntroUrl(e.target.value)}
-                        placeholder="https://drive.google.com/file/d/…"
+                        placeholder="https://…/intro.mp4  or  https://drive.google.com/file/d/…"
                       />
                     </Field>
                     <Field

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { extractDriveFileId } from "@/lib/utils";
+import { resolveVideoSource } from "@/lib/video-source";
 import { parseProductInput } from "@/lib/product-input";
-import { isDriveFolderUrl, parseTimeToSeconds } from "@/lib/repurpose-utils";
+import { parseTimeToSeconds } from "@/lib/repurpose-utils";
 import { SUPPORTED_CHANNELS, type SubtitleChoice } from "@/lib/repurpose-types";
 
 const VIDEO_TYPES = ["vertical-shorts", "horizontal-long"];
@@ -10,16 +10,6 @@ const SUBTITLE_CHOICES: SubtitleChoice[] = ["yes", "no", "later"];
 
 function bad(message: string, extra?: Record<string, unknown>) {
   return NextResponse.json({ error: message, ...extra }, { status: 400 });
-}
-
-/** Validates a Drive link and returns its file id, or an error message. */
-function driveFileId(url: unknown, label: string): { id: string } | { error: string } {
-  if (typeof url !== "string" || !url.trim()) return { error: `${label}: paste a Google Drive link.` };
-  const trimmed = url.trim();
-  if (isDriveFolderUrl(trimmed)) return { error: `${label}: that is a folder link - use the link to the video file itself.` };
-  const id = extractDriveFileId(trimmed);
-  if (!id) return { error: `${label}: couldn't find a Drive file id in that link.` };
-  return { id };
 }
 
 /**
@@ -84,16 +74,16 @@ export async function POST(request: NextRequest) {
     }
 
     // mode === "repurpose"
-    const source = driveFileId(body?.source_video_url, "Video link");
-    if ("error" in source) return bad(source.error);
+    const source = resolveVideoSource(body?.source_video_url, "Video link");
+    if (!source.ok) return bad(source.error);
 
     const introMode = body?.intro_mode === "replace" ? "replace" : "keep_original";
     const row: Record<string, unknown> = {
       title,
       channel,
       video_type: videoType,
-      source_video_url: String(body.source_video_url).trim(),
-      source_video_file_id: source.id,
+      source_video_url: source.url,
+      source_video_file_id: source.driveFileId,
       intro_mode: introMode,
       with_product: products.length > 0,
       product_ids: products,
@@ -101,12 +91,12 @@ export async function POST(request: NextRequest) {
     };
 
     if (introMode === "replace") {
-      const intro = driveFileId(body?.new_intro_url, "New intro link");
-      if ("error" in intro) return bad(intro.error);
+      const intro = resolveVideoSource(body?.new_intro_url, "New intro link");
+      if (!intro.ok) return bad(intro.error);
       const start = typeof body?.new_intro_start === "string" ? parseTimeToSeconds(body.new_intro_start) : null;
       if (start === null) return bad("New intro start time: use a format like 0:13 or 1:05.");
-      row.new_intro_url = String(body.new_intro_url).trim();
-      row.new_intro_file_id = intro.id;
+      row.new_intro_url = intro.url;
+      row.new_intro_file_id = intro.driveFileId;
       row.new_intro_start_seconds = start;
     }
 
