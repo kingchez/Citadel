@@ -16,9 +16,10 @@ function bad(message: string, extra?: Record<string, unknown>) {
  * Add Video page insert, Viral Shop only for now.
  *  - mode "new"       -> a normal row in `videos`, status `planning`, exactly
  *                        like any other freshly planned video.
- *  - mode "repurpose" -> a row in `repurpose_videos` (its own status flow).
- *                        Nothing in the main videos pipeline sees it until a
- *                        later handoff creates the real video.
+ *  - mode "repurpose" -> a row in `repurpose_videos` (its own status flow)
+ *                        plus a linked row in `videos` at `planning`, created
+ *                        together in one transaction. The videos row is the
+ *                        one that later carries the VPS lock.
  * Subtitles answer follows the manual: yes/no is written to notes, "later"
  * writes nothing so the planning agent still asks before scene planning.
  */
@@ -78,29 +79,40 @@ export async function POST(request: NextRequest) {
     if (!source.ok) return bad(source.error);
 
     const introMode = body?.intro_mode === "replace" ? "replace" : "keep_original";
-    const row: Record<string, unknown> = {
-      title,
-      channel,
-      video_type: videoType,
-      source_video_url: source.url,
-      intro_mode: introMode,
-      with_product: products.length > 0,
-      product_ids: products,
-      notes: { ...notes, source: "citadel_add_video" },
-    };
+    let newIntroUrl: string | null = null;
+    let newIntroStart: number | null = null;
 
     if (introMode === "replace") {
       const intro = resolveVideoSource(body?.new_intro_url, "New intro link");
       if (!intro.ok) return bad(intro.error);
       const start = typeof body?.new_intro_start === "string" ? parseTimeToSeconds(body.new_intro_start) : null;
       if (start === null) return bad("New intro start time: use a format like 0:13 or 1:05.");
-      row.new_intro_url = intro.url;
-      row.new_intro_start_seconds = start;
+      newIntroUrl = intro.url;
+      newIntroStart = start;
     }
 
-    const { data, error } = await supabase.from("repurpose_videos").insert(row).select("id, title, status").single();
+    // One database transaction creates BOTH the repurpose row and its linked
+    // `videos` row (status planning, everything else empty) - so neither can
+    // exist without the other. See create_repurpose_with_video() in Supabase.
+    const { data, error } = await supabase.rpc("create_repurpose_with_video", {
+      p_title: title,
+      p_channel: channel,
+      p_video_type: videoType,
+      p_source_video_url: source.url,
+      p_intro_mode: introMode,
+      p_new_intro_url: newIntroUrl,
+      p_new_intro_start_seconds: newIntroStart,
+      p_product_ids: products,
+      p_notes: { ...notes, source: "citadel_add_video" },
+    });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ mode, item: data });
+
+    const created = Array.isArray(data) ? data[0] : data;
+    return NextResponse.json({
+      mode,
+      item: { id: created?.repurpose_id, status: "pending_split" },
+      video: { id: created?.video_id, status: "planning" },
+    });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
   }
