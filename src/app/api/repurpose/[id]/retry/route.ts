@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { notifyRepurposeDownload } from "@/lib/repurpose-download-trigger";
 import { REPURPOSE_RETRY_TARGET, type RepurposeStatus } from "@/lib/repurpose-types";
 
 /**
@@ -33,7 +32,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!updated) return NextResponse.json({ error: "The item changed while retrying - refresh and try again." }, { status: 409 });
 
-    if (target === "pending_download") await notifyRepurposeDownload(id);
+    // The n8n crons pick the item up from its new status - nothing else to trigger.
     return NextResponse.json({ item: updated });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
