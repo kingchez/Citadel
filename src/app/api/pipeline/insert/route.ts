@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { resolveVideoSource } from "@/lib/video-source";
+import { classifyVideoUrl, resolveVideoSource } from "@/lib/video-source";
+import { notifyRepurposeDownload } from "@/lib/repurpose-download-trigger";
 import { addProductsToVideo } from "@/lib/add-products-to-video";
 import { parseTimeToSeconds } from "@/lib/repurpose-utils";
 import { SUPPORTED_CHANNELS, type SubtitleChoice } from "@/lib/repurpose-types";
@@ -88,6 +89,11 @@ export async function POST(request: NextRequest) {
       newIntroStart = start;
     }
 
+    // YouTube/TikTok page links can't be split directly: they get downloaded
+    // into the bucket first (status pending_download). Direct links skip that.
+    const needsDownload =
+      classifyVideoUrl(source.url) !== "direct" || (introMode === "replace" && !!newIntroUrl && classifyVideoUrl(newIntroUrl) !== "direct");
+
     // One database transaction creates BOTH the repurpose row and its linked
     // `videos` row (status planning, everything else empty) - so neither can
     // exist without the other. See create_repurpose_with_video() in Supabase.
@@ -100,6 +106,7 @@ export async function POST(request: NextRequest) {
       p_new_intro_url: newIntroUrl,
       p_new_intro_start_seconds: newIntroStart,
       p_notes: { ...notes, source: "citadel_add_video" },
+      p_needs_download: needsDownload,
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -107,9 +114,11 @@ export async function POST(request: NextRequest) {
     // Products go straight onto the linked videos row, through the exact
     // same logic the videos page uses.
     const products = await addProductsToVideo(created?.video_id, body?.products_raw);
+    // Wake the n8n download workflow right away (a 10-minute sweep there is the backup if this ping is lost).
+    if (needsDownload && created?.repurpose_id) await notifyRepurposeDownload(created.repurpose_id);
     return NextResponse.json({
       mode,
-      item: { id: created?.repurpose_id, status: "pending_split" },
+      item: { id: created?.repurpose_id, status: needsDownload ? "pending_download" : "pending_split" },
       video: { id: created?.video_id, status: "planning" },
       products,
     });

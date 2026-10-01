@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ChevronRight, Film, Repeat, Tag } from "lucide-react";
+import { AlertTriangle, ChevronRight, Film, Loader2, Repeat, RotateCcw, Tag } from "lucide-react";
 import { RepurposeStatusBadge } from "@/components/repurpose-status-badge";
 import { cn, formatTimeAgo } from "@/lib/utils";
 import { formatSeconds } from "@/lib/repurpose-utils";
@@ -11,8 +11,29 @@ import { REPURPOSE_ERROR_STATUSES, type RepurposeRow } from "@/lib/repurpose-typ
 const ROW_CLASS =
   "group flex items-center gap-4 px-5 py-4 rounded-xl bg-[var(--surface)] border border-[var(--border)] transition-all duration-150";
 
-function RepurposeRowItem({ item }: { item: RepurposeRow }) {
-  const hasError = REPURPOSE_ERROR_STATUSES.includes(item.status) && !!item.error_details;
+function RepurposeRowItem({ item, onRetried }: { item: RepurposeRow; onRetried: () => void }) {
+  const isError = REPURPOSE_ERROR_STATUSES.includes(item.status);
+  const hasError = isError && !!item.error_details;
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+
+  const retry = async (e: React.MouseEvent) => {
+    // The whole row is a link to the video - don't navigate when pressing Retry.
+    e.preventDefault();
+    e.stopPropagation();
+    setRetrying(true);
+    setRetryError(null);
+    try {
+      const res = await fetch(`/api/repurpose/${item.id}/retry`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) setRetryError(data.error || "Retry failed.");
+      else onRetried();
+    } catch {
+      setRetryError("Network error.");
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   const content = (
     <>
@@ -46,6 +67,7 @@ function RepurposeRowItem({ item }: { item: RepurposeRow }) {
             <span className="break-words">{item.error_details}</span>
           </p>
         )}
+        {retryError && <p className="text-xs text-[var(--color-red)] mt-1">{retryError}</p>}
       </div>
 
       <div className="flex-shrink-0">
@@ -55,7 +77,18 @@ function RepurposeRowItem({ item }: { item: RepurposeRow }) {
         </span>
       </div>
 
-      <div className="flex-shrink-0">
+      <div className="flex-shrink-0 flex items-center gap-2">
+        {isError && (
+          <button
+            type="button"
+            onClick={retry}
+            disabled={retrying}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[var(--color-red)]/40 text-xs font-medium text-[var(--color-red)] hover:bg-[var(--color-red-soft)] disabled:opacity-50"
+          >
+            {retrying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+            Retry
+          </button>
+        )}
         <RepurposeStatusBadge status={item.status} />
       </div>
 
@@ -89,15 +122,21 @@ export default function RepurposeQueuePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = () =>
     fetch("/api/repurpose")
       .then((r) => r.json())
       .then((data: { items?: RepurposeRow[]; error?: string }) => {
-        if (data.error) setError(data.error);
+        setError(data.error ?? null);
         setItems(data.items || []);
       })
       .catch(() => setError("Couldn't load the repurpose queue."))
       .finally(() => setLoading(false));
+
+  useEffect(() => {
+    load();
+    // Keep statuses fresh so a finished download clears its red signal on its own.
+    const timer = setInterval(load, 15000);
+    return () => clearInterval(timer);
   }, []);
 
   return (
@@ -130,7 +169,7 @@ export default function RepurposeQueuePage() {
       ) : (
         <div className="space-y-2">
           {items.map((item) => (
-            <RepurposeRowItem key={item.id} item={item} />
+            <RepurposeRowItem key={item.id} item={item} onRetried={load} />
           ))}
         </div>
       )}

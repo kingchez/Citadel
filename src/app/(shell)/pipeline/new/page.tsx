@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { parseTimeToSeconds, formatSeconds } from "@/lib/repurpose-utils";
+import { classifyVideoUrl } from "@/lib/video-source";
 import { SUPPORTED_CHANNELS, type SubtitleChoice } from "@/lib/repurpose-types";
 
 type Mode = "repurpose" | "new";
@@ -82,6 +83,10 @@ export default function AddVideoPage() {
 
   const supported = (SUPPORTED_CHANNELS as readonly string[]).includes(channel);
   const startSeconds = useMemo(() => parseTimeToSeconds(introStart), [introStart]);
+  const downloadNote = (url: string) => {
+    const kind = url.trim() ? classifyVideoUrl(url) : "direct";
+    return kind === "direct" ? null : `${kind === "youtube" ? "YouTube" : "TikTok"} link - it will be downloaded automatically before splitting.`;
+  };
 
   const canSubmit =
     supported &&
@@ -200,13 +205,14 @@ export default function AddVideoPage() {
 
             {mode === "repurpose" && (
               <>
-                <Field label="Original video link" hint="Google Drive, or a direct link to the video file (storage bucket, CDN...). It must be reachable without signing in.">
+                <Field label="Original video link" hint="Google Drive, a YouTube or TikTok link, or a direct link to the video file (storage bucket, CDN...). Must be reachable without signing in.">
                   <input
                     className="input-field text-sm font-mono"
                     value={sourceUrl}
                     onChange={(e) => setSourceUrl(e.target.value)}
                     placeholder="https://…/video.mp4  or  https://drive.google.com/file/d/…"
                   />
+                  {downloadNote(sourceUrl) && <p className="text-xs text-[var(--color-purple)]">{downloadNote(sourceUrl)}</p>}
                 </Field>
 
                 <Field label="Intro">
@@ -229,6 +235,7 @@ export default function AddVideoPage() {
                         onChange={(e) => setIntroUrl(e.target.value)}
                         placeholder="https://…/intro.mp4  or  https://drive.google.com/file/d/…"
                       />
+                      {downloadNote(introUrl) && <p className="text-xs text-[var(--color-purple)]">{downloadNote(introUrl)}</p>}
                     </Field>
                     <Field
                       label="Start cutting from"

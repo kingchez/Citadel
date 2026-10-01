@@ -41,3 +41,25 @@ export function resolveVideoSource(input: unknown, label: string): VideoSource {
 
   return { ok: true, url: raw };
 }
+
+export type VideoLinkKind = "youtube" | "tiktok" | "direct";
+
+const YOUTUBE_HOSTS = ["youtube.com", "m.youtube.com", "www.youtube.com", "music.youtube.com", "youtu.be", "www.youtu.be"];
+const TIKTOK_HOSTS = ["tiktok.com", "www.tiktok.com", "m.tiktok.com", "vm.tiktok.com", "vt.tiktok.com"];
+
+/**
+ * Tells whether a link is a YouTube or TikTok PAGE link (which has to be
+ * downloaded first) or anything else (treated as a direct video file link).
+ * Drive links count as direct. The n8n download workflow does its own,
+ * stricter check of the same thing before it downloads.
+ */
+export function classifyVideoUrl(input: string): VideoLinkKind {
+  try {
+    const host = new URL(input.trim()).hostname.toLowerCase();
+    if (YOUTUBE_HOSTS.includes(host)) return "youtube";
+    if (TIKTOK_HOSTS.includes(host)) return "tiktok";
+  } catch {
+    /* not a URL - callers validate separately */
+  }
+  return "direct";
+}

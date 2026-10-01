@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils";
 import { REPURPOSE_STATUS_COLORS, REPURPOSE_STATUS_LABELS, type RepurposeStatus } from "@/lib/repurpose-types";
 
-const PULSING = new Set<RepurposeStatus>(["splitting", "waiting_voice_timing"]);
+const PULSING = new Set<RepurposeStatus>(["downloading", "splitting", "waiting_voice_timing"]);
 
 export function RepurposeStatusBadge({ status, className }: { status: RepurposeStatus; className?: string }) {
   const color = REPURPOSE_STATUS_COLORS[status] ?? "purple";

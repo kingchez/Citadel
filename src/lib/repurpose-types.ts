@@ -1,6 +1,9 @@
 import type { ProductEntry, VideoType } from "./types";
 
 export type RepurposeStatus =
+  | "pending_download"
+  | "downloading"
+  | "download_error"
   | "pending_split"
   | "splitting"
   | "split_error"
@@ -28,8 +31,10 @@ export interface RepurposeRow {
   video_type: VideoType;
   status: RepurposeStatus;
   source_video_url: string;
+  source_video_original_url: string | null;
   intro_mode: RepurposeIntroMode;
   new_intro_url: string | null;
+  new_intro_original_url: string | null;
   new_intro_start_seconds: number | null;
   notes: unknown;
   video_only_url: string | null;
@@ -44,6 +49,9 @@ export interface RepurposeRow {
 }
 
 export const REPURPOSE_STATUS_LABELS: Record<RepurposeStatus, string> = {
+  pending_download: "Pending Download",
+  downloading: "Downloading",
+  download_error: "Download Failed",
   pending_split: "Pending Split",
   splitting: "Splitting",
   split_error: "Split Error",
@@ -56,6 +64,9 @@ export const REPURPOSE_STATUS_LABELS: Record<RepurposeStatus, string> = {
 };
 
 export const REPURPOSE_STATUS_COLORS: Record<RepurposeStatus, "purple" | "cyan" | "green" | "amber" | "red"> = {
+  pending_download: "purple",
+  downloading: "cyan",
+  download_error: "red",
   pending_split: "purple",
   splitting: "cyan",
   split_error: "red",
@@ -67,5 +78,12 @@ export const REPURPOSE_STATUS_COLORS: Record<RepurposeStatus, "purple" | "cyan" 
   cancelled: "amber",
 };
 
-export const REPURPOSE_ERROR_STATUSES: RepurposeStatus[] = ["split_error", "voice_timing_error"];
+export const REPURPOSE_ERROR_STATUSES: RepurposeStatus[] = ["download_error", "split_error", "voice_timing_error"];
+
+/** Where a failed item goes when "Retry" is pressed. */
+export const REPURPOSE_RETRY_TARGET: Partial<Record<RepurposeStatus, RepurposeStatus>> = {
+  download_error: "pending_download",
+  split_error: "pending_split",
+  voice_timing_error: "split_done",
+};
 export const REPURPOSE_FINISHED_STATUSES: RepurposeStatus[] = ["handed_off", "cancelled"];
