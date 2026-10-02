@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { resolveVideoSource } from "@/lib/video-source";
 import { addProductsToVideo } from "@/lib/add-products-to-video";
 import { parseTimeToSeconds } from "@/lib/repurpose-utils";
+import { MAX_SOURCES, newSourceItem } from "@/lib/repurpose-sources";
 import { SUPPORTED_CHANNELS, type SubtitleChoice } from "@/lib/repurpose-types";
 
 const VIDEO_TYPES = ["vertical-shorts", "horizontal-long"];
@@ -71,9 +72,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ mode, video: data, products });
     }
 
-    // mode === "repurpose"
-    const source = resolveVideoSource(body?.source_video_url, "Video link");
-    if (!source.ok) return bad(source.error);
+    // mode === "repurpose": one video (single) or several (merge) - each link becomes one json item.
+    const rawUrls: unknown[] = Array.isArray(body?.source_video_urls)
+      ? body.source_video_urls
+      : body?.source_video_url
+        ? [body.source_video_url]
+        : [];
+    if (rawUrls.length < 1) return bad("Add at least one video link.");
+    if (rawUrls.length > MAX_SOURCES) return bad(`At most ${MAX_SOURCES} videos can be merged.`);
+    const sources = [];
+    for (let i = 0; i < rawUrls.length; i++) {
+      const resolved = resolveVideoSource(rawUrls[i], rawUrls.length > 1 ? `Video ${i + 1}` : "Video link");
+      if (!resolved.ok) return bad(resolved.error);
+      sources.push(newSourceItem(resolved.url, i));
+    }
 
     const introMode = body?.intro_mode === "replace" ? "replace" : "keep_original";
     let newIntroUrl: string | null = null;
@@ -95,11 +107,11 @@ export async function POST(request: NextRequest) {
       p_title: title,
       p_channel: channel,
       p_video_type: videoType,
-      p_source_video_url: source.url,
+      p_sources: sources,
       p_intro_mode: introMode,
       p_new_intro_url: newIntroUrl,
       p_new_intro_start_seconds: newIntroStart,
-      p_notes: { ...notes, source: "citadel_add_video" },
+      p_notes: { ...notes, source: "citadel_add_video", video_kind: sources.length > 1 ? "merge" : "single" },
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

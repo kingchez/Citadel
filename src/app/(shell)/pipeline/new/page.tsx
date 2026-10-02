@@ -6,10 +6,12 @@ import { Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { parseTimeToSeconds, formatSeconds } from "@/lib/repurpose-utils";
 import { classifyVideoUrl } from "@/lib/video-source";
+import { MAX_SOURCES } from "@/lib/repurpose-sources";
 import { SUPPORTED_CHANNELS, type SubtitleChoice } from "@/lib/repurpose-types";
 
 type Mode = "repurpose" | "new";
 type IntroMode = "keep_original" | "replace";
+type VideoKind = "single" | "merge";
 
 function Choice<T extends string>({
   value,
@@ -58,7 +60,8 @@ export default function AddVideoPage() {
   const [channel, setChannel] = useState("");
   const [mode, setMode] = useState<Mode>("repurpose");
   const [title, setTitle] = useState("");
-  const [sourceUrl, setSourceUrl] = useState("");
+  const [videoKind, setVideoKind] = useState<VideoKind>("single");
+  const [sourceUrls, setSourceUrls] = useState<string[]>([""]);
   const [introMode, setIntroMode] = useState<IntroMode>("keep_original");
   const [introUrl, setIntroUrl] = useState("");
   const [introStart, setIntroStart] = useState("");
@@ -88,11 +91,21 @@ export default function AddVideoPage() {
     return kind === "direct" ? null : `${kind === "youtube" ? "YouTube" : "TikTok"} link - it will be downloaded automatically before splitting.`;
   };
 
+  // Single video = one link; merge = at least two. The kind switch keeps what was typed.
+  const changeKind = (k: VideoKind) => {
+    setVideoKind(k);
+    setSourceUrls((prev) => (k === "single" ? [prev[0] ?? ""] : prev.length >= 2 ? prev : [...prev, ""]));
+  };
+  const setUrlAt = (i: number, v: string) => setSourceUrls((prev) => prev.map((u, idx) => (idx === i ? v : u)));
+  const activeUrls = videoKind === "single" ? sourceUrls.slice(0, 1) : sourceUrls;
+
   const canSubmit =
     supported &&
     !!title.trim() &&
     (mode === "new" ||
-      (!!sourceUrl.trim() && (introMode === "keep_original" || (!!introUrl.trim() && startSeconds !== null))));
+      (activeUrls.length >= 1 &&
+        activeUrls.every((u) => !!u.trim()) &&
+        (introMode === "keep_original" || (!!introUrl.trim() && startSeconds !== null))));
 
   const submit = async () => {
     setSubmitting(true);
@@ -111,7 +124,7 @@ export default function AddVideoPage() {
           products_raw: productsRaw,
           ...(mode === "repurpose"
             ? {
-                source_video_url: sourceUrl,
+                source_video_urls: activeUrls.map((u) => u.trim()),
                 intro_mode: introMode,
                 ...(introMode === "replace" ? { new_intro_url: introUrl, new_intro_start: introStart } : {}),
               }
@@ -205,14 +218,58 @@ export default function AddVideoPage() {
 
             {mode === "repurpose" && (
               <>
-                <Field label="Original video link" hint="Google Drive, a YouTube or TikTok link, or a direct link to the video file (storage bucket, CDN...). Must be reachable without signing in.">
-                  <input
-                    className="input-field text-sm font-mono"
-                    value={sourceUrl}
-                    onChange={(e) => setSourceUrl(e.target.value)}
-                    placeholder="https://…/video.mp4  or  https://drive.google.com/file/d/…"
-                  />
-                  {downloadNote(sourceUrl) && <p className="text-xs text-[var(--color-purple)]">{downloadNote(sourceUrl)}</p>}
+                <Field label="Kind of video">
+                  <div className="flex gap-2">
+                    <Choice value="single" current={videoKind} onSelect={changeKind}>
+                      Single video
+                    </Choice>
+                    <Choice value="merge" current={videoKind} onSelect={changeKind}>
+                      Merge several videos
+                    </Choice>
+                  </div>
+                </Field>
+
+                <Field
+                  label={videoKind === "merge" ? "Videos to merge (in order)" : "Original video link"}
+                  hint="Each link: Google Drive, a YouTube or TikTok link, or a direct link to the video file (storage bucket, CDN...). Must be reachable without signing in."
+                >
+                  <div className="space-y-2">
+                    {activeUrls.map((u, i) => (
+                      <div key={i} className="space-y-1">
+                        <div className="flex gap-2 items-center">
+                          {videoKind === "merge" && (
+                            <span className="text-xs font-semibold text-[var(--text-faint)] w-14 flex-shrink-0">Video {i + 1}</span>
+                          )}
+                          <input
+                            className="input-field text-sm font-mono flex-1"
+                            value={u}
+                            onChange={(e) => setUrlAt(i, e.target.value)}
+                            placeholder="https://…/video.mp4  or  https://drive.google.com/file/d/…"
+                          />
+                          {videoKind === "merge" && activeUrls.length > 2 && (
+                            <button
+                              type="button"
+                              onClick={() => setSourceUrls((prev) => prev.filter((_, idx) => idx !== i))}
+                              className="text-xs text-[var(--text-faint)] hover:text-[var(--color-red)] px-2"
+                              aria-label={`Remove video ${i + 1}`}
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                        {downloadNote(u) && <p className="text-xs text-[var(--color-purple)] pl-0">{downloadNote(u)}</p>}
+                      </div>
+                    ))}
+                    {videoKind === "merge" && activeUrls.length < MAX_SOURCES && (
+                      <button
+                        type="button"
+                        onClick={() => setSourceUrls((prev) => [...prev, ""])}
+                        className="text-xs font-medium text-[var(--color-purple)] hover:underline"
+                      >
+                        + Add another video
+                      </button>
+                    )}
+                  </div>
                 </Field>
 
                 <Field label="Intro">

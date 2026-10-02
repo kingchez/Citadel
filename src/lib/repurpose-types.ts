@@ -1,4 +1,5 @@
 import type { ProductEntry, VideoType } from "./types";
+import type { RepurposeSource } from "./repurpose-sources";
 
 export type RepurposeStatus =
   | "pending_download"
@@ -30,15 +31,13 @@ export interface RepurposeRow {
   channel: string;
   video_type: VideoType;
   status: RepurposeStatus;
-  source_video_url: string;
-  source_video_original_url: string | null;
+  /** The videos being repurposed: one = single video, several = merge. */
+  sources: RepurposeSource[];
   intro_mode: RepurposeIntroMode;
   new_intro_url: string | null;
   new_intro_original_url: string | null;
   new_intro_start_seconds: number | null;
   notes: unknown;
-  video_only_url: string | null;
-  audio_url: string | null;
   voice_timing: unknown;
   error_details: string | null;
   video_id: string | null;

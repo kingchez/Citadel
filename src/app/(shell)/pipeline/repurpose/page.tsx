@@ -2,45 +2,80 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ChevronRight, Film, Loader2, Repeat, RotateCcw, Tag } from "lucide-react";
+import { AlertTriangle, ChevronRight, Film, Loader2, Plus, Repeat, RotateCcw, Tag } from "lucide-react";
 import { RepurposeStatusBadge } from "@/components/repurpose-status-badge";
 import { cn, formatTimeAgo } from "@/lib/utils";
 import { formatSeconds } from "@/lib/repurpose-utils";
-import { REPURPOSE_ERROR_STATUSES, type RepurposeRow } from "@/lib/repurpose-types";
+import { sourceStage } from "@/lib/repurpose-sources";
+import { REPURPOSE_ERROR_STATUSES, type RepurposeRow, type RepurposeStatus } from "@/lib/repurpose-types";
 
-const ROW_CLASS =
-  "group flex items-center gap-4 px-5 py-4 rounded-xl bg-[var(--surface)] border border-[var(--border)] transition-all duration-150";
+const CARD_CLASS = "rounded-xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden";
+const TOP_CLASS = "group flex items-center gap-4 px-5 py-4 transition-all duration-150";
+// A video can be added only while nothing is actively running on the item.
+const CAN_ADD: RepurposeStatus[] = ["pending_download", "download_error", "pending_split", "split_error", "split_done", "voice_timing_error", "voice_timing_done"];
+const KIND_LABEL = { youtube: "YouTube", tiktok: "TikTok", direct: "Direct link" } as const;
+const TONE = { ok: "text-[var(--color-green)]", wait: "text-[var(--text-faint)]", error: "text-[var(--color-red)]" } as const;
 
-function RepurposeRowItem({ item, onRetried }: { item: RepurposeRow; onRetried: () => void }) {
+function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () => void }) {
   const isError = REPURPOSE_ERROR_STATUSES.includes(item.status);
   const hasError = isError && !!item.error_details;
   const [retrying, setRetrying] = useState(false);
-  const [retryError, setRetryError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [newUrl, setNewUrl] = useState("");
+  const [saving, setSaving] = useState(false);
+  const sources = item.sources ?? [];
+  const canAdd = CAN_ADD.includes(item.status);
 
   const retry = async (e: React.MouseEvent) => {
-    // The whole row is a link to the video - don't navigate when pressing Retry.
+    // The top of the card is a link to the video - don't navigate when pressing Retry.
     e.preventDefault();
     e.stopPropagation();
     setRetrying(true);
-    setRetryError(null);
+    setActionError(null);
     try {
       const res = await fetch(`/api/repurpose/${item.id}/retry`, { method: "POST" });
       const data = await res.json();
-      if (!res.ok) setRetryError(data.error || "Retry failed.");
-      else onRetried();
+      if (!res.ok) setActionError(data.error || "Retry failed.");
+      else onChanged();
     } catch {
-      setRetryError("Network error.");
+      setActionError("Network error.");
     } finally {
       setRetrying(false);
     }
   };
 
-  const content = (
+  const addVideo = async () => {
+    setSaving(true);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/repurpose/${item.id}/sources`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: newUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) setActionError(data.error || "Couldn't add the video.");
+      else {
+        setNewUrl("");
+        setAdding(false);
+        onChanged();
+      }
+    } catch {
+      setActionError("Network error.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const top = (
     <>
       <div className="flex-1 min-w-0">
         <h3 className="text-sm font-semibold text-[var(--text)] truncate">{item.title}</h3>
         <p className="text-xs text-[var(--text-faint)] mt-0.5 flex items-center gap-1.5 flex-wrap">
           <span>{item.channel}</span>
+          <span>·</span>
+          <span>{sources.length > 1 ? `Merge of ${sources.length} videos` : "Single video"}</span>
           <span>·</span>
           <span>
             {item.intro_mode === "replace" && item.new_intro_start_seconds !== null
@@ -67,16 +102,13 @@ function RepurposeRowItem({ item, onRetried }: { item: RepurposeRow; onRetried: 
             <span className="break-words">{item.error_details}</span>
           </p>
         )}
-        {retryError && <p className="text-xs text-[var(--color-red)] mt-1">{retryError}</p>}
       </div>
-
       <div className="flex-shrink-0">
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[var(--surface-raised)] border border-[var(--border)] text-xs font-medium text-[var(--text-muted)]">
           <Film className="w-3.5 h-3.5" />
           {item.video_type === "vertical-shorts" ? "Vertical" : "Horizontal"}
         </span>
       </div>
-
       <div className="flex-shrink-0 flex items-center gap-2">
         {isError && (
           <button
@@ -91,29 +123,75 @@ function RepurposeRowItem({ item, onRetried }: { item: RepurposeRow; onRetried: 
         )}
         <RepurposeStatusBadge status={item.status} />
       </div>
-
       <div className="flex items-center gap-2 flex-shrink-0">
         <span className="text-xs text-[var(--text-faint)]">{formatTimeAgo(item.updated_at)}</span>
-        <ChevronRight
-          className={cn(
-            "w-4 h-4 text-[var(--border-strong)] transition-colors",
-            item.video_id && "group-hover:text-[var(--color-purple)]"
-          )}
-        />
+        <ChevronRight className={cn("w-4 h-4 text-[var(--border-strong)] transition-colors", item.video_id && "group-hover:text-[var(--color-purple)]")} />
       </div>
     </>
   );
 
-  // The whole row opens the linked video, same as the All Videos list.
-  return item.video_id ? (
-    <Link
-      href={`/pipeline/videos/${item.video_id}`}
-      className={cn(ROW_CLASS, "hover:border-[var(--border-strong)] hover:bg-[var(--surface-raised)]")}
-    >
-      {content}
-    </Link>
-  ) : (
-    <div className={ROW_CLASS}>{content}</div>
+  return (
+    <div className={CARD_CLASS}>
+      {/* The top of the card opens the linked video, same as the All Videos list. */}
+      {item.video_id ? (
+        <Link href={`/pipeline/videos/${item.video_id}`} className={cn(TOP_CLASS, "hover:bg-[var(--surface-raised)]")}>
+          {top}
+        </Link>
+      ) : (
+        <div className={TOP_CLASS}>{top}</div>
+      )}
+
+      {/* One line per video: its own progress, so a failed one is easy to spot. */}
+      <div className="border-t border-[var(--border)] px-5 py-3 space-y-1.5 bg-[var(--surface-raised)]/40">
+        {sources.map((s) => {
+          const stage = sourceStage(s);
+          return (
+            <div key={s.index} className="text-xs">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-[var(--text-muted)] w-14">Video {s.index + 1}</span>
+                <span className="px-1.5 py-0.5 rounded bg-[var(--surface)] border border-[var(--border)] text-[10px] text-[var(--text-muted)]">
+                  {KIND_LABEL[s.kind]}
+                </span>
+                <span className={cn("font-medium", TONE[stage.tone])}>{stage.label}</span>
+                <span className="text-[var(--text-faint)] truncate max-w-[40ch]">{s.original_url}</span>
+              </div>
+              {stage.detail && <p className="text-[var(--color-red)] mt-0.5 pl-16 break-words">{stage.detail}</p>}
+            </div>
+          );
+        })}
+
+        {canAdd && !adding && (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-purple)] hover:underline"
+          >
+            <Plus className="w-3.5 h-3.5" /> Add another video
+          </button>
+        )}
+        {adding && (
+          <div className="flex gap-2 items-center pt-1">
+            <input
+              className="input-field text-xs font-mono flex-1"
+              value={newUrl}
+              onChange={(e) => setNewUrl(e.target.value)}
+              placeholder="Link to the extra video (Drive, YouTube, TikTok or a direct file)"
+              autoFocus
+            />
+            <button type="button" className="btn-primary text-xs" disabled={!newUrl.trim() || saving} onClick={addVideo}>
+              {saving ? "Adding…" : "Add"}
+            </button>
+            <button type="button" className="text-xs text-[var(--text-faint)] hover:underline" onClick={() => { setAdding(false); setNewUrl(""); }}>
+              Cancel
+            </button>
+          </div>
+        )}
+        {!canAdd && item.status !== "handed_off" && item.status !== "cancelled" && (
+          <p className="text-[11px] text-[var(--text-faint)]">A step is running - another video can be added when it finishes.</p>
+        )}
+        {actionError && <p className="text-xs text-[var(--color-red)]">{actionError}</p>}
+      </div>
+    </div>
   );
 }
 
@@ -145,7 +223,7 @@ export default function RepurposeQueuePage() {
         <div>
           <h1 className="text-xl font-bold text-[var(--text)]">Repurpose Queue</h1>
           <p className="text-sm text-[var(--text-faint)] mt-1">
-            Existing videos being split, timed and handed to the main pipeline.
+            Existing videos being downloaded, split, timed and handed to the main pipeline. Merged items show every video&apos;s own progress.
           </p>
         </div>
         <Link href="/pipeline/new" className="btn-primary text-sm">
@@ -167,9 +245,9 @@ export default function RepurposeQueuePage() {
           Nothing queued yet.
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {items.map((item) => (
-            <RepurposeRowItem key={item.id} item={item} onRetried={load} />
+            <RepurposeCard key={item.id} item={item} onChanged={load} />
           ))}
         </div>
       )}
