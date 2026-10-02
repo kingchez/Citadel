@@ -67,6 +67,7 @@ export default function AddVideoPage() {
   const [introStart, setIntroStart] = useState("");
   const [productsRaw, setProductsRaw] = useState("");
   const [subtitles, setSubtitles] = useState<SubtitleChoice>("later");
+  const [instructions, setInstructions] = useState<string[]>([""]);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +122,7 @@ export default function AddVideoPage() {
           channel,
           video_type: videoType,
           subtitles,
+          instructions: instructions.map((t) => t.trim()).filter(Boolean),
           products_raw: productsRaw,
           ...(mode === "repurpose"
             ? {
@@ -325,6 +327,43 @@ export default function AddVideoPage() {
                 onChange={(e) => setProductsRaw(e.target.value)}
                 placeholder="https://www.amazon.com/dp/B0XXXXXXXX"
               />
+            </Field>
+
+            <Field
+              label="Notes for the agent"
+              hint="Optional. Anything the agent must know or do for this video - one instruction per box. Saved on the video (you can add more on the video page later)."
+            >
+              <div className="space-y-2">
+                {instructions.map((t, i) => (
+                  <div key={i} className="flex gap-2 items-start">
+                    <textarea
+                      className="input-field text-sm resize-none flex-1"
+                      rows={2}
+                      value={t}
+                      onChange={(e) => setInstructions((prev) => prev.map((x, idx) => (idx === i ? e.target.value : x)))}
+                      placeholder={`Instruction ${i + 1}`}
+                      maxLength={2000}
+                    />
+                    {instructions.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setInstructions((prev) => prev.filter((_, idx) => idx !== i))}
+                        className="text-xs text-[var(--text-faint)] hover:text-[var(--color-red)] px-2 pt-2"
+                        aria-label={`Remove instruction ${i + 1}`}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setInstructions((prev) => [...prev, ""])}
+                  className="text-xs font-medium text-[var(--color-purple)] hover:underline"
+                >
+                  + Add another instruction
+                </button>
+              </div>
             </Field>
 
             <Field label="Subtitles" hint="“Decide later” leaves it for the planning agent to ask.">

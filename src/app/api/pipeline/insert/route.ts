@@ -23,7 +23,7 @@ function bad(message: string, extra?: Record<string, unknown>) {
  *                        one that later carries the VPS lock.
  * Products are never written here directly: after the video row exists they
  * are added with the same handler the videos page uses (lib/add-products-to-video).
- * Subtitles answer follows the manual: yes/no is written to notes, "later"
+ * Notes (King's instructions for the agent, one item each) go to the LINKED `videos` row only. Subtitles answer follows the manual: yes/no is written to notes, "later"
  * writes nothing so the planning agent still asks before scene planning.
  */
 export async function POST(request: NextRequest) {
@@ -44,13 +44,25 @@ export async function POST(request: NextRequest) {
     }
     if (!VIDEO_TYPES.includes(videoType)) return bad("video_type must be 'vertical-shorts' or 'horizontal-long'.");
 
+    // Notes = ONLY what King typed. Each instruction is its own item (note_1, note_2, ...), plus the subtitles
+    // choice if he made one. Nothing is added automatically; no notes at all = the field stays empty (null).
     const notes: Record<string, unknown> = {};
+    const instructions: unknown[] = Array.isArray(body?.instructions) ? body.instructions : [];
+    let n = 0;
+    for (const raw of instructions) {
+      const text = typeof raw === "string" ? raw.trim() : "";
+      if (!text) continue;
+      if (text.length > 2000) return bad("An instruction is too long (2000 characters max).");
+      n += 1;
+      notes[`note_${n}`] = text;
+    }
     if (subtitles === "yes") {
       notes.subtitles = "yes";
       notes.subtitle_style = "capcut-style word-highlight (default)";
     } else if (subtitles === "no") {
       notes.subtitles = "no";
     }
+    const notesOrNull = Object.keys(notes).length > 0 ? notes : null;
 
     const supabase = getSupabaseAdmin();
 
@@ -62,7 +74,7 @@ export async function POST(request: NextRequest) {
           channel,
           status: "planning",
           video_type: videoType,
-          notes: { ...notes, source: "citadel_add_video" },
+          notes: notesOrNull,
         })
         .select("id, title, status")
         .single();
@@ -111,7 +123,7 @@ export async function POST(request: NextRequest) {
       p_intro_mode: introMode,
       p_new_intro_url: newIntroUrl,
       p_new_intro_start_seconds: newIntroStart,
-      p_notes: { ...notes, source: "citadel_add_video", video_kind: sources.length > 1 ? "merge" : "single" },
+      p_notes: notesOrNull,
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

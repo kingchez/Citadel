@@ -6,7 +6,7 @@ import { AlertTriangle, ChevronRight, Film, Loader2, Plus, Repeat, RotateCcw, Ta
 import { RepurposeStatusBadge } from "@/components/repurpose-status-badge";
 import { cn, formatTimeAgo } from "@/lib/utils";
 import { formatSeconds } from "@/lib/repurpose-utils";
-import { sourceStage } from "@/lib/repurpose-sources";
+import { sourceStage, type RepurposeSource, type SourceState } from "@/lib/repurpose-sources";
 import { REPURPOSE_ERROR_STATUSES, type RepurposeRow, type RepurposeStatus } from "@/lib/repurpose-types";
 
 const CARD_CLASS = "rounded-xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden";
@@ -14,7 +14,33 @@ const TOP_CLASS = "group flex items-center gap-4 px-5 py-4 transition-all durati
 // A video can be added only while nothing is actively running on the item.
 const CAN_ADD: RepurposeStatus[] = ["pending_download", "download_error", "pending_split", "split_error", "split_done", "voice_timing_error", "voice_timing_done"];
 const KIND_LABEL = { youtube: "YouTube", tiktok: "TikTok", direct: "Direct link" } as const;
-const TONE = { ok: "text-[var(--color-green)]", wait: "text-[var(--text-faint)]", error: "text-[var(--color-red)]" } as const;
+const CHIP: Record<SourceState, string> = {
+  done: "bg-[var(--color-green-soft)] text-[var(--color-green)] border-[var(--color-green)]/30",
+  pending: "bg-[var(--surface)] text-[var(--text-faint)] border-[var(--border)]",
+  error: "bg-[var(--color-red-soft)] text-[var(--color-red)] border-[var(--color-red)]/40",
+};
+
+function StateChip({ label, state }: { label: string; state: SourceState }) {
+  return <span className={cn("px-1.5 py-0.5 rounded border text-[10px] font-medium whitespace-nowrap", CHIP[state])}>{label}</span>;
+}
+
+/** The three signals shown next to every video's link: downloaded?, split?, voice-timed? */
+function SourceChips({ s }: { s: RepurposeSource }) {
+  const dl =
+    s.kind === "direct" ? (
+      <StateChip label="No download needed" state="done" />
+    ) : (
+      <StateChip label={s.download === "done" ? "Downloaded" : s.download === "error" ? "Download failed" : "Not downloaded yet"} state={s.download} />
+    );
+  return (
+    <>
+      {dl}
+      <StateChip label={s.split === "done" ? "Split" : s.split === "error" ? "Split failed" : "Not split yet"} state={s.split} />
+      <StateChip label={s.timing === "done" ? "Voice timed" : s.timing === "error" ? "Timing failed" : "Not timed yet"} state={s.timing} />
+    </>
+  );
+}
+
 
 function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () => void }) {
   const isError = REPURPOSE_ERROR_STATUSES.includes(item.status);
@@ -152,7 +178,7 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
                 <span className="px-1.5 py-0.5 rounded bg-[var(--surface)] border border-[var(--border)] text-[10px] text-[var(--text-muted)]">
                   {KIND_LABEL[s.kind]}
                 </span>
-                <span className={cn("font-medium", TONE[stage.tone])}>{stage.label}</span>
+                <SourceChips s={s} />
                 <span className="text-[var(--text-faint)] truncate max-w-[40ch]">{s.original_url}</span>
               </div>
               {stage.detail && <p className="text-[var(--color-red)] mt-0.5 pl-16 break-words">{stage.detail}</p>}
