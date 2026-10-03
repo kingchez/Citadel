@@ -11,13 +11,10 @@ export interface RepurposeSource {
   kind: "youtube" | "tiktok" | "direct";
   download: SourceState;
   download_error: string | null;
-  source_key: string | null;
   split: SourceState;
   split_error: string | null;
   video_only_url: string | null;
-  video_only_key: string | null;
   audio_url: string | null;
-  audio_key: string | null;
   timing: SourceState;
   timing_error: string | null;
 }
@@ -34,13 +31,10 @@ export function newSourceItem(url: string, index = 0): RepurposeSource {
     kind,
     download: kind === "direct" ? "done" : "pending",
     download_error: null,
-    source_key: null,
     split: "pending",
     split_error: null,
     video_only_url: null,
-    video_only_key: null,
     audio_url: null,
-    audio_key: null,
     timing: "pending",
     timing_error: null,
   };
