@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { extractAsin, splitProductInput, resolveShortAmazonLink } from "@/lib/amazon";
+import { extractAsin, splitProductInput, resolveShortAmazonLink, buildAmazonProductUrl } from "@/lib/amazon";
 import type { ProductEntry } from "@/lib/types";
 
 /**
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         asin = await resolveShortAmazonLink(line);
       }
       if (asin) {
-        extractedAsins.push({ asin, source_url: line });
+        extractedAsins.push({ asin, source_url: buildAmazonProductUrl(asin) });
       } else {
         failed.push(line);
       }

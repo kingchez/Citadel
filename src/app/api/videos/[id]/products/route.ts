@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import type { ProductEntry } from "@/lib/types";
+import { buildAmazonProductUrl } from "@/lib/amazon";
 
 /**
  * Replaces the whole product list - covers editing an ASIN in place,
@@ -24,12 +25,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "products must be an array." }, { status: 400 });
     }
 
-    const cleaned: ProductEntry[] = products.map((p: Partial<ProductEntry>, i: number) => ({
-      index: i,
-      asin: String(p.asin || "").trim().toUpperCase(),
-      source_url: p.source_url,
-      added_at: p.added_at || new Date().toISOString(),
-    }));
+    const cleaned: ProductEntry[] = products.map((p: Partial<ProductEntry>, i: number) => {
+      const asin = String(p.asin || "").trim().toUpperCase();
+      return {
+        index: i,
+        asin,
+        // always the clean link built from the ASIN, so an edited ASIN can never keep a stale/long URL
+        source_url: asin ? buildAmazonProductUrl(asin) : p.source_url,
+        added_at: p.added_at || new Date().toISOString(),
+      };
+    });
 
     if (cleaned.some((p) => !p.asin)) {
       return NextResponse.json({ error: "Every product needs a non-empty ASIN." }, { status: 400 });
