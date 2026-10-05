@@ -5,7 +5,7 @@ import Link from "next/link";
 import { AlertTriangle, ChevronRight, Film, Loader2, Plus, Repeat, RotateCcw, Tag } from "lucide-react";
 import { RepurposeStatusBadge } from "@/components/repurpose-status-badge";
 import { cn, formatTimeAgo } from "@/lib/utils";
-import { formatSeconds } from "@/lib/repurpose-utils";
+import { formatSeconds, parseTimeToSeconds } from "@/lib/repurpose-utils";
 import { sourceStage, introStage, type RepurposeSource, type SourceState } from "@/lib/repurpose-sources";
 import { REPURPOSE_ERROR_STATUSES, type RepurposeRow, type RepurposeStatus } from "@/lib/repurpose-types";
 
@@ -49,6 +49,8 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
   const [actionError, setActionError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [newUrl, setNewUrl] = useState("");
+  const [addKind, setAddKind] = useState<"source" | "intro">("source");
+  const [introStart, setIntroStart] = useState("");
   const [saving, setSaving] = useState(false);
   const sources = item.sources ?? [];
   const canAdd = CAN_ADD.includes(item.status);
@@ -75,15 +77,25 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
     setSaving(true);
     setActionError(null);
     try {
-      const res = await fetch(`/api/repurpose/${item.id}/sources`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: newUrl }),
-      });
+      // A source video goes into `sources`; an intro goes into the intro fields (never into `sources`).
+      const res =
+        addKind === "intro"
+          ? await fetch(`/api/repurpose/${item.id}/intro`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ url: newUrl, start: introStart }),
+            })
+          : await fetch(`/api/repurpose/${item.id}/sources`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ url: newUrl }),
+            });
       const data = await res.json();
       if (!res.ok) setActionError(data.error || "Couldn't add the video.");
       else {
         setNewUrl("");
+        setIntroStart("");
+        setAddKind("source");
         setAdding(false);
         onChanged();
       }
@@ -214,24 +226,56 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
             onClick={() => setAdding(true)}
             className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-purple)] hover:underline"
           >
-            <Plus className="w-3.5 h-3.5" /> Add another video
+            <Plus className="w-3.5 h-3.5" /> Add another video or intro
           </button>
         )}
         {adding && (
-          <div className="flex gap-2 items-center pt-1">
-            <input
-              className="input-field text-xs font-mono flex-1"
-              value={newUrl}
-              onChange={(e) => setNewUrl(e.target.value)}
-              placeholder="Link to the extra video (Drive, YouTube, TikTok or a direct file)"
-              autoFocus
-            />
-            <button type="button" className="btn-primary text-xs" disabled={!newUrl.trim() || saving} onClick={addVideo}>
-              {saving ? "Adding…" : "Add"}
-            </button>
-            <button type="button" className="text-xs text-[var(--text-faint)] hover:underline" onClick={() => { setAdding(false); setNewUrl(""); }}>
-              Cancel
-            </button>
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center gap-1 text-xs">
+              {(["source", "intro"] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setAddKind(k)}
+                  className={cn(
+                    "px-2.5 py-1 rounded-lg border font-medium",
+                    addKind === k
+                      ? "bg-[var(--color-purple)] text-white border-[var(--color-purple)]"
+                      : "bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)] hover:bg-[var(--surface-raised)]"
+                  )}
+                >
+                  {k === "source" ? "Source video" : item.new_intro_original_url ? "Intro (replaces current)" : "Intro video"}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2 items-center">
+              <input
+                className="input-field text-xs font-mono flex-1"
+                value={newUrl}
+                onChange={(e) => setNewUrl(e.target.value)}
+                placeholder={addKind === "intro" ? "Link to the new intro video (Drive, YouTube, TikTok or a direct file)" : "Link to the extra video (Drive, YouTube, TikTok or a direct file)"}
+                autoFocus
+              />
+              {addKind === "intro" && (
+                <input
+                  className="input-field text-xs font-mono w-28"
+                  value={introStart}
+                  onChange={(e) => setIntroStart(e.target.value)}
+                  placeholder="Start 0:13"
+                />
+              )}
+              <button
+                type="button"
+                className="btn-primary text-xs"
+                disabled={!newUrl.trim() || (addKind === "intro" && parseTimeToSeconds(introStart) === null) || saving}
+                onClick={addVideo}
+              >
+                {saving ? "Adding…" : addKind === "intro" ? "Set intro" : "Add"}
+              </button>
+              <button type="button" className="text-xs text-[var(--text-faint)] hover:underline" onClick={() => { setAdding(false); setNewUrl(""); setIntroStart(""); setAddKind("source"); }}>
+                Cancel
+              </button>
+            </div>
           </div>
         )}
         {!canAdd && item.status !== "handed_off" && item.status !== "cancelled" && (

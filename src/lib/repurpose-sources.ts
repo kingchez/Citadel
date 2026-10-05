@@ -70,3 +70,9 @@ export function introStage(i: RepurposeIntro): { label: string; tone: "ok" | "wa
   if (i.download !== "done") return { label: "Waiting to download", tone: "wait", detail: null };
   return { label: "Ready", tone: "ok", detail: null };
 }
+
+/** Builds the json for a newly typed intro link. Direct links need no download, so they start as downloaded. */
+export function newIntroItem(url: string): RepurposeIntro {
+  const kind = classifyVideoUrl(url);
+  return { original_url: url, url, kind, download: kind === "direct" ? "done" : "pending", download_error: null };
+}
