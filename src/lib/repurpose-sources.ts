@@ -50,3 +50,23 @@ export function sourceStage(s: RepurposeSource): { label: string; tone: "ok" | "
   if (s.timing !== "done") return { label: "Waiting for voice timing", tone: "wait", detail: null };
   return { label: "Ready", tone: "ok", detail: null };
 }
+
+/**
+ * The replacement intro, stored in the json column repurpose_videos.new_intro_original_url.
+ * Same shape as a source item, minus split/timing - the intro is only downloaded, never split or voice-timed.
+ */
+export interface RepurposeIntro {
+  original_url: string;
+  /** Working link: the original for direct files, or the bucket copy (repurpose/<id>/intro.mp4) once downloaded. */
+  url: string;
+  kind: "youtube" | "tiktok" | "direct";
+  download: SourceState;
+  download_error: string | null;
+}
+
+/** Short plain-language stage of the intro, for the queue. */
+export function introStage(i: RepurposeIntro): { label: string; tone: "ok" | "wait" | "error"; detail: string | null } {
+  if (i.download === "error") return { label: "Download failed", tone: "error", detail: i.download_error };
+  if (i.download !== "done") return { label: "Waiting to download", tone: "wait", detail: null };
+  return { label: "Ready", tone: "ok", detail: null };
+}

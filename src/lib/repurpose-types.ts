@@ -1,5 +1,5 @@
 import type { ProductEntry, VideoType } from "./types";
-import type { RepurposeSource } from "./repurpose-sources";
+import type { RepurposeSource, RepurposeIntro } from "./repurpose-sources";
 
 export type RepurposeStatus =
   | "pending_download"
@@ -35,7 +35,8 @@ export interface RepurposeRow {
   sources: RepurposeSource[];
   intro_mode: RepurposeIntroMode;
   new_intro_url: string | null;
-  new_intro_original_url: string | null;
+  /** json: the replacement intro's link + download state (null when intro_mode is keep_original). */
+  new_intro_original_url: RepurposeIntro | null;
   new_intro_start_seconds: number | null;
   notes: unknown;
   voice_timing: unknown;

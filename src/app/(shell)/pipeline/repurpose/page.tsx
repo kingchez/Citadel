@@ -6,7 +6,7 @@ import { AlertTriangle, ChevronRight, Film, Loader2, Plus, Repeat, RotateCcw, Ta
 import { RepurposeStatusBadge } from "@/components/repurpose-status-badge";
 import { cn, formatTimeAgo } from "@/lib/utils";
 import { formatSeconds } from "@/lib/repurpose-utils";
-import { sourceStage, type RepurposeSource, type SourceState } from "@/lib/repurpose-sources";
+import { sourceStage, introStage, type RepurposeSource, type SourceState } from "@/lib/repurpose-sources";
 import { REPURPOSE_ERROR_STATUSES, type RepurposeRow, type RepurposeStatus } from "@/lib/repurpose-types";
 
 const CARD_CLASS = "rounded-xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden";
@@ -185,6 +185,28 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
             </div>
           );
         })}
+
+        {item.intro_mode === "replace" && item.new_intro_original_url && (() => {
+          const intro = item.new_intro_original_url;
+          const stage = introStage(intro);
+          return (
+            <div className="text-xs">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-[var(--text-muted)] w-14">Intro</span>
+                <span className="px-1.5 py-0.5 rounded bg-[var(--surface)] border border-[var(--border)] text-[10px] text-[var(--text-muted)]">
+                  {KIND_LABEL[intro.kind]}
+                </span>
+                {intro.kind === "direct" ? (
+                  <StateChip label="No download needed" state="done" />
+                ) : (
+                  <StateChip label={intro.download === "done" ? "Downloaded" : intro.download === "error" ? "Download failed" : "Not downloaded yet"} state={intro.download} />
+                )}
+                <span className="text-[var(--text-faint)] truncate max-w-[40ch]">{intro.original_url}</span>
+              </div>
+              {stage.detail && <p className="text-[var(--color-red)] mt-0.5 pl-16 break-words">{stage.detail}</p>}
+            </div>
+          );
+        })()}
 
         {canAdd && !adding && (
           <button
