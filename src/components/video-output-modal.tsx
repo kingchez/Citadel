@@ -28,6 +28,8 @@ export function VideoOutputModal({
   const [error, setError] = useState<string | null>(null);
 
   const fileId = extractDriveFileId(outputDriveLink);
+  // Anything that is not a Google Drive link (e.g. the R2 bucket URL the pipeline now saves for renders) plays directly.
+  const directUrl = !fileId && /^https?:\/\//i.test(outputDriveLink) ? outputDriveLink : null;
 
   const handleSubmit = async () => {
     if (!notes.trim()) return;
@@ -69,7 +71,25 @@ export function VideoOutputModal({
         {/* Left: the video. Right: revision notes. Stacks on narrow screens. */}
         <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px]">
           <div className="min-h-[50vh] lg:min-h-0 bg-black flex flex-col">
-            {fileId ? (
+            {directUrl ? (
+              <>
+                {/* Bucket (R2) link: plain native player - the browser streams it directly with range requests, no Drive processing delay. */}
+                <video
+                  key={directUrl}
+                  src={directUrl}
+                  controls
+                  autoPlay
+                  playsInline
+                  preload="metadata"
+                  className="flex-1 min-h-0 w-full bg-black"
+                />
+                <div className="px-4 py-2 text-[11px] text-[var(--text-faint)] bg-[var(--surface)] border-t border-[var(--border)]">
+                  <a href={directUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--color-cyan)] underline">
+                    Open video in new tab
+                  </a>
+                </div>
+              </>
+            ) : fileId ? (
               <>
                 {/* Google's own player: plays straight from Drive (no proxying through this server, so no size/time limits). */}
                 <iframe
