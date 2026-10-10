@@ -2,19 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
 /**
- * Enqueues a single-segment/service retry into the `retries` table - the
- * dispatch cron in the Retries workflow picks it up whenever the VPS is
- * free. This is just a guarded insert (don't double-queue the same target),
- * so it goes straight to Supabase rather than through n8n's own queue
- * webhook - n8n's job starts at "interpret what's pending and dispatch it,"
- * not "receive this write on Citadel's behalf."
- *
- * If this is a chatterbox retry for a specific segment that was carrying an
- * `edited_pending_retry` warning, that flag is cleared here too. The
- * warning's whole job was "remind them to click retry" - once they've
- * clicked it, its job is done. It shouldn't linger until the async job
- * actually finishes (which could be a long wait, and would read as "you
- * still haven't retried this" when they already have).
+ * One retry click, for any service. All the bookkeeping happens inside a
+ * single database function so a click is atomic:
+ *  - chatterbox / whisperx -> request_segment_retry: marks that segment
+ *    `retry`, drops its voice timing, registers the old voiceover (and old
+ *    render) in media_to_delete, and rewinds the whole video to
+ *    `script_written` - even if a job on it is currently running.
+ *  - render -> request_render_retry: old render registered for deletion, video
+ *    back to `final_scene_planned`.
+ *  - autobrowse -> request_media_retry: old file registered, that media entry
+ *    reset to `pending`.
+ * Main's own crons then pick the work up; there is no retries table anymore.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -26,55 +24,29 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin();
+    let result;
 
-    if (service === "chatterbox" && typeof target?.segment_index === "number") {
-      const { data: video } = await supabase
-        .from("videos")
-        .select("script_segments")
-        .eq("id", video_id)
-        .single();
-      const segments = video?.script_segments || [];
-      const idx = segments.findIndex((s: { index: number }) => s.index === target.segment_index);
-      if (idx !== -1 && segments[idx].edited_pending_retry) {
-        const updated = [...segments];
-        updated[idx] = { ...updated[idx], edited_pending_retry: undefined };
-        await supabase.from("videos").update({ script_segments: updated }).eq("id", video_id);
+    if (service === "chatterbox" || service === "whisperx") {
+      const idx = service === "chatterbox" ? target?.segment_index : target?.clip_index;
+      if (typeof idx !== "number") {
+        return NextResponse.json({ error: `A ${service} retry needs a segment index.` }, { status: 400 });
       }
+      result = await supabase.rpc("request_segment_retry", { p_video_id: video_id, p_indices: [idx] });
+    } else if (service === "render") {
+      result = await supabase.rpc("request_render_retry", { p_video_id: video_id });
+    } else if (service === "autobrowse") {
+      if (typeof target?.code !== "string") {
+        return NextResponse.json({ error: "A media retry needs the media code." }, { status: 400 });
+      }
+      result = await supabase.rpc("request_media_retry", { p_video_id: video_id, p_code: target.code });
+    } else {
+      return NextResponse.json({ error: `Unknown service "${service}".` }, { status: 400 });
     }
 
-    // Dedup guard: don't queue the same target twice while a retry for it
-    // is still outstanding.
-    let existingQuery = supabase
-      .from("retries")
-      .select("id")
-      .eq("video_id", video_id)
-      .eq("service", service)
-      .in("status", ["pending", "dispatched"]);
-
-    existingQuery = target
-      ? existingQuery.eq("target", JSON.stringify(target))
-      : existingQuery.is("target", null);
-
-    const { data: existing, error: existingError } = await existingQuery.maybeSingle();
-
-    if (existingError) {
-      return NextResponse.json({ error: existingError.message }, { status: 500 });
+    if (result.error) {
+      return NextResponse.json({ error: result.error.message }, { status: 500 });
     }
-    if (existing) {
-      return NextResponse.json({ retry: existing, alreadyQueued: true });
-    }
-
-    const { data, error } = await supabase
-      .from("retries")
-      .insert({ video_id, service, target: target ?? null, status: "pending", attempt_count: 0 })
-      .select()
-      .single();
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ retry: data });
+    return NextResponse.json({ ok: true, result: result.data });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Unknown error" },

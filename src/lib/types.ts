@@ -33,6 +33,14 @@ export interface ScriptSegment {
   text?: string;
   voiceover_drive_file_id?: string;
   error?: string;
+  /** Voiceover/timing state of this one segment. A retry click sets `retry`
+   * (and drops the whole video back to the voiceover stage); Main's Chatterbox
+   * lane then sends only pending/retry segments. Errors wait for a click. */
+  status?: "pending" | "retry" | "done" | "error";
+  /** How many times this segment has failed; never limits retries. */
+  error_count?: number;
+  /** When the retry was clicked - lets Main ignore results of an older job. */
+  retry_requested_at?: string;
   /** Set when the text was edited in Citadel after this segment already had
    * a voiceover, and the person declined the "retry now?" prompt. A
    * standing reminder until they click retry - cleared automatically the
@@ -88,12 +96,6 @@ export interface RevisionEntry {
   resolved_at?: string | null;
 }
 
-export interface ActiveRetry {
-  source?: string;
-  segment_indices?: number[];
-  requested_at?: string;
-}
-
 export interface VideoRow {
   id: string;
   title: string;
@@ -114,31 +116,15 @@ export interface VideoRow {
   output_drive_link?: string;
   error_details?: string;
   revision_history?: RevisionEntry[];
-  active_retry?: ActiveRetry | null;
   vps_in_use?: boolean;
   vps_status?: string;
   vps_current_service?: string | null;
   vps_job_triggered_at?: string;
-  retry_batch_id?: string;
   created_at: string;
   updated_at: string;
 }
 
 export type RetryService = "chatterbox" | "whisperx" | "render" | "autobrowse";
-export type RetryStatus = "pending" | "dispatched" | "done" | "failed";
-
-export interface RetryRow {
-  id: string;
-  video_id: string;
-  service: RetryService;
-  target: { segment_index?: number; clip_index?: number; code?: string } | null;
-  status: RetryStatus;
-  attempt_count: number;
-  drive_file_id_to_delete?: string;
-  error?: string;
-  created_at: string;
-  updated_at: string;
-}
 
 /** Review checkpoints where a one-click approve is meaningful. */
 export const REVIEW_STATUSES: VideoStatus[] = ["media_review", "production_review"];

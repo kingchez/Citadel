@@ -12,16 +12,14 @@ interface SegmentRowProps {
   onRetry: (index: number) => void;
   onPlay: (index: number) => void;
   isPlaying: boolean;
-  /** True when there's a pending/dispatched retry row for this segment -
-   * i.e. it's genuinely queued to be regenerated, whether that retry came
-   * from the retry icon or from approving a retry after an edit. */
-  retryQueued?: boolean;
 }
 
-export function SegmentRow({ segment, selected, onSelect, onRetry, onPlay, isPlaying, retryQueued }: SegmentRowProps) {
+export function SegmentRow({ segment, selected, onSelect, onRetry, onPlay, isPlaying }: SegmentRowProps) {
   const [expanded, setExpanded] = useState(false);
   const hasAudio = !!segment.voiceover_drive_file_id;
-  const isError = !!segment.error;
+  // The segment's own status is the source of truth: `retry` = clicked and waiting for Main to redo it.
+  const retryQueued = segment.status === "retry";
+  const isError = !retryQueued && (segment.status === "error" || !!segment.error);
   const isSuccess = !isError && hasAudio && !retryQueued;
   const text = segment.text || "";
 
@@ -78,7 +76,10 @@ export function SegmentRow({ segment, selected, onSelect, onRetry, onPlay, isPla
           {isError && segment.error && (
             <div className="mt-2 flex items-start gap-2 p-2.5 rounded-lg bg-[var(--color-red-soft)]/50 border border-[var(--color-red)]/20">
               <AlertCircle className="w-4 h-4 text-[var(--color-red)] flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-[var(--color-red)] font-mono leading-relaxed">{segment.error}</p>
+              <p className="text-xs text-[var(--color-red)] font-mono leading-relaxed">
+                {segment.error_count && segment.error_count > 1 ? `Failed ${segment.error_count} times - ` : ""}
+                {segment.error}
+              </p>
             </div>
           )}
 

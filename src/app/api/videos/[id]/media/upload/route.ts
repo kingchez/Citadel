@@ -59,6 +59,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const mediaAssets: Record<string, MediaAssetEntry> = video?.media_assets || {};
     const previous = mediaAssets[mediaKey] || { provided: false };
 
+    // The file being swapped out is no longer needed: register it so Main deletes it after 3 days.
+    if (previous.driveFileId && previous.driveFileId !== driveFileId) {
+      const { error: registerError } = await supabase.rpc("register_media_for_deletion", {
+        p_video_id: id,
+        p_ref: previous.driveFileId,
+        p_reason: "media_replaced",
+      });
+      if (registerError) console.error("media_to_delete registration failed:", registerError.message);
+    }
+
     mediaAssets[mediaKey] = {
       ...previous,
       provided: true,

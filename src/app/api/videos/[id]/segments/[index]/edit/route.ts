@@ -7,11 +7,11 @@ import type { ScriptSegment } from "@/lib/types";
  * database write - direct to Supabase.
  *
  * If this segment already has a voiceover (Chatterbox already ran for it)
- * and the person didn't confirm an immediate retry, the segment is flagged
- * `edited_pending_retry` so it keeps reminding them the audio no longer
- * matches the text until they click retry. If `retry: true` is passed, this
- * also queues the same guarded retry insert /api/retry uses, and the flag
- * is left unset (a successful retry rebuilds the segment without it anyway).
+ * the segment is flagged `edited_pending_retry` so it keeps reminding them
+ * the audio no longer matches the text until they click retry. If
+ * `retry: true` is passed, the same atomic database function a retry click
+ * uses (request_segment_retry) is called right after saving the text; it
+ * clears the flag, marks the segment `retry` and rewinds the video.
  * If the segment never had a voiceover yet, there's nothing to warn about.
  */
 export async function POST(
@@ -51,7 +51,7 @@ export async function POST(
     updated[segIdx] = {
       ...updated[segIdx],
       text,
-      edited_pending_retry: hadVoiceover && !retry ? true : undefined,
+      edited_pending_retry: hadVoiceover ? true : undefined,
     };
 
     const { data, error } = await supabase
@@ -66,23 +66,18 @@ export async function POST(
     }
 
     if (retry && hadVoiceover) {
-      const existingQuery = supabase
-        .from("retries")
-        .select("id")
-        .eq("video_id", id)
-        .eq("service", "chatterbox")
-        .eq("target", JSON.stringify({ segment_index: segIndex }))
-        .in("status", ["pending", "dispatched"]);
-      const { data: existingRetry } = await existingQuery.maybeSingle();
-      if (!existingRetry) {
-        await supabase.from("retries").insert({
-          video_id: id,
-          service: "chatterbox",
-          target: { segment_index: segIndex },
-          status: "pending",
-          attempt_count: 0,
-        });
+      const { error: retryError } = await supabase.rpc("request_segment_retry", {
+        p_video_id: id,
+        p_indices: [segIndex],
+      });
+      if (retryError) {
+        return NextResponse.json(
+          { error: `Text saved, but the retry could not be queued: ${retryError.message}` },
+          { status: 500 }
+        );
       }
+      const { data: fresh } = await supabase.from("videos").select("*").eq("id", id).single();
+      return NextResponse.json({ video: fresh ?? data, hadVoiceover });
     }
 
     return NextResponse.json({ video: data, hadVoiceover });

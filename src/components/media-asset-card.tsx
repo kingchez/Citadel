@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Image as ImageIcon, Camera, Sparkles, Upload, AlertCircle, CheckCircle2, Clock, Loader2 } from "lucide-react";
+import { Image as ImageIcon, Camera, Sparkles, Upload, AlertCircle, CheckCircle2, Clock, Loader2, RotateCcw } from "lucide-react";
 import type { MediaAssetEntry } from "@/lib/types";
 
 const sourceIcons: Record<string, React.ElementType> = {
@@ -23,9 +23,11 @@ interface MediaAssetCardProps {
   mediaKey: string;
   asset: MediaAssetEntry;
   onUpdated: () => void;
+  /** Asks the page to retry fetching this asset (the page shows the confirmation). */
+  onRetry?: (mediaKey: string) => void;
 }
 
-export function MediaAssetCard({ videoId, mediaKey, asset, onUpdated }: MediaAssetCardProps) {
+export function MediaAssetCard({ videoId, mediaKey, asset, onUpdated, onRetry }: MediaAssetCardProps) {
   const [note, setNote] = useState(asset.citadel_note || "");
   const [savingNote, setSavingNote] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -124,6 +126,13 @@ export function MediaAssetCard({ videoId, mediaKey, asset, onUpdated }: MediaAss
           <AlertCircle className="w-4 h-4 text-[var(--color-red)] flex-shrink-0 mt-0.5" />
           <p className="text-xs text-[var(--color-red)] font-mono leading-relaxed">{asset.error}</p>
         </div>
+      )}
+
+      {onRetry && asset.status === "error" && (
+        <button onClick={() => onRetry(mediaKey)} className="btn-amber flex items-center gap-1.5 py-1.5 px-3 text-xs">
+          <RotateCcw className="w-3.5 h-3.5" />
+          Retry fetching this media
+        </button>
       )}
 
       {(asset.asset_query || asset.video_generation_prompt || asset.image_prompt || asset.recording_instructions) && (

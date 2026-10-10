@@ -2,7 +2,8 @@
 
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
-import type { ScriptSegment, VideoRow, RetryRow } from "@/lib/types";
+import type { ScriptSegment, VideoRow } from "@/lib/types";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { SegmentRow, AudioPlayerBar } from "@/components/segment-row";
 import { VideoOutputModal } from "@/components/video-output-modal";
@@ -37,7 +38,9 @@ const APPROVABLE_STATUSES = new Set(["media_review", "production_review", "done"
 export default function VideoDetailPage({ params }: VideoDetailProps) {
   const { id } = use(params);
   const [video, setVideo] = useState<VideoRow | null>(null);
-  const [retries, setRetries] = useState<RetryRow[]>([]);
+  const [confirmAction, setConfirmAction] = useState<
+    { kind: "retry"; index: number } | { kind: "redo"; all: boolean } | { kind: "render" } | { kind: "media"; code: string } | null
+  >(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
@@ -57,9 +60,8 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
         }
         return r.json();
       })
-      .then((data: { video?: VideoRow; retries?: RetryRow[] } | null) => {
+      .then((data: { video?: VideoRow } | null) => {
         if (data?.video) setVideo(data.video);
-        if (data?.retries) setRetries(data.retries);
       })
       .finally(() => setLoading(false));
   };
@@ -162,7 +164,12 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
     });
   };
 
-  const handleRetryOne = async (index: number) => {
+  // Both buttons ask for confirmation first - a retry rewinds the whole video, so it should never be one stray click.
+  const requestRetryOne = (index: number) => setConfirmAction({ kind: "retry", index });
+  const requestRedo = (all: boolean) => setConfirmAction({ kind: "redo", all });
+
+  const performRetryOne = async (index: number) => {
+    setActionLoading(true);
     try {
       const res = await fetch("/api/retry", {
         method: "POST",
@@ -174,10 +181,12 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
       loadVideo();
     } catch (err) {
       showFeedback(err instanceof Error ? err.message : "Retry failed");
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  const handleRedoSelected = async (all: boolean) => {
+  const performRedo = async (all: boolean) => {
     setActionLoading(true);
     try {
       const indices = all ? [] : Array.from(selectedIndices);
@@ -187,10 +196,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
         body: JSON.stringify({ segment_indices: indices }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || "Could not queue redo");
-      showFeedback(
-        all ? "All segments queued for redo — bypassing the retries table" : `${indices.length} segment(s) queued for redo`,
-        4000
-      );
+      showFeedback(all ? "All segments queued for redo" : `${indices.length} segment(s) queued for redo`, 4000);
       setSelectedIndices(new Set());
       loadVideo();
     } catch (err) {
@@ -199,6 +205,78 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
       setActionLoading(false);
     }
   };
+
+  const performServiceRetry = async (service: "render" | "autobrowse", target: { code?: string } | null, done: string) => {
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ video_id: video.id, service, target }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || "Retry failed");
+      showFeedback(done);
+      loadVideo();
+    } catch (err) {
+      showFeedback(err instanceof Error ? err.message : "Retry failed");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const runConfirmedAction = async () => {
+    const action = confirmAction;
+    setConfirmAction(null);
+    if (!action) return;
+    if (action.kind === "retry") await performRetryOne(action.index);
+    else if (action.kind === "redo") await performRedo(action.all);
+    else if (action.kind === "render") await performServiceRetry("render", null, "Render queued again");
+    else await performServiceRetry("autobrowse", { code: action.code }, `Media "${action.code}" queued again`);
+  };
+
+  const confirmCopy = (() => {
+    if (!confirmAction) return { title: "", message: "", label: "", danger: false };
+    const rewind =
+      "The whole video drops back to the voiceover stage, voice timing for the redone segments is regenerated, and the current render (if there is one) is deleted after 3 days.";
+    if (confirmAction.kind === "render") {
+      return {
+        title: "Retry the render?",
+        message: "The video goes back to the render queue. The previous render (if any) is deleted after 3 days.",
+        label: "Yes, retry render",
+        danger: false,
+      };
+    }
+    if (confirmAction.kind === "media") {
+      return {
+        title: `Retry media "${confirmAction.code}"?`,
+        message: "This media entry is fetched again. The previous file (if any) is deleted after 3 days.",
+        label: "Yes, retry it",
+        danger: false,
+      };
+    }
+    if (confirmAction.kind === "retry") {
+      return {
+        title: `Retry segment ${confirmAction.index + 1}?`,
+        message: `Its voiceover is generated again. ${rewind}`,
+        label: "Yes, retry it",
+        danger: false,
+      };
+    }
+    if (confirmAction.all) {
+      return {
+        title: "Redo ALL segments?",
+        message: `Every voiceover and all voice timing are regenerated from scratch. ${rewind}`,
+        label: "Yes, redo everything",
+        danger: true,
+      };
+    }
+    return {
+      title: `Redo ${selectedIndices.size} segment${selectedIndices.size > 1 ? "s" : ""}?`,
+      message: `The selected voiceovers are generated again. ${rewind}`,
+      label: "Yes, redo them",
+      danger: false,
+    };
+  })();
 
   const handleApprove = async () => {
     setActionLoading(true);
@@ -301,6 +379,14 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
             <div>
               <p className="text-sm font-semibold text-[var(--color-red)]">Render Error</p>
               <p className="text-sm text-[var(--color-red)] mt-1 font-mono opacity-90">{video.error_details}</p>
+              <button
+                onClick={() => setConfirmAction({ kind: "render" })}
+                disabled={actionLoading}
+                className="btn-amber flex items-center gap-1.5 py-1.5 px-3 text-xs mt-3 disabled:opacity-50"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Retry render
+              </button>
             </div>
           </div>
         )}
@@ -436,7 +522,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
               <div className="flex items-center gap-2">
                 {!allSelected && (
                   <button
-                    onClick={() => handleRedoSelected(false)}
+                    onClick={() => requestRedo(false)}
                     disabled={actionLoading}
                     className="btn-amber flex items-center gap-2 py-2 px-4 text-sm disabled:opacity-50"
                   >
@@ -446,7 +532,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
                 )}
                 {allSelected && (
                   <button
-                    onClick={() => handleRedoSelected(true)}
+                    onClick={() => requestRedo(true)}
                     disabled={actionLoading}
                     className="btn-danger flex items-center gap-2 py-2 px-4 text-sm disabled:opacity-50"
                   >
@@ -465,15 +551,9 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
                 segment={seg}
                 selected={selectedIndices.has(seg.index)}
                 onSelect={handleSelectOne}
-                onRetry={handleRetryOne}
+                onRetry={requestRetryOne}
                 onPlay={handlePlay}
                 isPlaying={playingIndex === seg.index}
-                retryQueued={retries.some(
-                  (r) =>
-                    r.service === "chatterbox" &&
-                    r.target?.segment_index === seg.index &&
-                    (r.status === "pending" || r.status === "dispatched")
-                )}
               />
             ))}
           </div>
@@ -492,6 +572,17 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
         </div>
       )}
 
+      <ConfirmDialog
+        open={!!confirmAction}
+        title={confirmCopy.title}
+        message={confirmCopy.message}
+        confirmLabel={confirmCopy.label}
+        danger={confirmCopy.danger}
+        busy={actionLoading}
+        onConfirm={runConfirmedAction}
+        onCancel={() => setConfirmAction(null)}
+      />
+
       {activeTab === "media" && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {mediaEntries.length === 0 ? (
@@ -504,7 +595,14 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
             mediaEntries
               .sort(([a], [b]) => Number(a) - Number(b))
               .map(([key, asset]) => (
-                <MediaAssetCard key={key} videoId={video.id} mediaKey={key} asset={asset} onUpdated={loadVideo} />
+                <MediaAssetCard
+                  key={key}
+                  videoId={video.id}
+                  mediaKey={key}
+                  asset={asset}
+                  onUpdated={loadVideo}
+                  onRetry={(code) => setConfirmAction({ kind: "media", code })}
+                />
               ))
           )}
         </div>
