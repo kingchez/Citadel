@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import type { ScriptSegment } from "@/lib/types";
 
 /**
  * Edits one segment's script text from the Full Script editor. Pure
  * database write - direct to Supabase.
+ *
+ * The edit itself is one atomic database function (edit_segment_text) that
+ * only touches this one segment, so it can never overwrite a result a
+ * voiceover/timing callback saved a moment earlier.
  *
  * If this segment already has a voiceover (Chatterbox already ran for it)
  * the segment is flagged `edited_pending_retry` so it keeps reminding them
@@ -28,42 +31,23 @@ export async function POST(
     if (typeof text !== "string") {
       return NextResponse.json({ error: "text is required." }, { status: 400 });
     }
+    if (!Number.isInteger(segIndex)) {
+      return NextResponse.json({ error: "Invalid segment index." }, { status: 400 });
+    }
 
     const supabase = getSupabaseAdmin();
-    const { data: video, error: fetchError } = await supabase
-      .from("videos")
-      .select("script_segments")
-      .eq("id", id)
-      .single();
+    const { data: edited, error: editError } = await supabase.rpc("edit_segment_text", {
+      p_video_id: id,
+      p_index: segIndex,
+      p_text: text,
+    });
 
-    if (fetchError) {
-      return NextResponse.json({ error: fetchError.message }, { status: 500 });
+    if (editError) {
+      const notFound = /not found/i.test(editError.message);
+      return NextResponse.json({ error: editError.message }, { status: notFound ? 404 : 500 });
     }
 
-    const segments: ScriptSegment[] = video?.script_segments || [];
-    const segIdx = segments.findIndex((s) => s.index === segIndex);
-    if (segIdx === -1) {
-      return NextResponse.json({ error: `No segment at index ${segIndex}.` }, { status: 404 });
-    }
-
-    const hadVoiceover = !!segments[segIdx].voiceover_drive_file_id;
-    const updated = [...segments];
-    updated[segIdx] = {
-      ...updated[segIdx],
-      text,
-      edited_pending_retry: hadVoiceover ? true : undefined,
-    };
-
-    const { data, error } = await supabase
-      .from("videos")
-      .update({ script_segments: updated })
-      .eq("id", id)
-      .select()
-      .single();
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    const hadVoiceover = !!(edited as { hadVoiceover?: boolean } | null)?.hadVoiceover;
 
     if (retry && hadVoiceover) {
       const { error: retryError } = await supabase.rpc("request_segment_retry", {
@@ -76,11 +60,13 @@ export async function POST(
           { status: 500 }
         );
       }
-      const { data: fresh } = await supabase.from("videos").select("*").eq("id", id).single();
-      return NextResponse.json({ video: fresh ?? data, hadVoiceover });
     }
 
-    return NextResponse.json({ video: data, hadVoiceover });
+    const { data: video, error: fetchError } = await supabase.from("videos").select("*").eq("id", id).single();
+    if (fetchError) {
+      return NextResponse.json({ error: fetchError.message }, { status: 500 });
+    }
+    return NextResponse.json({ video, hadVoiceover });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Unknown error" },

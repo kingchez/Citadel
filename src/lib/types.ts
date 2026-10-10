@@ -41,6 +41,8 @@ export interface ScriptSegment {
   error_count?: number;
   /** When the retry was clicked - lets Main ignore results of an older job. */
   retry_requested_at?: string;
+  /** When the text was last edited - lets Main tell a running job's result is already out of date. */
+  text_edited_at?: string;
   /** Set when the text was edited in Citadel after this segment already had
    * a voiceover, and the person declined the "retry now?" prompt. A
    * standing reminder until they click retry - cleared automatically the
