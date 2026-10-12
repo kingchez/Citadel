@@ -22,6 +22,8 @@ import {
   Inbox,
   Plus,
   Repeat,
+  CalendarClock,
+  History,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
@@ -63,6 +65,15 @@ const PROJECTS: ProjectDef[] = [
       { label: "Reviewed", href: "/news/events?view=reviewed", icon: CheckCircle, countKey: "news.reviewed" },
     ],
   },
+  {
+    key: "schedule",
+    label: "Schedule",
+    icon: CalendarClock,
+    items: [
+      { label: "Timetable", href: "/schedule", icon: CalendarClock },
+      { label: "History", href: "/schedule?view=history", icon: History },
+    ],
+  },
 ];
 
 export function Sidebar() {
@@ -71,7 +82,7 @@ export function Sidebar() {
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const [expandedProjects, setExpandedProjects] = useState<string[]>(["video-pipeline", "news-pipeline"]);
+  const [expandedProjects, setExpandedProjects] = useState<string[]>(["video-pipeline", "news-pipeline", "schedule"]);
   const [counts, setCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
