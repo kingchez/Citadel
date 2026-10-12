@@ -23,7 +23,6 @@ import {
   Plus,
   Repeat,
   CalendarClock,
-  History,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
@@ -65,15 +64,6 @@ const PROJECTS: ProjectDef[] = [
       { label: "Reviewed", href: "/news/events?view=reviewed", icon: CheckCircle, countKey: "news.reviewed" },
     ],
   },
-  {
-    key: "schedule",
-    label: "Schedule",
-    icon: CalendarClock,
-    items: [
-      { label: "Timetable", href: "/schedule", icon: CalendarClock },
-      { label: "History", href: "/schedule?view=history", icon: History },
-    ],
-  },
 ];
 
 export function Sidebar() {
@@ -82,7 +72,7 @@ export function Sidebar() {
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const [expandedProjects, setExpandedProjects] = useState<string[]>(["video-pipeline", "news-pipeline", "schedule"]);
+  const [expandedProjects, setExpandedProjects] = useState<string[]>(["video-pipeline", "news-pipeline"]);
   const [counts, setCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -167,6 +157,20 @@ export function Sidebar() {
         <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)]">
           Workspace
         </div>
+
+        <Link
+          href="/schedule"
+          className={cn(
+            "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-150 sidebar-item",
+            pathname.startsWith("/schedule")
+              ? "bg-[var(--surface-raised)] text-[var(--text)] border-l-2 border-[var(--color-purple)]"
+              : "text-[var(--text)] hover:bg-[var(--surface-raised)]"
+          )}
+          aria-current={pathname.startsWith("/schedule") ? "page" : undefined}
+        >
+          <CalendarClock className="w-4.5 h-4.5 text-[var(--color-purple)] flex-shrink-0" />
+          <span className="flex-1 truncate">Schedule</span>
+        </Link>
 
         <div className="pl-1 space-y-1">
           <div className="flex items-center gap-2 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)]">

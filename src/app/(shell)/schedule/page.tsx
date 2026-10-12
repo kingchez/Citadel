@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { BellRing, CalendarClock, Check, Loader2, Pause, Pencil, Play, Plus, Repeat, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -443,6 +444,21 @@ function SchedulePage() {
             New entry
           </button>
         )}
+      </div>
+
+      <div className="flex gap-2">
+        <Link
+          href="/schedule"
+          className={cn("px-4 py-2 rounded-xl text-sm font-medium border transition-all duration-150", !history ? "bg-[var(--color-purple-soft)] text-[var(--color-purple)] border-[var(--color-purple)]" : "bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)] hover:border-[var(--border-strong)]")}
+        >
+          Upcoming
+        </Link>
+        <Link
+          href="/schedule?view=history"
+          className={cn("px-4 py-2 rounded-xl text-sm font-medium border transition-all duration-150", history ? "bg-[var(--color-purple-soft)] text-[var(--color-purple)] border-[var(--color-purple)]" : "bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)] hover:border-[var(--border-strong)]")}
+        >
+          History
+        </Link>
       </div>
 
       {ringingCount > 0 && (
