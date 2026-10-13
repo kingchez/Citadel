@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { BellRing, CalendarClock, Check, Loader2, Pause, Pencil, Play, Plus, Repeat, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ScheduleCalendar } from "@/components/schedule-calendar";
 import {
   DURATION_OPTIONS,
   KINDS,
@@ -344,8 +345,10 @@ function ScheduleRow({
 }
 
 function SchedulePage() {
-  const view = useSearchParams().get("view") === "history" ? "history" : "upcoming";
+  const viewParam = useSearchParams().get("view");
+  const view = viewParam === "history" ? "history" : viewParam === "calendar" ? "calendar" : "upcoming";
   const history = view === "history";
+  const calendar = view === "calendar";
 
   const [items, setItems] = useState<ScheduleItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -358,7 +361,7 @@ function SchedulePage() {
 
   const load = useCallback(
     () =>
-      fetch(`/api/schedule?view=${view}`)
+      fetch(`/api/schedule?view=${view === "calendar" ? "all" : view}`)
         .then((r) => r.json())
         .then((data: { items?: ScheduleItem[]; error?: string }) => {
           if (data.error) setError(data.error);
@@ -427,10 +430,10 @@ function SchedulePage() {
     return Array.from(map.values());
   }, [items]);
 
-  const ringingCount = history ? 0 : items.filter((i) => i.active && !i.acknowledged_at && now >= new Date(i.next_at).getTime() - i.remind_before_minutes * 60000).length;
+  const ringingCount = history ? 0 : items.filter((i) => i.status === "upcoming" && i.active && !i.acknowledged_at && now >= new Date(i.next_at).getTime() - i.remind_before_minutes * 60000).length;
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-6">
+    <div className={cn("p-6 mx-auto space-y-6", calendar ? "max-w-6xl" : "max-w-3xl")}>
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-[var(--text)]">{history ? "Schedule history" : "Schedule & Duties"}</h1>
@@ -447,18 +450,24 @@ function SchedulePage() {
       </div>
 
       <div className="flex gap-2">
-        <Link
-          href="/schedule"
-          className={cn("px-4 py-2 rounded-xl text-sm font-medium border transition-all duration-150", !history ? "bg-[var(--color-purple-soft)] text-[var(--color-purple)] border-[var(--color-purple)]" : "bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)] hover:border-[var(--border-strong)]")}
-        >
-          Upcoming
-        </Link>
-        <Link
-          href="/schedule?view=history"
-          className={cn("px-4 py-2 rounded-xl text-sm font-medium border transition-all duration-150", history ? "bg-[var(--color-purple-soft)] text-[var(--color-purple)] border-[var(--color-purple)]" : "bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)] hover:border-[var(--border-strong)]")}
-        >
-          History
-        </Link>
+        {[
+          { href: "/schedule", label: "Upcoming", active: view === "upcoming" },
+          { href: "/schedule?view=calendar", label: "Calendar", active: calendar },
+          { href: "/schedule?view=history", label: "History", active: history },
+        ].map((t) => (
+          <Link
+            key={t.href}
+            href={t.href}
+            className={cn(
+              "px-4 py-2 rounded-xl text-sm font-medium border transition-all duration-150",
+              t.active
+                ? "bg-[var(--color-purple-soft)] text-[var(--color-purple)] border-[var(--color-purple)]"
+                : "bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)] hover:border-[var(--border-strong)]"
+            )}
+          >
+            {t.label}
+          </Link>
+        ))}
       </div>
 
       {ringingCount > 0 && (
@@ -476,6 +485,8 @@ function SchedulePage() {
             <div key={i} className="h-[68px] rounded-xl bg-[var(--surface)] border border-[var(--border)] animate-pulse" />
           ))}
         </div>
+      ) : calendar ? (
+        <ScheduleCalendar items={items} onSelect={setEditing} />
       ) : items.length === 0 ? (
         <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-10 text-center text-sm text-[var(--text-faint)]">
           <CalendarClock className="w-6 h-6 mx-auto mb-2 text-[var(--border-strong)]" />

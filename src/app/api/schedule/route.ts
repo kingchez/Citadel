@@ -5,19 +5,23 @@ import { parseScheduleBody } from "@/lib/schedule-validate";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/schedule?view=upcoming|history
+ * GET /api/schedule?view=upcoming|history|all
  *  - upcoming: everything still pending (status = upcoming), soonest first.
  *  - history: finished or missed entries, newest first (last 100).
+ *  - all: every entry, used by the calendar (day / week / month) to expand repeats.
  * Reminders themselves are NOT sent from here - n8n watches this table through
  * citadel_schedule_claim_due() and pushes to the phone.
  */
 export async function GET(request: NextRequest) {
   try {
-    const view = request.nextUrl.searchParams.get("view") === "history" ? "history" : "upcoming";
+    const v = request.nextUrl.searchParams.get("view");
+    const view = v === "history" ? "history" : v === "all" ? "all" : "upcoming";
     const supabase = getSupabaseAdmin();
 
     const query =
-      view === "upcoming"
+      view === "all"
+        ? supabase.from("citadel_schedule_items").select("*").order("next_at", { ascending: true }).limit(1000)
+        : view === "upcoming"
         ? supabase.from("citadel_schedule_items").select("*").eq("status", "upcoming").order("next_at", { ascending: true }).limit(500)
         : supabase.from("citadel_schedule_items").select("*").in("status", ["done", "missed"]).order("next_at", { ascending: false }).limit(100);
 
