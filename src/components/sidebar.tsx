@@ -138,7 +138,7 @@ export function Sidebar() {
     <aside className="fixed left-0 top-0 h-screen w-64 bg-[var(--bg)] border-r border-[var(--border)] flex flex-col overflow-y-auto z-40">
       {/* Logo Area */}
       <div className="p-5 border-b border-[var(--border)]">
-        <Link href="/pipeline/dashboard" className="flex items-center gap-3" aria-label="Citadel Home">
+        <Link href="/" className="flex items-center gap-3" aria-label="Citadel Home">
           <div className="relative p-2 rounded-xl bg-[var(--color-purple-soft)] glow-purple">
             <Castle className="w-6 h-6 text-[var(--color-purple)]" />
             <div className="absolute inset-0 rounded-xl bg-[var(--color-purple)]/30 blur-xl animate-pulse-glow" />
@@ -157,6 +157,20 @@ export function Sidebar() {
         <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)]">
           Workspace
         </div>
+
+        <Link
+          href="/"
+          className={cn(
+            "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-150 sidebar-item",
+            pathname === "/"
+              ? "bg-[var(--surface-raised)] text-[var(--text)] border-l-2 border-[var(--color-purple)]"
+              : "text-[var(--text)] hover:bg-[var(--surface-raised)]"
+          )}
+          aria-current={pathname === "/" ? "page" : undefined}
+        >
+          <LayoutDashboard className="w-4.5 h-4.5 text-[var(--color-purple)] flex-shrink-0" />
+          <span className="flex-1 truncate">Dashboard</span>
+        </Link>
 
         <Link
           href="/schedule"

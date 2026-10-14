@@ -16,6 +16,7 @@ const breadcrumbMap: Record<string, string> = {
   "/news/events": "News Pipeline",
   "/notifications": "Notifications",
   "/schedule": "Schedule",
+  "/": "Dashboard",
 };
 
 /** Only emits crumbs for routes that actually exist. The literal "/pipeline"
@@ -23,7 +24,7 @@ const breadcrumbMap: Record<string, string> = {
  * routes live at /<project>/dashboard and /<project>/videos|events - so
  * they're deliberately skipped rather than shown as a dead link. */
 function getBreadcrumbs(pathname: string) {
-  const breadcrumbs: { label: string; href: string }[] = [{ label: "Workspace", href: "/pipeline/dashboard" }];
+  const breadcrumbs: { label: string; href: string }[] = [{ label: "Workspace", href: "/" }];
 
   if (pathname.startsWith("/pipeline/videos")) {
     breadcrumbs.push({ label: "Video Pipeline", href: "/pipeline/videos" });
