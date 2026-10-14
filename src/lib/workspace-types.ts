@@ -15,22 +15,9 @@ export interface WorkspaceAlert {
   last_seen_at: string;
 }
 
-export interface WorkspaceTodo {
-  id: string;
-  title: string;
-  notes: string | null;
-  due_at: string | null;
-  priority: 1 | 2 | 3;
-  project: string | null;
-  status: "open" | "done";
-  done_at: string | null;
-  created_at: string;
-}
-
 export interface WorkspaceSummary {
   now: string;
   alerts: WorkspaceAlert[];
-  todos: WorkspaceTodo[];
   doneToday: number;
   schedule: import("./schedule-types").ScheduleItem[];
   videos: {

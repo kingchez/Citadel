@@ -20,10 +20,10 @@ export async function GET(request: NextRequest) {
 
     const query =
       view === "all"
-        ? supabase.from("citadel_schedule_items").select("*").order("next_at", { ascending: true }).limit(1000)
+        ? supabase.from("citadel_schedule_items").select("*").order("next_at", { ascending: true, nullsFirst: false }).limit(1000)
         : view === "upcoming"
-        ? supabase.from("citadel_schedule_items").select("*").eq("status", "upcoming").order("next_at", { ascending: true }).limit(500)
-        : supabase.from("citadel_schedule_items").select("*").in("status", ["done", "missed"]).order("next_at", { ascending: false }).limit(100);
+        ? supabase.from("citadel_schedule_items").select("*").eq("status", "upcoming").order("next_at", { ascending: true, nullsFirst: false }).limit(500)
+        : supabase.from("citadel_schedule_items").select("*").in("status", ["done", "missed"]).order("next_at", { ascending: false, nullsFirst: false }).limit(100);
 
     const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -40,6 +40,9 @@ export async function POST(request: NextRequest) {
     if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
     const v = parsed.value;
 
+    if (!v.starts_at && v.repeat && v.repeat !== "none") {
+      return NextResponse.json({ error: "A repeating entry needs a start time." }, { status: 400 });
+    }
     if (v.repeat && v.repeat !== "none" && v.repeat_until && v.starts_at && v.repeat_until < v.starts_at) {
       return NextResponse.json({ error: "Repeat-until can't be before the start." }, { status: 400 });
     }
@@ -51,10 +54,12 @@ export async function POST(request: NextRequest) {
         title: v.title,
         notes: v.notes ?? null,
         kind: v.kind,
-        next_at: v.starts_at,
-        first_at: v.starts_at,
+        next_at: v.starts_at ?? null,
+        first_at: v.starts_at ?? null,
         duration_minutes: v.duration_minutes,
-        remind_before_minutes: v.remind_before_minutes,
+        // no time => nothing to alert about
+        remind_before_minutes: v.starts_at ? v.remind_before_minutes ?? null : null,
+        priority: v.priority ?? 2,
         repeat: v.repeat,
         repeat_until: v.repeat === "none" ? null : v.repeat_until ?? null,
       })

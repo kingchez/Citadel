@@ -100,7 +100,8 @@ interface FormState {
   kind: ScheduleKind;
   starts: string;
   duration: number;
-  remind: number;
+  remind: number | null;
+  priority: 1 | 2 | 3;
   repeat: ScheduleRepeat;
   until: string;
 }
@@ -109,7 +110,7 @@ function defaultForm(): FormState {
   const d = new Date();
   d.setMinutes(0, 0, 0);
   d.setHours(d.getHours() + 1);
-  return { title: "", notes: "", kind: "duty", starts: toLocalInput(d), duration: 60, remind: 30, repeat: "none", until: "" };
+  return { title: "", notes: "", kind: "duty", starts: toLocalInput(d), duration: 60, remind: 30, priority: 2, repeat: "none", until: "" };
 }
 
 function ItemModal({ item, onClose, onSaved }: { item: ScheduleItem | null; onClose: () => void; onSaved: () => void }) {
@@ -119,9 +120,10 @@ function ItemModal({ item, onClose, onSaved }: { item: ScheduleItem | null; onCl
           title: item.title,
           notes: item.notes ?? "",
           kind: item.kind,
-          starts: toLocalInput(item.next_at),
+          starts: item.next_at ? toLocalInput(item.next_at) : "",
           duration: item.duration_minutes,
           remind: item.remind_before_minutes,
+          priority: item.priority,
           repeat: item.repeat,
           until: item.repeat_until ? toLocalInput(item.repeat_until).slice(0, 10) : "",
         }
@@ -134,17 +136,18 @@ function ItemModal({ item, onClose, onSaved }: { item: ScheduleItem | null; onCl
   const save = async () => {
     setError(null);
     if (!form.title.trim()) return setError("Give it a title.");
-    if (!form.starts) return setError("Pick a start date and time.");
+    if (!form.starts && form.kind !== "task") return setError("Pick a start date and time.");
     setSaving(true);
     try {
       const body = {
         title: form.title,
         notes: form.notes,
         kind: form.kind,
-        starts_at: new Date(form.starts).toISOString(),
+        starts_at: form.starts ? new Date(form.starts).toISOString() : null,
         duration_minutes: form.duration,
-        remind_before_minutes: form.remind,
-        repeat: form.repeat,
+        remind_before_minutes: form.starts ? form.remind : null,
+        priority: form.priority,
+        repeat: form.starts ? form.repeat : "none",
         // "until" is a date: keep the whole of that day included
         repeat_until: form.repeat !== "none" && form.until ? new Date(`${form.until}T23:59:59`).toISOString() : null,
       };
@@ -187,8 +190,21 @@ function ItemModal({ item, onClose, onSaved }: { item: ScheduleItem | null; onCl
           </div>
         </Field>
 
+        <Field label="Priority">
+          <div className="flex flex-wrap gap-2">
+            {([1, 2, 3] as const).map((p) => (
+              <Choice key={p} value={p} current={form.priority} onSelect={(v) => set("priority", v)}>
+                {p === 1 ? "High" : p === 2 ? "Normal" : "Low"}
+              </Choice>
+            ))}
+          </div>
+        </Field>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Starts" hint="Your device's local time (Lagos).">
+          <Field
+            label={form.kind === "task" ? "Due (optional)" : "Starts"}
+            hint={form.kind === "task" ? "Leave empty for an anytime to-do (no alert)." : "Your device's local time (Lagos)."}
+          >
             <input type="datetime-local" className="input-field" value={form.starts} onChange={(e) => set("starts", e.target.value)} />
           </Field>
           <Field label="Duration">
@@ -202,27 +218,32 @@ function ItemModal({ item, onClose, onSaved }: { item: ScheduleItem | null; onCl
           </Field>
         </div>
 
-        <Field label="Phone alert" hint="You'll be pinged from this point and re-pinged every 5 minutes until you tap Done.">
-          <select className="input-field" value={form.remind} onChange={(e) => set("remind", Number(e.target.value))}>
-            {REMIND_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </Field>
+        {(form.kind !== "task" || form.starts) && (
+          <Field label="Phone alert" hint="You'll be pinged from this point and re-pinged every 5 minutes until you tap Done.">
+            <select className="input-field" value={form.remind ?? "none"} onChange={(e) => set("remind", e.target.value === "none" ? null : Number(e.target.value))}>
+              <option value="none">No alert</option>
+              {REMIND_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
 
-        <Field label="Repeat">
-          <div className="flex flex-wrap gap-2">
-            {REPEATS.map((r) => (
-              <Choice key={r} value={r} current={form.repeat} onSelect={(v) => set("repeat", v)}>
-                {REPEAT_LABEL[r]}
-              </Choice>
-            ))}
-          </div>
-        </Field>
+        {form.starts && (
+          <Field label="Repeat">
+            <div className="flex flex-wrap gap-2">
+              {REPEATS.map((r) => (
+                <Choice key={r} value={r} current={form.repeat} onSelect={(v) => set("repeat", v)}>
+                  {REPEAT_LABEL[r]}
+                </Choice>
+              ))}
+            </div>
+          </Field>
+        )}
 
-        {form.repeat !== "none" && (
+        {form.starts && form.repeat !== "none" && (
           <Field label="Repeat until (optional)" hint="Leave empty to repeat forever.">
             <input type="date" className="input-field" value={form.until} onChange={(e) => set("until", e.target.value)} />
           </Field>
@@ -267,9 +288,9 @@ function ScheduleRow({
   onTogglePause: () => void;
   busy: boolean;
 }) {
-  const start = new Date(item.next_at).getTime();
-  const alertAt = start - item.remind_before_minutes * 60000;
-  const ringing = !history && item.active && !item.acknowledged_at && now >= alertAt;
+  const start = item.next_at ? new Date(item.next_at).getTime() : null;
+  const ringing =
+    !history && item.status === "upcoming" && item.active && !item.acknowledged_at && start !== null && item.remind_before_minutes !== null && now >= start - item.remind_before_minutes * 60000;
 
   return (
     <div
@@ -280,7 +301,7 @@ function ScheduleRow({
       )}
     >
       <div className="w-16 flex-shrink-0 text-center">
-        <p className="text-lg font-bold tabular-nums text-[var(--text)]">{timeLabel(item.next_at)}</p>
+        <p className="text-lg font-bold tabular-nums text-[var(--text)]">{item.next_at ? timeLabel(item.next_at) : "Any time"}</p>
         {item.duration_minutes > 0 && <p className="text-[10px] text-[var(--text-faint)]">{item.duration_minutes >= 60 ? `${item.duration_minutes / 60}h` : `${item.duration_minutes}m`}</p>}
       </div>
 
@@ -301,15 +322,15 @@ function ScheduleRow({
         <p className="text-xs text-[var(--text-faint)] mt-1 flex items-center gap-1.5 flex-wrap">
           {history ? (
             <span>
-              {dayLabel(new Date(item.next_at))}, {timeLabel(item.next_at)}
+              {item.next_at ? `${dayLabel(new Date(item.next_at))}, ${timeLabel(item.next_at)}` : "No due time"}
             </span>
           ) : (
-            <span className={cn(ringing && "text-[var(--color-amber)] font-semibold")}>{countdown(item.next_at, now)}</span>
+            <span className={cn(ringing && "text-[var(--color-amber)] font-semibold")}>{item.next_at ? countdown(item.next_at, now) : "No due time"}</span>
           )}
           <span>·</span>
           <span className="inline-flex items-center gap-1">
             <BellRing className="w-3 h-3" />
-            {REMIND_OPTIONS.find((o) => o.value === item.remind_before_minutes)?.label ?? `${item.remind_before_minutes} min before`}
+            {item.remind_before_minutes === null ? "No alert" : (REMIND_OPTIONS.find((o) => o.value === item.remind_before_minutes)?.label ?? `${item.remind_before_minutes} min before`)}
           </span>
           {ringing && item.notify_count > 0 && (
             <>
@@ -422,15 +443,15 @@ function SchedulePage() {
   const groups = useMemo(() => {
     const map = new Map<string, { label: string; items: ScheduleItem[] }>();
     for (const item of items) {
-      const d = new Date(item.next_at);
-      const key = d.toDateString();
-      if (!map.has(key)) map.set(key, { label: dayLabel(d), items: [] });
+      const d = item.next_at ? new Date(item.next_at) : null;
+      const key = d ? d.toDateString() : "anytime";
+      if (!map.has(key)) map.set(key, { label: d ? dayLabel(d) : "Anytime", items: [] });
       map.get(key)!.items.push(item);
     }
     return Array.from(map.values());
   }, [items]);
 
-  const ringingCount = history ? 0 : items.filter((i) => i.status === "upcoming" && i.active && !i.acknowledged_at && now >= new Date(i.next_at).getTime() - i.remind_before_minutes * 60000).length;
+  const ringingCount = history ? 0 : items.filter((i) => i.status === "upcoming" && i.active && !i.acknowledged_at && i.next_at !== null && i.remind_before_minutes !== null && now >= new Date(i.next_at).getTime() - i.remind_before_minutes * 60000).length;
 
   return (
     <div className={cn("p-6 mx-auto space-y-6", calendar ? "max-w-6xl" : "max-w-3xl")}>

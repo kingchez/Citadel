@@ -16,7 +16,7 @@ const breadcrumbMap: Record<string, string> = {
   "/news/events": "News Pipeline",
   "/notifications": "Notifications",
   "/schedule": "Schedule",
-  "/": "Dashboard",
+  "/": "Home",
 };
 
 /** Only emits crumbs for routes that actually exist. The literal "/pipeline"

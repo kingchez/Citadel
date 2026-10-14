@@ -24,10 +24,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (v.repeat === "none") update.repeat_until = null;
     }
     if (v.repeat_until !== undefined && v.repeat !== "none") update.repeat_until = v.repeat_until;
+    if (v.priority !== undefined) update.priority = v.priority;
     if (v.active !== undefined) update.active = v.active;
     if (v.starts_at !== undefined) {
       update.next_at = v.starts_at;
       update.first_at = v.starts_at;
+      if (v.starts_at === null) {
+        update.repeat = "none";
+        update.repeat_until = null;
+        update.remind_before_minutes = null;
+      }
       update.status = "upcoming";
       update.acknowledged_at = null;
       update.last_notified_at = null;
@@ -36,7 +42,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase.from("citadel_schedule_items").update(update).eq("id", id).select().maybeSingle();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      const timeless = error.code === "23514";
+      return NextResponse.json({ error: timeless ? "Only to-dos can have no time." : error.message }, { status: timeless ? 400 : 500 });
+    }
     if (!data) return NextResponse.json({ error: "Entry not found." }, { status: 404 });
     return NextResponse.json({ item: data });
   } catch (err) {

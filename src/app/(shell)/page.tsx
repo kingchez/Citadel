@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { cn, formatTimeAgo } from "@/lib/utils";
 import { KIND_LABEL, type ScheduleItem } from "@/lib/schedule-types";
-import { safeLink, type AlertSeverity, type WorkspaceAlert, type WorkspaceSummary, type WorkspaceTodo } from "@/lib/workspace-types";
+import { safeLink, type AlertSeverity, type WorkspaceAlert, type WorkspaceSummary } from "@/lib/workspace-types";
 import { startOfDay, addDays } from "@/lib/schedule-occurrences";
 
 /* ───────────── helpers ───────────── */
@@ -59,16 +59,17 @@ function SeverityIcon({ s }: { s: AlertSeverity }) {
   return <Info className={cls} style={style} />;
 }
 
+/** One row on the Home timeline: a duty, meeting or to-do (all live in the same schedule table). */
 interface AgendaEntry {
   key: string;
-  kind: "schedule" | "todo";
   id: string;
   title: string;
   at: number | null;
-  ringing?: boolean;
-  schedule?: ScheduleItem;
-  todo?: WorkspaceTodo;
+  ringing: boolean;
+  item: ScheduleItem;
 }
+
+const isTodo = (i: ScheduleItem) => i.kind === "task";
 
 type GroupKey = "overdue" | "today" | "tomorrow" | "week" | "anytime";
 const GROUP_LABEL: Record<GroupKey, string> = {
@@ -84,7 +85,7 @@ function groupOf(e: AgendaEntry, now: number): GroupKey {
   const today = startOfDay(new Date(now));
   const tomorrow = addDays(today, 1).getTime();
   const dayAfter = addDays(today, 2).getTime();
-  if (e.kind === "todo" && e.at < now) return "overdue";
+  if (isTodo(e.item) && e.at < now) return "overdue";
   if (e.at < tomorrow) return "today";
   if (e.at < dayAfter) return "tomorrow";
   return "week";
@@ -189,6 +190,7 @@ export default function WorkspaceDashboard() {
   const [title, setTitle] = useState("");
   const [due, setDue] = useState("");
   const [priority, setPriority] = useState<1 | 2 | 3>(2);
+  const [remind, setRemind] = useState<string>("0"); // minutes before the due time, or "none"
   const [adding, setAdding] = useState(false);
 
   const load = useCallback(
@@ -237,21 +239,25 @@ export default function WorkspaceDashboard() {
   };
 
   const resolveAlert = (a: WorkspaceAlert) => act(a.id, () => fetch(`/api/workspace/notifications/${a.id}/resolve`, { method: "POST" }));
-  const ackSchedule = (s: ScheduleItem) => act(s.id, () => fetch(`/api/schedule/${s.id}/ack`, { method: "POST" }));
-  const toggleTodo = (t: WorkspaceTodo) =>
-    act(t.id, () =>
-      fetch(`/api/workspace/todos/${t.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "done" }) })
-    );
-  const deleteTodo = (t: WorkspaceTodo) => act(t.id, () => fetch(`/api/workspace/todos/${t.id}`, { method: "DELETE" }));
+  const markDone = (s: ScheduleItem) => act(s.id, () => fetch(`/api/schedule/${s.id}/ack`, { method: "POST" }));
+  const deleteItem = (s: ScheduleItem) => act(s.id, () => fetch(`/api/schedule/${s.id}`, { method: "DELETE" }));
 
   const addTodo = async () => {
     if (!title.trim()) return;
     setAdding(true);
     try {
-      const res = await fetch("/api/workspace/todos", {
+      // A to-do is just a schedule entry of type "task" - with a time it alerts you like any other entry.
+      const res = await fetch("/api/schedule", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, due_at: due ? new Date(due).toISOString() : null, priority }),
+        body: JSON.stringify({
+          title,
+          kind: "task",
+          starts_at: due ? new Date(due).toISOString() : null,
+          duration_minutes: 0,
+          remind_before_minutes: due && remind !== "none" ? Number(remind) : null,
+          priority,
+        }),
       });
       const d = await res.json();
       if (!res.ok) setError(d.error || "Couldn't add it.");
@@ -282,19 +288,15 @@ export default function WorkspaceDashboard() {
     if (!data) return [];
     const list: AgendaEntry[] = [];
     for (const s of data.schedule) {
-      const at = new Date(s.next_at).getTime();
+      const at = s.next_at ? new Date(s.next_at).getTime() : null;
       list.push({
-        key: `s-${s.id}`,
-        kind: "schedule",
+        key: s.id,
         id: s.id,
         title: s.title,
         at,
-        schedule: s,
-        ringing: !s.acknowledged_at && now >= at - s.remind_before_minutes * 60000,
+        item: s,
+        ringing: at !== null && s.remind_before_minutes !== null && !s.acknowledged_at && now >= at - s.remind_before_minutes * 60000,
       });
-    }
-    for (const t of data.todos) {
-      list.push({ key: `t-${t.id}`, kind: "todo", id: t.id, title: t.title, at: t.due_at ? new Date(t.due_at).getTime() : null, todo: t });
     }
     return list;
   }, [data, now]);
@@ -303,7 +305,7 @@ export default function WorkspaceDashboard() {
     const g: Record<GroupKey, AgendaEntry[]> = { overdue: [], today: [], tomorrow: [], week: [], anytime: [] };
     for (const e of entries) g[groupOf(e, now)].push(e);
     (Object.keys(g) as GroupKey[]).forEach((k) =>
-      g[k].sort((a, b) => (a.at ?? Infinity) - (b.at ?? Infinity) || (a.todo?.priority ?? 2) - (b.todo?.priority ?? 2))
+      g[k].sort((a, b) => (a.at ?? Infinity) - (b.at ?? Infinity) || a.item.priority - b.item.priority)
     );
     return g;
   }, [entries, now]);
@@ -323,9 +325,9 @@ export default function WorkspaceDashboard() {
   }
 
   const todayEntries = grouped.today;
-  const nextUp = entries.filter((e) => e.at !== null && e.at >= now - 60000 && (e.kind === "schedule" || e.at >= now)).sort((a, b) => a.at! - b.at!)[0];
+  const nextUp = entries.filter((e) => e.at !== null && e.at >= now - 60000).sort((a, b) => a.at! - b.at!)[0];
   const overdueCount = grouped.overdue.length;
-  const openTodos = data.todos.length;
+  const openTodos = data.schedule.filter(isTodo).length;
   const alertCount = data.alerts.length;
   const sortedAlerts = [...data.alerts].sort((a, b) => {
     const rank: Record<AlertSeverity, number> = { error: 0, action: 1, warning: 2, info: 3 };
@@ -432,7 +434,7 @@ export default function WorkspaceDashboard() {
               <div className="flex gap-2">
                 <input
                   className="input-field flex-1"
-                  placeholder="Add a to-do… (press Enter)"
+                  placeholder="Add to your day… (press Enter)"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && addTodo()}
@@ -458,6 +460,15 @@ export default function WorkspaceDashboard() {
                   <option value={2}>Normal</option>
                   <option value={3}>Low</option>
                 </select>
+                {due && (
+                  <select className="input-field !w-auto text-xs" value={remind} onChange={(e) => setRemind(e.target.value)}>
+                    <option value="none">No alert</option>
+                    <option value="0">Alert at due time</option>
+                    <option value="15">Alert 15 min before</option>
+                    <option value="30">Alert 30 min before</option>
+                    <option value="60">Alert 1 hour before</option>
+                  </select>
+                )}
               </div>
             </div>
 
@@ -486,8 +497,8 @@ export default function WorkspaceDashboard() {
                             e.ringing ? "border-[var(--color-amber)] bg-[var(--color-amber-soft)]" : "border-[var(--border)]"
                           )}
                         >
-                          {e.kind === "todo" ? (
-                            <button onClick={() => toggleTodo(e.todo!)} disabled={busy === e.id} aria-label="Mark done" className="text-[var(--text-faint)] hover:text-[var(--color-green)] flex-shrink-0">
+                          {isTodo(e.item) ? (
+                            <button onClick={() => markDone(e.item)} disabled={busy === e.id} aria-label="Mark done" className="text-[var(--text-faint)] hover:text-[var(--color-green)] flex-shrink-0">
                               {busy === e.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Circle className="w-5 h-5" />}
                             </button>
                           ) : (
@@ -496,9 +507,9 @@ export default function WorkspaceDashboard() {
                           <div className="w-14 flex-shrink-0 text-xs tabular-nums text-[var(--text-muted)]">{e.at !== null ? hhmm(e.at) : "—"}</div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-[var(--text)] truncate flex items-center gap-2">
-                              {e.todo?.priority === 1 && <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-red)] flex-shrink-0" title="High priority" />}
+                              {e.item.priority === 1 && <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-red)] flex-shrink-0" title="High priority" />}
                               <span className="truncate">{e.title}</span>
-                              {e.kind === "schedule" && e.schedule && <span className="badge badge-purple flex-shrink-0">{KIND_LABEL[e.schedule.kind]}</span>}
+                              {!isTodo(e.item) && <span className="badge badge-purple flex-shrink-0">{KIND_LABEL[e.item.kind]}</span>}
                             </p>
                             {e.at !== null && (
                               <p className={cn("text-[11px] mt-0.5", e.ringing || k === "overdue" ? "text-[var(--color-amber)] font-semibold" : "text-[var(--text-faint)]")}>
@@ -507,13 +518,13 @@ export default function WorkspaceDashboard() {
                               </p>
                             )}
                           </div>
-                          {e.kind === "schedule" ? (
-                            <button onClick={() => ackSchedule(e.schedule!)} disabled={busy === e.id} className="btn-secondary text-xs py-1.5 px-3 inline-flex items-center gap-1.5 disabled:opacity-50">
+                          {!isTodo(e.item) ? (
+                            <button onClick={() => markDone(e.item)} disabled={busy === e.id} className="btn-secondary text-xs py-1.5 px-3 inline-flex items-center gap-1.5 disabled:opacity-50">
                               <Check className="w-3.5 h-3.5" />
                               Done
                             </button>
                           ) : (
-                            <button onClick={() => deleteTodo(e.todo!)} disabled={busy === e.id} aria-label="Delete" className="btn-ghost opacity-0 group-hover:opacity-100 focus:opacity-100 hover:!text-[var(--color-red)]">
+                            <button onClick={() => deleteItem(e.item)} disabled={busy === e.id} aria-label="Delete" className="btn-ghost opacity-0 group-hover:opacity-100 focus:opacity-100 hover:!text-[var(--color-red)]">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           )}

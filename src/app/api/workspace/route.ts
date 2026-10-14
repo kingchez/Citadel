@@ -16,17 +16,18 @@ export async function GET() {
     startOfToday.setHours(0, 0, 0, 0);
     const horizon = new Date(now.getTime() + 8 * 24 * 3600 * 1000);
 
-    const [alertsRes, todosRes, doneRes, scheduleRes, videosRes, eventsRes] = await Promise.all([
+    const [alertsRes, doneRes, scheduleRes, videosRes, eventsRes] = await Promise.all([
       supabase.from("workspace_notifications").select("*").eq("status", "open").order("last_seen_at", { ascending: false }).limit(60),
-      supabase.from("workspace_todos").select("*").eq("status", "open").order("due_at", { ascending: true, nullsFirst: false }).limit(200),
-      supabase.from("workspace_todos").select("id", { count: "exact", head: true }).eq("status", "done").gte("done_at", startOfToday.toISOString()),
+      // done today = anything ticked off / acknowledged today (duties, meetings and to-dos alike)
+      supabase.from("citadel_schedule_items").select("id", { count: "exact", head: true }).eq("status", "done").gte("acknowledged_at", startOfToday.toISOString()),
       supabase
         .from("citadel_schedule_items")
         .select("*")
         .eq("status", "upcoming")
         .eq("active", true)
-        .lte("next_at", horizon.toISOString())
-        .order("next_at", { ascending: true })
+        // next 8 days + anything overdue + anytime to-dos (next_at is null)
+        .or(`next_at.lte.${horizon.toISOString()},next_at.is.null`)
+        .order("next_at", { ascending: true, nullsFirst: false })
         .limit(100),
       supabase
         .from("videos")
@@ -34,7 +35,7 @@ export async function GET() {
       supabase.from("events").select("id, event_title, status, golden_window_hours"),
     ]);
 
-    const firstError = [alertsRes, todosRes, scheduleRes, videosRes, eventsRes].find((r) => r.error)?.error;
+    const firstError = [alertsRes, scheduleRes, videosRes, eventsRes].find((r) => r.error)?.error;
     if (firstError) return NextResponse.json({ error: firstError.message }, { status: 500 });
 
     const videos = (videosRes.data || []) as unknown as VideoRow[];
@@ -48,7 +49,6 @@ export async function GET() {
     const summary: WorkspaceSummary = {
       now: now.toISOString(),
       alerts: (alertsRes.data || []) as WorkspaceSummary["alerts"],
-      todos: (todosRes.data || []) as WorkspaceSummary["todos"],
       doneToday: doneRes.count ?? 0,
       schedule: (scheduleRes.data || []) as WorkspaceSummary["schedule"],
       videos: {

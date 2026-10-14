@@ -4,9 +4,10 @@ export interface ScheduleInput {
   title?: string;
   notes?: string | null;
   kind?: ScheduleKind;
-  starts_at?: string;
+  starts_at?: string | null;
   duration_minutes?: number;
-  remind_before_minutes?: number;
+  remind_before_minutes?: number | null;
+  priority?: 1 | 2 | 3;
   repeat?: ScheduleRepeat;
   repeat_until?: string | null;
   active?: boolean;
@@ -53,7 +54,10 @@ export function parseScheduleBody(body: unknown, partial: boolean): Parsed {
 
   if (!partial || "starts_at" in b) {
     const iso = isoOrNull(b.starts_at);
-    if (!iso) return { ok: false, error: "A valid start date and time is required." };
+    if (iso === undefined) return { ok: false, error: "That start date and time isn't valid." };
+    if (iso === null && !partial && (b.kind ?? "duty") !== "task") {
+      return { ok: false, error: "A start date and time is required (only to-dos can have no time)." };
+    }
     out.starts_at = iso;
   }
 
@@ -64,9 +68,13 @@ export function parseScheduleBody(body: unknown, partial: boolean): Parsed {
   }
 
   if (!partial || "remind_before_minutes" in b) {
-    const n = intInRange(b.remind_before_minutes ?? 30, 0, 10080);
-    if (n === undefined) return { ok: false, error: "Reminder must be between 0 minutes and 7 days before." };
-    out.remind_before_minutes = n;
+    if (b.remind_before_minutes === null || b.remind_before_minutes === "none") {
+      out.remind_before_minutes = null;
+    } else {
+      const n = intInRange(b.remind_before_minutes ?? 30, 0, 10080);
+      if (n === undefined) return { ok: false, error: "Reminder must be between 0 minutes and 7 days before." };
+      out.remind_before_minutes = n;
+    }
   }
 
   if (!partial || "repeat" in b) {
@@ -79,6 +87,12 @@ export function parseScheduleBody(body: unknown, partial: boolean): Parsed {
     const iso = isoOrNull(b.repeat_until);
     if (iso === undefined) return { ok: false, error: "Invalid repeat-until date." };
     out.repeat_until = iso;
+  }
+
+  if ("priority" in b) {
+    const p = intInRange(b.priority, 1, 3);
+    if (p === undefined) return { ok: false, error: "Priority must be 1 (high), 2 (normal) or 3 (low)." };
+    out.priority = p as 1 | 2 | 3;
   }
 
   if ("active" in b) {

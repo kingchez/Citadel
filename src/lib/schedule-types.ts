@@ -8,11 +8,12 @@ export interface ScheduleItem {
   notes: string | null;
   kind: ScheduleKind;
   /** Start of the upcoming occurrence (UTC ISO). Repeating items roll this forward. */
-  next_at: string;
+  next_at: string | null; // null = an anytime to-do
   /** Original start the item was created with. */
-  first_at: string;
+  first_at: string | null;
   duration_minutes: number;
-  remind_before_minutes: number;
+  remind_before_minutes: number | null; // null = no phone alert
+  priority: 1 | 2 | 3;
   repeat: ScheduleRepeat;
   repeat_until: string | null;
   status: ScheduleStatus;
@@ -28,7 +29,7 @@ export const KINDS: ScheduleKind[] = ["duty", "meeting", "task", "other"];
 export const KIND_LABEL: Record<ScheduleKind, string> = {
   duty: "Duty",
   meeting: "Meeting",
-  task: "Task",
+  task: "To-do",
   other: "Other",
 };
 

@@ -169,7 +169,7 @@ export function Sidebar() {
           aria-current={pathname === "/" ? "page" : undefined}
         >
           <LayoutDashboard className="w-4.5 h-4.5 text-[var(--color-purple)] flex-shrink-0" />
-          <span className="flex-1 truncate">Dashboard</span>
+          <span className="flex-1 truncate">Home</span>
         </Link>
 
         <Link

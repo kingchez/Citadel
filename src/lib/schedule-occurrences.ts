@@ -38,6 +38,7 @@ export function occurrencesInRange(items: ScheduleItem[], from: Date, to: Date):
   const out: Occurrence[] = [];
 
   for (const item of items) {
+    if (!item.next_at || !item.first_at) continue; // anytime to-dos have no place on a calendar
     if (item.repeat === "none") {
       const start = new Date(item.next_at);
       if (start >= from && start < to) out.push({ item, start, key: `${item.id}:${start.getTime()}` });
