@@ -358,3 +358,34 @@ input[type="checkbox"].custom-checkbox:focus-visible {
 .tooltip:hover::after { opacity: 1; transform: translateX(-50%) translateY(-8px); }
 
 }
+
+/* ───────── Mobile / touch ───────── */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+@media (max-width: 640px) {
+  /* 16px inputs stop phones from zooming the page when a field is focused */
+  .input-field,
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+@media (pointer: coarse) {
+  /* comfortable thumb targets */
+  .btn-ghost {
+    min-width: 40px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .btn-primary,
+  .btn-secondary {
+    min-height: 40px;
+  }
+}

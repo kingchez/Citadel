@@ -145,7 +145,7 @@ function VideosContent() {
   );
 
   return (
-    <div className="p-6 space-y-5 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 space-y-5 max-w-6xl mx-auto">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text)]">Video Pipeline</h1>
@@ -214,7 +214,7 @@ function VideosContent() {
 
 export default function VideosPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-[var(--text-faint)]">Loading...</div>}>
+    <Suspense fallback={<div className="p-4 sm:p-6 text-[var(--text-faint)]">Loading...</div>}>
       <VideosContent />
     </Suspense>
   );

@@ -310,7 +310,7 @@ export default function RepurposeQueuePage() {
   }, []);
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-[var(--text)]">Repurpose Queue</h1>

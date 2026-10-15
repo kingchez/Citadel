@@ -116,7 +116,7 @@ function SummaryCard({
         <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{label}</p>
         <span style={{ color }}>{icon}</span>
       </div>
-      <p className="text-3xl font-bold tabular-nums" style={{ color }}>
+      <p className="text-2xl sm:text-3xl font-bold tabular-nums" style={{ color }}>
         {value}
       </p>
       {sub && <p className="text-xs text-[var(--text-faint)] mt-1 truncate">{sub}</p>}
@@ -137,7 +137,7 @@ function AlertRow({ alert, onResolve, busy }: { alert: WorkspaceAlert; onResolve
   const link = safeLink(alert.link_url);
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden" style={{ borderLeftWidth: 3, borderLeftColor: color }}>
-      <div className="p-3.5 flex items-start gap-3">
+      <div className="p-3.5 flex flex-wrap sm:flex-nowrap items-start gap-3">
         <div className="mt-0.5 flex-shrink-0">
           <SeverityIcon s={alert.severity} />
         </div>
@@ -157,7 +157,7 @@ function AlertRow({ alert, onResolve, busy }: { alert: WorkspaceAlert; onResolve
             {alert.occurrences > 1 && ` · first seen ${formatTimeAgo(alert.first_seen_at)}`}
           </p>
         </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+        <div className="flex items-center gap-1.5 flex-shrink-0 w-full sm:w-auto justify-end">
           {link &&
             (link.external ? (
               <a href={link.href} target="_blank" rel="noopener noreferrer" className="btn-ghost" aria-label="Open">
@@ -312,7 +312,7 @@ export default function WorkspaceDashboard() {
 
   if (!data) {
     return (
-      <div className="p-6 max-w-7xl mx-auto space-y-4">
+      <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-4">
         <div className="h-9 w-72 rounded-lg bg-[var(--surface)] animate-pulse" />
         <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
           {[...Array(6)].map((_, i) => (
@@ -336,10 +336,10 @@ export default function WorkspaceDashboard() {
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--text)]">{greeting()}, Kingsley 👋</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-[var(--text)]">{greeting()}, Kingsley 👋</h1>
           <p className="mt-1 text-sm text-[var(--text-faint)]">{today}</p>
         </div>
         <Link href="/schedule" className="btn-secondary text-sm inline-flex items-center gap-2 flex-shrink-0">
@@ -350,7 +350,7 @@ export default function WorkspaceDashboard() {
 
       {error && <p className="text-sm text-[var(--color-red)]">{error}</p>}
 
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
         <SummaryCard
           label="Needs attention"
           value={alertCount}

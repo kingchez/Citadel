@@ -161,7 +161,7 @@ export default function AddVideoPage() {
   };
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">
       <div>
         <h1 className="text-xl font-bold text-[var(--text)]">Add Video</h1>
         <p className="text-sm text-[var(--text-faint)] mt-1">

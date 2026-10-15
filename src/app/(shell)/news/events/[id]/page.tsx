@@ -159,12 +159,12 @@ export default function EventDetailPage({ params }: EventDetailProps) {
   };
 
   if (loading) {
-    return <div className="p-6 max-w-4xl mx-auto text-[var(--text-faint)]">Loading...</div>;
+    return <div className="p-4 sm:p-6 max-w-4xl mx-auto text-[var(--text-faint)]">Loading...</div>;
   }
 
   if (notFound || !event) {
     return (
-      <div className="p-6 max-w-4xl mx-auto text-center py-20">
+      <div className="p-4 sm:p-6 max-w-4xl mx-auto text-center py-20">
         <p className="text-[var(--text-muted)]">Event not found.</p>
         <Link href="/news/events" className="text-[var(--color-purple)] hover:opacity-80 text-sm mt-2 inline-block">
           Back to Events
@@ -183,7 +183,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
   const lightboxImages = Array.from(new Set([event.thumbnail, ...thumbCandidates].filter((v): v is string => !!v)));
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <Link href="/news/events" className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
           <ArrowLeft className="w-4 h-4" />

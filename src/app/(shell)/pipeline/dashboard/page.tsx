@@ -53,7 +53,7 @@ export default async function DashboardPage() {
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text)]">{getGreeting()}, Kingsley 👋</h1>

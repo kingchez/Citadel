@@ -126,12 +126,12 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
   };
 
   if (loading) {
-    return <div className="p-6 max-w-5xl mx-auto text-[var(--text-faint)]">Loading...</div>;
+    return <div className="p-4 sm:p-6 max-w-5xl mx-auto text-[var(--text-faint)]">Loading...</div>;
   }
 
   if (notFound || !video) {
     return (
-      <div className="p-6 max-w-5xl mx-auto text-center py-20">
+      <div className="p-4 sm:p-6 max-w-5xl mx-auto text-center py-20">
         <p className="text-[var(--text-muted)]">Video not found.</p>
         <Link href="/pipeline/videos" className="text-[var(--color-purple)] hover:opacity-80 text-sm mt-2 inline-block">
           Back to Pipeline
@@ -310,7 +310,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
   const handlePlay = (index: number) => setPlayingIndex((prev) => (prev === index ? null : index));
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
       <Link href="/pipeline/videos" className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
         <ArrowLeft className="w-4 h-4" />
         Back to Pipeline

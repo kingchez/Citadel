@@ -295,13 +295,13 @@ function ScheduleRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-4 px-4 py-3.5 rounded-xl border bg-[var(--surface)]",
+        "flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-2 px-3 sm:px-4 py-3.5 rounded-xl border bg-[var(--surface)]",
         ringing ? "border-[var(--color-amber)] bg-[var(--color-amber-soft)]" : "border-[var(--border)]",
         !item.active && !history && "opacity-60"
       )}
     >
-      <div className="w-16 flex-shrink-0 text-center">
-        <p className="text-lg font-bold tabular-nums text-[var(--text)]">{item.next_at ? timeLabel(item.next_at) : "Any time"}</p>
+      <div className="w-14 sm:w-16 flex-shrink-0 text-center">
+        <p className="text-base sm:text-lg font-bold tabular-nums text-[var(--text)]">{item.next_at ? timeLabel(item.next_at) : "Any time"}</p>
         {item.duration_minutes > 0 && <p className="text-[10px] text-[var(--text-faint)]">{item.duration_minutes >= 60 ? `${item.duration_minutes / 60}h` : `${item.duration_minutes}m`}</p>}
       </div>
 
@@ -342,7 +342,7 @@ function ScheduleRow({
         {item.notes && <p className="text-xs text-[var(--text-muted)] mt-1 break-words">{item.notes}</p>}
       </div>
 
-      <div className="flex items-center gap-1 flex-shrink-0">
+      <div className="flex items-center gap-1 flex-shrink-0 w-full sm:w-auto justify-end">
         {!history && (
           <>
             <button onClick={onDone} disabled={busy} className="btn-secondary text-xs py-1.5 px-3 inline-flex items-center gap-1.5 disabled:opacity-50">
@@ -454,9 +454,9 @@ function SchedulePage() {
   const ringingCount = history ? 0 : items.filter((i) => i.status === "upcoming" && i.active && !i.acknowledged_at && i.next_at !== null && i.remind_before_minutes !== null && now >= new Date(i.next_at).getTime() - i.remind_before_minutes * 60000).length;
 
   return (
-    <div className={cn("p-6 mx-auto space-y-6", calendar ? "max-w-6xl" : "max-w-3xl")}>
-      <div className="flex items-center justify-between gap-4">
-        <div>
+    <div className={cn("p-4 sm:p-6 mx-auto space-y-6", calendar ? "max-w-6xl" : "max-w-3xl")}>
+      <div className="flex items-start sm:items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-xl font-bold text-[var(--text)]">{history ? "Schedule history" : "Schedule & Duties"}</h1>
           <p className="text-sm text-[var(--text-faint)] mt-1">
             {history ? "Finished and missed entries." : "Your timetable. You get a phone alert before each entry, repeated until you tap Done."}
@@ -567,7 +567,7 @@ function SchedulePage() {
 
 export default function Page() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-[var(--text-faint)]">Loading schedule…</div>}>
+    <Suspense fallback={<div className="p-4 sm:p-6 text-sm text-[var(--text-faint)]">Loading schedule…</div>}>
       <SchedulePage />
     </Suspense>
   );

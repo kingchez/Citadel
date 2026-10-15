@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
+import { useNav } from "@/components/nav-context";
 import type { VideoRow } from "@/lib/types";
 import type { NewsEvent } from "@/lib/news-types";
 import { computeVideoCounts } from "@/lib/video-stats";
@@ -67,6 +68,7 @@ const PROJECTS: ProjectDef[] = [
 ];
 
 export function Sidebar() {
+  const { open: navOpen, closeNav } = useNav();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -135,7 +137,24 @@ export function Sidebar() {
   const isDark = mounted ? resolvedTheme === "dark" : true;
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 bg-[var(--bg)] border-r border-[var(--border)] flex flex-col overflow-y-auto z-40">
+    <>
+    {/* dim backdrop behind the drawer (phones only) */}
+    <div
+      className={cn("fixed inset-0 z-40 bg-black/60 md:hidden transition-opacity duration-200", navOpen ? "opacity-100" : "opacity-0 pointer-events-none")}
+      onClick={closeNav}
+      aria-hidden="true"
+    />
+    <aside
+      onClick={(e) => {
+        // tapping any link closes the drawer (also covers links that only change ?query)
+        if ((e.target as HTMLElement).closest("a")) closeNav();
+      }}
+      className={cn(
+        "fixed left-0 top-0 h-dvh w-64 max-w-[85vw] bg-[var(--bg)] border-r border-[var(--border)] flex flex-col overflow-y-auto z-50 md:z-40",
+        "transition-transform duration-200 ease-out md:translate-x-0",
+        navOpen ? "translate-x-0" : "-translate-x-full"
+      )}
+    >
       {/* Logo Area */}
       <div className="p-5 border-b border-[var(--border)]">
         <Link href="/" className="flex items-center gap-3" aria-label="Citadel Home">
@@ -279,5 +298,6 @@ export function Sidebar() {
         </button>
       </div>
     </aside>
+    </>
   );
 }

@@ -101,7 +101,7 @@ export function ScheduleCalendar({ items, onSelect }: { items: ScheduleItem[]; o
           <button onClick={() => setAnchor(startOfDay(new Date()))} className="btn-secondary text-xs py-1.5 px-3">
             Today
           </button>
-          <h2 className="text-base font-semibold text-[var(--text)] ml-1">{label}</h2>
+          <h2 className="text-sm sm:text-base font-semibold text-[var(--text)] ml-1">{label}</h2>
         </div>
         <div className="flex gap-1.5">
           {(["day", "week", "month"] as Mode[]).map((m) => (
@@ -126,7 +126,7 @@ export function ScheduleCalendar({ items, onSelect }: { items: ScheduleItem[]; o
         <div className="rounded-2xl border border-[var(--border)] overflow-hidden bg-[var(--surface)]">
           <div className="grid grid-cols-7 border-b border-[var(--border)]">
             {WEEKDAYS.map((w) => (
-              <div key={w} className="px-2 py-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-faint)] text-center">
+              <div key={w} className="px-1 sm:px-2 py-2 text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-[var(--text-faint)] text-center">
                 {w}
               </div>
             ))}
@@ -137,7 +137,7 @@ export function ScheduleCalendar({ items, onSelect }: { items: ScheduleItem[]; o
               const inMonth = d.getMonth() === anchor.getMonth();
               const isToday = d.toDateString() === todayKey;
               return (
-                <div key={i} className={cn("min-h-[92px] p-1.5 border-b border-r border-[var(--border)] space-y-1", !inMonth && "bg-[var(--bg)] opacity-60")}>
+                <div key={i} className={cn("min-h-[56px] sm:min-h-[92px] p-1 sm:p-1.5 border-b border-r border-[var(--border)] space-y-1", !inMonth && "bg-[var(--bg)] opacity-60")}>
                   <button
                     onClick={() => openDay(d)}
                     className={cn(
@@ -148,14 +148,25 @@ export function ScheduleCalendar({ items, onSelect }: { items: ScheduleItem[]; o
                   >
                     {d.getDate()}
                   </button>
-                  {occs.slice(0, 3).map((o) => (
-                    <Chip key={o.key} occ={o} onSelect={onSelect} compact />
-                  ))}
-                  {occs.length > 3 && (
-                    <button onClick={() => openDay(d)} className="text-[10px] text-[var(--text-faint)] hover:text-[var(--text)] px-1">
-                      +{occs.length - 3} more
+                  {/* phones: dots only (tap the date to open the day). Larger screens: full chips */}
+                  {occs.length > 0 && (
+                    <button onClick={() => openDay(d)} className="sm:hidden flex flex-wrap gap-0.5 px-0.5" aria-label={`${occs.length} entries`}>
+                      {occs.slice(0, 4).map((o) => (
+                        <span key={o.key} className="w-1.5 h-1.5 rounded-full bg-[var(--color-purple)]" />
+                      ))}
+                      {occs.length > 4 && <span className="text-[9px] leading-none text-[var(--text-faint)]">+{occs.length - 4}</span>}
                     </button>
                   )}
+                  <div className="hidden sm:block space-y-1">
+                    {occs.slice(0, 3).map((o) => (
+                      <Chip key={o.key} occ={o} onSelect={onSelect} compact />
+                    ))}
+                    {occs.length > 3 && (
+                      <button onClick={() => openDay(d)} className="text-[10px] text-[var(--text-faint)] hover:text-[var(--text)] px-1">
+                        +{occs.length - 3} more
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -191,7 +202,7 @@ export function ScheduleCalendar({ items, onSelect }: { items: ScheduleItem[]; o
                 key={o.key}
                 onClick={() => onSelect(o.item)}
                 className={cn(
-                  "w-full text-left flex items-center gap-4 px-4 py-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-strong)] transition-colors",
+                  "w-full text-left flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-strong)] transition-colors",
                   (o.item.status !== "upcoming" || !o.item.active) && "opacity-60"
                 )}
               >

@@ -137,7 +137,7 @@ function EventsContent() {
   );
 
   return (
-    <div className="p-6 space-y-5 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 space-y-5 max-w-6xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold text-[var(--text)] flex items-center gap-3">
           <Newspaper className="w-7 h-7 text-[var(--color-cyan)]" />
@@ -201,7 +201,7 @@ function EventsContent() {
 
 export default function NewsEventsPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-[var(--text-faint)]">Loading...</div>}>
+    <Suspense fallback={<div className="p-4 sm:p-6 text-[var(--text-faint)]">Loading...</div>}>
       <EventsContent />
     </Suspense>
   );

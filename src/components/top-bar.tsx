@@ -2,7 +2,9 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { ChevronRight, Moon, Sun } from "lucide-react";
+import { useNav } from "@/components/nav-context";
+import { cn } from "@/lib/utils";
+import { ChevronRight, Moon, Sun, Menu } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { NotificationBell } from "./notification-bell";
@@ -52,6 +54,7 @@ function getBreadcrumbs(pathname: string) {
 }
 
 export function TopBar() {
+  const { openNav } = useNav();
   const pathname = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -61,14 +64,17 @@ export function TopBar() {
   const breadcrumbs = getBreadcrumbs(pathname);
 
   return (
-    <header className="fixed left-64 right-0 top-0 h-14 bg-[var(--bg)]/80 backdrop-blur-md border-b border-[var(--border)] z-30 flex items-center justify-between px-6">
-      <nav className="flex items-center gap-2" aria-label="Breadcrumb">
-        <ol className="flex items-center gap-2">
+    <header className="fixed left-0 md:left-64 right-0 top-0 h-14 bg-[var(--bg)]/80 backdrop-blur-md border-b border-[var(--border)] z-30 flex items-center justify-between gap-2 px-3 sm:px-6">
+      <button onClick={openNav} className="btn-ghost p-2 md:hidden flex-shrink-0" aria-label="Open menu">
+        <Menu className="w-5 h-5" />
+      </button>
+      <nav className="flex items-center gap-2 min-w-0 flex-1" aria-label="Breadcrumb">
+        <ol className="flex items-center gap-2 min-w-0">
           {breadcrumbs.map((crumb, index) => (
-            <li key={crumb.href} className="flex items-center gap-2">
-              {index > 0 && <ChevronRight className="w-4 h-4 text-[var(--text-faint)] flex-shrink-0" aria-hidden="true" />}
+            <li key={crumb.href} className={cn("items-center gap-2 min-w-0", index === breadcrumbs.length - 1 ? "flex" : "hidden sm:flex")}>
+              {index > 0 && <ChevronRight className="w-4 h-4 text-[var(--text-faint)] flex-shrink-0 hidden sm:block" aria-hidden="true" />}
               {index === breadcrumbs.length - 1 ? (
-                <span className="text-sm font-medium text-[var(--text)] truncate max-w-[220px]">{crumb.label}</span>
+                <span className="text-sm font-medium text-[var(--text)] truncate max-w-[60vw] sm:max-w-[220px]">{crumb.label}</span>
               ) : (
                 <Link
                   href={crumb.href}
@@ -82,7 +88,7 @@ export function TopBar() {
         </ol>
       </nav>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1 sm:gap-3 flex-shrink-0">
         <NotificationBell />
         <div className="w-px h-6 bg-[var(--border)]" aria-hidden="true" />
         <button
