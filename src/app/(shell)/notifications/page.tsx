@@ -143,7 +143,7 @@ export default function NotificationsPage() {
         )}
       </div>
 
-      <div className="flex items-center gap-1 p-1.5 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-fit">
+      <div className="flex items-center gap-1 p-1.5 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-fit max-w-full scroll-x">
         {(["all", "unread"] as const).map((f) => (
           <button key={f} onClick={() => setFilter(f)} className={`tab capitalize ${filter === f ? "tab-active" : ""}`}>
             {f === "unread" ? `Unread (${unreadCount})` : "All"}

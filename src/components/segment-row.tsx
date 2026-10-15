@@ -34,7 +34,7 @@ export function SegmentRow({ segment, selected, onSelect, onRetry, onPlay, isPla
           : "bg-[var(--surface)] border-[var(--border)] hover:border-[var(--border-strong)]"
       )}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex flex-wrap sm:flex-nowrap items-start gap-x-3 gap-y-2">
         <div className="flex-shrink-0 pt-0.5">
           <input
             type="checkbox"
@@ -51,7 +51,7 @@ export function SegmentRow({ segment, selected, onSelect, onRetry, onPlay, isPla
           </span>
         </div>
 
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-[calc(100%-5rem)] sm:min-w-0">
           <p className={cn("text-sm text-[var(--text)] leading-relaxed", !expanded && "line-clamp-2")}>{text}</p>
 
           {text.length > 120 && (
@@ -102,7 +102,7 @@ export function SegmentRow({ segment, selected, onSelect, onRetry, onPlay, isPla
           )}
         </div>
 
-        <div className="flex-shrink-0 flex items-center gap-2 pt-0.5">
+        <div className="flex-shrink-0 flex items-center gap-2 pt-0.5 max-sm:ml-[4.75rem]">
           {retryQueued ? (
             <span title="Retry queued">
               <RotateCw className="w-5 h-5 text-[var(--color-amber)]" />
@@ -190,7 +190,7 @@ export function AudioPlayerBar({ segmentIndex, segmentText, fileId, src, onClose
   };
 
   return (
-    <div className="flex items-center gap-4 p-4 bg-[var(--bg)] border border-[var(--border)] rounded-xl mt-3">
+    <div className="flex flex-wrap sm:flex-nowrap items-center gap-x-3 sm:gap-x-4 gap-y-2 p-3 sm:p-4 bg-[var(--bg)] border border-[var(--border)] rounded-xl mt-3">
       <audio
         ref={audioRef}
         src={src || `/api/drive/${fileId}`}
@@ -212,12 +212,12 @@ export function AudioPlayerBar({ segmentIndex, segmentText, fileId, src, onClose
         {playing ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white ml-0.5" />}
       </button>
 
-      <div className="flex-shrink-0">
+      <div className="min-w-0 flex-1 sm:flex-none">
         <p className="text-xs font-semibold text-[var(--text)]">Segment {String(segmentIndex + 1).padStart(2, "0")}</p>
-        <p className="text-[10px] text-[var(--text-faint)] truncate max-w-[160px]">{segmentText}</p>
+        <p className="text-[10px] text-[var(--text-faint)] truncate max-w-[45vw] sm:max-w-[160px]">{segmentText}</p>
       </div>
 
-      <div className="flex items-center gap-[2px] flex-1 h-8">
+      <div className="hidden sm:flex items-center gap-[2px] flex-1 h-8">
         {waveformBars.map((i) => (
           <div
             key={i}

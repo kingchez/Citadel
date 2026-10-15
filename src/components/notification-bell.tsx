@@ -128,7 +128,7 @@ export function NotificationBell() {
       {open && (
         <div
           ref={dropdownRef}
-          className="notif-dropdown absolute right-0 top-full mt-2 w-96 bg-[var(--surface)] border border-[var(--border)] rounded-2xl shadow-2xl overflow-hidden z-50"
+          className="notif-dropdown fixed left-3 right-3 top-16 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96 bg-[var(--surface)] border border-[var(--border)] rounded-2xl shadow-2xl overflow-hidden z-50"
           role="menu"
         >
           <div className="flex items-center justify-between p-4 border-b border-[var(--border)]">

@@ -58,7 +58,7 @@ export function VideoOutputModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm animate-fade-in" onClick={onClose}>
       <div
-        className="card w-full max-w-[1600px] h-[92vh] flex flex-col overflow-hidden"
+        className="card w-full max-w-[1600px] h-[92dvh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 px-5 py-3 border-b border-[var(--border)]">

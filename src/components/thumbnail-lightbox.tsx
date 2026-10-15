@@ -31,7 +31,7 @@ export function ThumbnailLightbox({ images, startIndex, selectedUrl, onClose, on
   const isSelected = current === selectedUrl;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/85 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-sm" onClick={onClose}>
       <button onClick={onClose} className="absolute top-6 right-6 btn-ghost p-2 text-white hover:bg-white/10" aria-label="Close">
         <X className="w-6 h-6" />
       </button>

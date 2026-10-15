@@ -212,7 +212,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
         )}
       </div>
 
-      <div className="card p-6 space-y-4">
+      <div className="card p-4 sm:p-6 space-y-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-2">
@@ -254,12 +254,12 @@ export default function EventDetailPage({ params }: EventDetailProps) {
       </div>
 
       {feedback && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-xl bg-[var(--color-purple-soft)] border border-[var(--color-purple)]/60 shadow-2xl animate-slide-down max-w-sm">
+        <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:bottom-6 sm:right-6 z-50 flex items-center gap-3 px-4 sm:px-5 py-3 sm:py-3.5 rounded-xl bg-[var(--color-purple-soft)] border border-[var(--color-purple)]/60 shadow-2xl animate-slide-down max-w-sm">
           <span className="text-sm font-medium text-[var(--text)]">{feedback}</span>
         </div>
       )}
 
-      <div className="card p-5 space-y-3">
+      <div className="card p-4 sm:p-5 space-y-3">
         <div className="flex items-center justify-between">
           <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Social Headline</label>
           {savingField && <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--text-faint)]" />}
@@ -272,7 +272,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
         />
       </div>
 
-      <div className="card p-5 space-y-3">
+      <div className="card p-4 sm:p-5 space-y-3">
         <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Snapshot Summary</label>
         <textarea
           defaultValue={event.snapshot_summary || ""}
@@ -283,7 +283,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
         />
       </div>
 
-      <div className="card p-5 space-y-4">
+      <div className="card p-4 sm:p-5 space-y-4">
         <h3 className="text-sm font-semibold text-[var(--text)]">Article</h3>
         <div className="space-y-2">
           <label className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)]">Title</label>
@@ -320,7 +320,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
         </div>
       </div>
 
-      <div className="card p-5 space-y-4">
+      <div className="card p-4 sm:p-5 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <ImageIcon className="w-5 h-5 text-[var(--color-purple)]" />
@@ -393,7 +393,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-3">
+      <div className="flex flex-wrap items-center justify-end gap-3 [&>*]:flex-1 sm:[&>*]:flex-none [&>*]:justify-center">
         {event.status === "paused" ? (
           <span className="inline-flex items-center gap-2 py-2.5 px-5 rounded-xl bg-[var(--surface-raised)] border border-[var(--border)] text-sm font-semibold text-[var(--text-faint)]">
             <PauseCircle className="w-4 h-4" />
@@ -441,7 +441,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
       )}
 
       {showConvert && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm" onClick={() => setShowConvert(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm" onClick={() => setShowConvert(false)}>
           <div className="card w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-semibold text-[var(--text)] text-lg">Turn Into Video</h3>
             <p className="text-sm text-[var(--text-muted)]">
@@ -491,7 +491,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
 
       {(event.seo || event.editorial_metadata) && (
         <details className="card group">
-          <summary className="flex items-center justify-between px-5 py-4 cursor-pointer list-none select-none hover:bg-[var(--surface-raised)] transition-colors rounded-xl">
+          <summary className="flex items-center justify-between px-4 sm:px-5 py-4 cursor-pointer list-none select-none hover:bg-[var(--surface-raised)] transition-colors rounded-xl">
             <span className="font-semibold text-[var(--text)]">Raw Metadata</span>
             <ExternalLink className="w-4 h-4 text-[var(--text-faint)]" />
           </summary>

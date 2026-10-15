@@ -151,7 +151,7 @@ export default async function DashboardPage() {
                 <Link
                   key={video.id}
                   href={`/pipeline/videos/${video.id}`}
-                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-[var(--surface-raised)] transition-colors group"
+                  className="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-1.5 p-3 rounded-xl hover:bg-[var(--surface-raised)] transition-colors group"
                 >
                   <div className="flex-shrink-0">
                     {isError ? (
@@ -169,7 +169,7 @@ export default async function DashboardPage() {
                     )}
                   </div>
 
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-[calc(100%-3.25rem)] sm:min-w-0">
                     <p className="text-sm font-medium text-[var(--text)] truncate group-hover:opacity-90 transition-colors">
                       {video.title}
                     </p>
@@ -178,7 +178,7 @@ export default async function DashboardPage() {
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-2 flex-shrink-0 max-sm:ml-11">
                     <StatusBadge status={video.status} size="sm" showIcon={false} />
                     <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] transition-colors" />
                   </div>

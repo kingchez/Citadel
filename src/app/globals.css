@@ -320,6 +320,8 @@ input[type="checkbox"].custom-checkbox:focus-visible {
   border: none;
   cursor: pointer;
   transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .tab:hover { color: var(--text); background: var(--surface-raised); }
 .tab-active { color: white; background: var(--color-purple); }
@@ -389,3 +391,7 @@ html {
     min-height: 40px;
   }
 }
+
+/* horizontally scrollable strip (tab bars) with the scrollbar hidden */
+.scroll-x { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.scroll-x::-webkit-scrollbar { display: none; }

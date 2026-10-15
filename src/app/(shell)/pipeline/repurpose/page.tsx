@@ -10,7 +10,7 @@ import { sourceStage, introStage, type RepurposeSource, type SourceState } from 
 import { REPURPOSE_ERROR_STATUSES, type RepurposeRow, type RepurposeStatus } from "@/lib/repurpose-types";
 
 const CARD_CLASS = "rounded-xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden";
-const TOP_CLASS = "group flex items-center gap-4 px-5 py-4 transition-all duration-150";
+const TOP_CLASS = "group flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-2 px-4 sm:px-5 py-3.5 sm:py-4 transition-all duration-150";
 // A video can be added only while nothing is actively running on the item.
 const CAN_ADD: RepurposeStatus[] = ["pending_download", "download_error", "pending_split", "split_error", "split_done", "voice_timing_error", "voice_timing_done"];
 const KIND_LABEL = { youtube: "YouTube", tiktok: "TikTok", direct: "Direct link" } as const;
@@ -108,8 +108,8 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
 
   const top = (
     <>
-      <div className="flex-1 min-w-0">
-        <h3 className="text-sm font-semibold text-[var(--text)] truncate">{item.title}</h3>
+      <div className="flex-1 min-w-full sm:min-w-0">
+        <h3 className="text-sm font-semibold text-[var(--text)] line-clamp-2 sm:truncate">{item.title}</h3>
         <p className="text-xs text-[var(--text-faint)] mt-0.5 flex items-center gap-1.5 flex-wrap">
           <span>{item.channel}</span>
           <span>·</span>
@@ -161,7 +161,7 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
         )}
         <RepurposeStatusBadge status={item.status} />
       </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="flex items-center gap-2 flex-shrink-0 max-sm:ml-auto">
         <span className="text-xs text-[var(--text-faint)]">{formatTimeAgo(item.updated_at)}</span>
         <ChevronRight className={cn("w-4 h-4 text-[var(--border-strong)] transition-colors", item.video_id && "group-hover:text-[var(--color-purple)]")} />
       </div>

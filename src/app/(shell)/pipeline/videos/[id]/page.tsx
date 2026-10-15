@@ -316,10 +316,10 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
         Back to Pipeline
       </Link>
 
-      <div className="card p-6 space-y-4">
+      <div className="card p-4 sm:p-6 space-y-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-bold text-[var(--text)] leading-tight">{video.title}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-[var(--text)] leading-tight break-words">{video.title}</h1>
             <div className="flex items-center gap-3 mt-2 flex-wrap">
               <span className="text-sm text-[var(--text-muted)]">{video.channel}</span>
               <span className="text-[var(--border-strong)]">·</span>
@@ -349,7 +349,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 flex-shrink-0">
+          <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap sm:flex-shrink-0">
             <StatusBadge status={video.status} size="md" />
             {video.output_drive_link && (
               <button
@@ -412,7 +412,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
       </div>
 
       {revisionHistory.length > 0 && (
-        <div className="card p-5 space-y-3">
+        <div className="card p-4 sm:p-5 space-y-3">
           <div className="flex items-center gap-2">
             <MessageSquareWarning className="w-5 h-5 text-[var(--color-amber)]" />
             <h2 className="font-semibold text-[var(--text)]">Revision History</h2>
@@ -426,7 +426,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
               .map((entry) => (
                 <div
                   key={entry.id}
-                  className={`flex items-start gap-3 p-3 rounded-xl border ${
+                  className={`flex flex-wrap sm:flex-nowrap items-start gap-3 p-3 rounded-xl border ${
                     entry.status === "pending"
                       ? "bg-[var(--color-amber-soft)]/40 border-[var(--color-amber)]/30"
                       : "bg-[var(--surface-raised)] border-[var(--border)]"
@@ -447,7 +447,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
                   {entry.status === "pending" && (
                     <button
                       onClick={() => handleResolveRevision(entry.id)}
-                      className="btn-secondary text-xs py-1.5 px-3 flex-shrink-0"
+                      className="btn-secondary text-xs py-1.5 px-3 flex-shrink-0 max-sm:ml-8"
                       title="Manual override until the fixing agent exists"
                     >
                       Mark resolved
@@ -460,13 +460,13 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
       )}
 
       {feedback && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-xl bg-[var(--color-purple-soft)] border border-[var(--color-purple)]/60 shadow-2xl animate-slide-down">
+        <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:bottom-6 sm:right-6 z-50 flex items-center gap-3 px-4 sm:px-5 py-3 sm:py-3.5 rounded-xl bg-[var(--color-purple-soft)] border border-[var(--color-purple)]/60 shadow-2xl animate-slide-down">
           <RefreshCw className="w-4 h-4 text-[var(--color-purple)]" />
           <span className="text-sm font-medium text-[var(--text)]">{feedback}</span>
         </div>
       )}
 
-      <div className="flex items-center gap-1 p-1.5 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-fit flex-wrap">
+      <div className="flex items-center gap-1 p-1.5 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-fit max-w-full scroll-x">
         <button onClick={() => setActiveTab("segments")} className={`tab flex items-center gap-2 ${activeTab === "segments" ? "tab-active" : ""}`}>
           <Layers className="w-4 h-4" />
           Voiceover Segments
@@ -498,7 +498,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
 
       {activeTab === "segments" && segments.length > 0 && (
         <div className="card overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)] bg-[var(--surface-raised)]/50 flex-wrap gap-2">
+          <div className="flex items-center justify-between px-3 sm:px-5 py-3 sm:py-4 border-b border-[var(--border)] bg-[var(--surface-raised)]/50 flex-wrap gap-2">
             <div className="flex items-center gap-3">
               <button
                 onClick={handleSelectAll}
@@ -544,7 +544,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
             )}
           </div>
 
-          <div className="p-4 space-y-2">
+          <div className="p-2 sm:p-4 space-y-2">
             {segments.map((seg) => (
               <SegmentRow
                 key={seg.index}
@@ -627,7 +627,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
 
       {segments.length > 0 && (
         <details className="card group">
-          <summary className="flex items-center justify-between px-5 py-4 cursor-pointer list-none select-none hover:bg-[var(--surface-raised)] transition-colors rounded-xl">
+          <summary className="flex items-center justify-between px-4 sm:px-5 py-4 cursor-pointer list-none select-none hover:bg-[var(--surface-raised)] transition-colors rounded-xl">
             <span className="font-semibold text-[var(--text)]">Full Script</span>
             <span className="text-sm text-[var(--text-faint)] group-open:hidden">Click to expand</span>
             <span className="text-sm text-[var(--text-faint)] hidden group-open:inline">Click to collapse</span>

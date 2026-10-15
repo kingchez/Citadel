@@ -43,13 +43,13 @@ function VideoRowItem({ video }: { video: VideoRow }) {
   return (
     <Link
       href={`/pipeline/videos/${video.id}`}
-      className="group flex items-center gap-4 px-5 py-4 rounded-xl bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-raised)] transition-all duration-150"
+      className="group flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-2 px-4 sm:px-5 py-3.5 sm:py-4 rounded-xl bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-raised)] transition-all duration-150"
     >
       <StatusDot status={video.status} size="md" />
 
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-[calc(100%-2.25rem)] sm:min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <h3 className="text-sm font-semibold text-[var(--text)] truncate">{video.title}</h3>
+          <h3 className="text-sm font-semibold text-[var(--text)] line-clamp-2 sm:truncate">{video.title}</h3>
           {hasError && errorCount > 0 && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[var(--color-red-soft)] text-[var(--color-red)] border border-[var(--color-red)]/30 flex-shrink-0">
               <AlertTriangle className="w-3 h-3" />
@@ -68,14 +68,14 @@ function VideoRowItem({ video }: { video: VideoRow }) {
               </span>
             </>
           )}
-          <span>·</span>
-          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--surface-raised)] border border-[var(--border)]">
+          <span className="hidden sm:inline">·</span>
+          <span className="hidden sm:inline font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--surface-raised)] border border-[var(--border)]">
             {video.id}
           </span>
         </p>
       </div>
 
-      <div className="flex-shrink-0">
+      <div className="flex-shrink-0 max-sm:ml-7">
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[var(--surface-raised)] border border-[var(--border)] text-xs font-medium text-[var(--text-muted)]">
           <Film className="w-3.5 h-3.5" />
           {video.video_type === "vertical-shorts" ? "Vertical" : "Horizontal"}
@@ -86,7 +86,7 @@ function VideoRowItem({ video }: { video: VideoRow }) {
         <StatusBadge status={video.status} size="sm" showIcon={false} />
       </div>
 
-      <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="flex items-center gap-2 flex-shrink-0 max-sm:ml-auto">
         <span className="text-xs text-[var(--text-faint)]">{formatTimeAgo(video.updated_at)}</span>
         <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] transition-colors" />
       </div>
@@ -148,12 +148,12 @@ function VideosContent() {
     <div className="p-4 sm:p-6 space-y-5 max-w-6xl mx-auto">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--text)]">Video Pipeline</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-[var(--text)]">Video Pipeline</h1>
           <p className="mt-1 text-sm text-[var(--text-faint)]">{videos.length} total items across all stages</p>
         </div>
       </div>
 
-      <div className="flex items-center gap-1 p-1.5 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-fit overflow-x-auto">
+      <div className="flex items-center gap-1 p-1.5 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-fit max-w-full scroll-x">
         {TABS.map((tab) => {
           const count = tabCounts[tab.key as keyof typeof tabCounts];
           return (
