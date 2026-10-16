@@ -119,7 +119,7 @@ export function PushToggle() {
     return (
       <div className="rounded-xl border border-[var(--color-purple)] bg-[var(--color-purple-soft)] px-4 py-3 flex flex-wrap items-center gap-3">
         <BellRing className="w-5 h-5 text-[var(--color-purple)] flex-shrink-0" />
-        <p className="text-sm text-[var(--text)] flex-1 min-w-[12rem]">Get schedule and alert notifications on this phone, like any other app.</p>
+        <p className="text-sm text-[var(--text)] flex-1 min-w-[12rem]">Get your schedule alerts on this phone, plus an hourly reminder when notifications are still unresolved.</p>
         <button onClick={enable} disabled={busy} className="btn-primary text-sm inline-flex items-center gap-2 disabled:opacity-50">
           {busy && <Loader2 className="w-4 h-4 animate-spin" />}
           Enable notifications
