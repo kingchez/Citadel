@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { Choice, Field, PriorityField } from "@/components/add-video-ui";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { formatSeconds, parseTimeToSeconds } from "@/lib/repurpose-utils";
-import { SUPPORTED_CHANNELS, type SubtitleChoice } from "@/lib/repurpose-types";
+import { REPURPOSE_STATUS_LABELS, SUPPORTED_CHANNELS, type RepurposeStatus, type SubtitleChoice } from "@/lib/repurpose-types";
 import {
   CHANNEL_STATUS_LABELS,
   type ChannelPlatform,
@@ -16,6 +16,14 @@ import {
 
 type IntroMode = "keep_original" | "replace";
 type ViewMode = "vertical-shorts" | "horizontal-long";
+type AddKind = "single" | "merge";
+interface MergeTarget {
+  id: string;
+  title: string;
+  status: RepurposeStatus;
+  video_type: ViewMode | null;
+  source_count: number;
+}
 type Flash = { tone: "ok" | "warn" | "error"; message: string; lines?: string[] } | null;
 
 const STATUS_TONE: Record<SourceChannel["status"], string> = {
@@ -216,6 +224,8 @@ function ReviewCard({
   onRemoved,
   onSkip,
   canSkip,
+  lastTargetId,
+  onMergedInto,
 }: {
   video: ScrapedVideo;
   poolTotal: number;
@@ -223,6 +233,8 @@ function ReviewCard({
   onRemoved: (video: ScrapedVideo) => void;
   onSkip: () => void;
   canSkip: boolean;
+  lastTargetId: string;
+  onMergedInto: (targetId: string) => void;
 }) {
   const [viewMode, setViewMode] = useState<ViewMode>(video.is_shorts ? "vertical-shorts" : "horizontal-long");
   const [title, setTitle] = useState(video.title || "");
@@ -235,16 +247,70 @@ function ReviewCard({
   const [subtitles, setSubtitles] = useState<SubtitleChoice>("later");
   const [instructions, setInstructions] = useState<string[]>([""]);
 
+  const [kind, setKind] = useState<AddKind>("single");
+  const [targets, setTargets] = useState<MergeTarget[]>([]);
+  const [targetsLoading, setTargetsLoading] = useState(false);
+  const [targetId, setTargetId] = useState(lastTargetId);
+  const [pastedId, setPastedId] = useState("");
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [removeBusy, setRemoveBusy] = useState(false);
 
   const startSeconds = useMemo(() => parseTimeToSeconds(introStart), [introStart]);
-  const canSubmit = !!title.trim() && !!url.trim() && (introMode === "keep_original" || (!!introUrl.trim() && startSeconds !== null));
+  const isMerge = kind === "merge";
+  const mergeTarget = isMerge ? pastedId.trim() || targetId : "";
+  const canSubmit = isMerge
+    ? !!url.trim() && !!mergeTarget
+    : !!title.trim() && !!url.trim() && (introMode === "keep_original" || (!!introUrl.trim() && startSeconds !== null));
+  const pickedTarget = targets.find((t) => t.id === targetId);
   const isShort = viewMode === "vertical-shorts";
 
+  const openMerge = async () => {
+    setKind("merge");
+    setTargetsLoading(true);
+    try {
+      const res = await fetch("/api/repurpose-videos/merge-targets", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Couldn't load items.");
+      const list: MergeTarget[] = data.targets || [];
+      setTargets(list);
+      setTargetId((prev) => (list.some((t) => t.id === prev) ? prev : ""));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't load items.");
+    } finally {
+      setTargetsLoading(false);
+    }
+  };
+
+  const submitMerge = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/repurpose-videos/${video.id}/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: mergeTarget, url: url.trim(), priority }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Something went wrong.");
+        return;
+      }
+      const warnings = (data.warnings as string[] | undefined) || [];
+      if (!pastedId.trim()) onMergedInto(targetId);
+      const into = `“${data.item?.title || "the item"}” (${data.item?.total_sources ?? "?"} videos)`;
+      onQueued(video, warnings.length > 0 ? { tone: "warn", message: `Merged into ${into} - ${warnings.join(" ")}` } : { tone: "ok", message: `Merged into ${into}.` });
+    } catch {
+      setError("Network error - nothing was saved.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const submit = async () => {
+    if (isMerge) return submitMerge();
     setSubmitting(true);
     setError(null);
     try {
@@ -356,13 +422,28 @@ function ReviewCard({
 
       {/* Form */}
       <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-4 sm:p-6 space-y-6 min-w-0">
-        <Field label="Channel">
-          <p className="text-sm text-[var(--text)]">{SUPPORTED_CHANNELS[0]}</p>
+        <Field label="Add as">
+          <div className="flex gap-2">
+            <Choice value="single" current={kind} onSelect={() => setKind("single")}>
+              Single video
+            </Choice>
+            <Choice value="merge" current={kind} onSelect={openMerge}>
+              Merge into another
+            </Choice>
+          </div>
         </Field>
 
-        <Field label="Title">
-          <input className="input-field text-sm" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Working title for this video" maxLength={200} />
-        </Field>
+        {!isMerge && (
+          <>
+            <Field label="Channel">
+              <p className="text-sm text-[var(--text)]">{SUPPORTED_CHANNELS[0]}</p>
+            </Field>
+
+            <Field label="Title">
+              <input className="input-field text-sm" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Working title for this video" maxLength={200} />
+            </Field>
+          </>
+        )}
 
         <Field label="Original video link">
           <input className="input-field text-sm font-mono" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.youtube.com/watch?v=…" />
@@ -379,6 +460,31 @@ function ReviewCard({
           </div>
         </Field>
 
+        {isMerge && (
+          <div className="space-y-4 pl-4 border-l border-[var(--border)]">
+            <Field label="Merge into" hint="Items that can still take another video. Merging sends the item back to download, and only this new video is processed.">
+              <select className="input-field text-sm" value={targetId} onChange={(e) => setTargetId(e.target.value)} disabled={targetsLoading}>
+                <option value="">{targetsLoading ? "Loading…" : targets.length === 0 ? "No items available" : "Choose an item…"}</option>
+                {targets.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.title} · {REPURPOSE_STATUS_LABELS[t.status] ?? t.status} · {t.source_count} video{t.source_count === 1 ? "" : "s"}
+                  </option>
+                ))}
+              </select>
+              {pickedTarget?.video_type && pickedTarget.video_type !== viewMode && !pastedId.trim() && (
+                <p className="text-xs text-[var(--color-amber)]">
+                  That item is a {pickedTarget.video_type === "vertical-shorts" ? "Short" : "Long"} video and this one is set to {isShort ? "Short" : "Long"}.
+                </p>
+              )}
+            </Field>
+            <Field label="Or paste an ID" hint="The repurpose item's ID or its video's ID. Overrides the list above.">
+              <input className="input-field text-sm font-mono" value={pastedId} onChange={(e) => setPastedId(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+            </Field>
+          </div>
+        )}
+
+        {!isMerge && (
+          <>
         <Field label="Intro">
           <div className="flex gap-2 flex-wrap">
             <Choice value="keep_original" current={introMode} onSelect={setIntroMode}>
@@ -405,8 +511,13 @@ function ReviewCard({
           </div>
         )}
 
+          </>
+        )}
+
         <PriorityField priority={priority} onChange={setPriority} />
 
+        {!isMerge && (
+          <>
         <Field label="Affiliate products" hint="Optional. Paste Amazon URLs or ASINs, one per line or comma separated.">
           <textarea className="input-field text-sm resize-none font-mono" rows={4} value={productsRaw} onChange={(e) => setProductsRaw(e.target.value)} placeholder="https://www.amazon.com/dp/B0XXXXXXXX" />
         </Field>
@@ -450,6 +561,9 @@ function ReviewCard({
           </div>
         </Field>
 
+          </>
+        )}
+
         {error && <div className="rounded-xl bg-[var(--color-red-soft)] border border-[var(--color-red)]/30 px-4 py-3 text-sm text-[var(--color-red)]">{error}</div>}
 
         <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -463,7 +577,7 @@ function ReviewCard({
           </div>
           <button type="button" className="btn-primary flex items-center justify-center gap-2" disabled={!canSubmit || submitting} onClick={submit}>
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            Add to repurpose queue
+            {isMerge ? "Merge into item" : "Add to repurpose queue"}
           </button>
         </div>
       </div>
@@ -493,6 +607,7 @@ export function AddByChannel() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showChannels, setShowChannels] = useState(false);
   const [flash, setFlash] = useState<Flash>(null);
+  const [lastTargetId, setLastTargetId] = useState("");
 
   const apply = useCallback((r: { videos?: ScrapedVideo[]; total?: number; error?: string }) => {
     setLoadError(r.error ?? null);
@@ -572,6 +687,8 @@ export function AddByChannel() {
           video={current}
           poolTotal={total}
           canSkip={videos.length > 1 || total > videos.length}
+          lastTargetId={lastTargetId}
+          onMergedInto={setLastTargetId}
           onSkip={() => {
             if (videos.length > 1) setVideos((prev) => [...prev.slice(1), prev[0]]);
             else load();
