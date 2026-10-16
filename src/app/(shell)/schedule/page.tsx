@@ -219,7 +219,7 @@ function ItemModal({ item, onClose, onSaved }: { item: ScheduleItem | null; onCl
         </div>
 
         {(form.kind !== "task" || form.starts) && (
-          <Field label="Phone alert" hint="You'll be pinged from this point and re-pinged every 5 minutes until you tap Done.">
+          <Field label="Phone alert" hint="You get one phone alert at this point.">
             <select className="input-field" value={form.remind ?? "none"} onChange={(e) => set("remind", e.target.value === "none" ? null : Number(e.target.value))}>
               <option value="none">No alert</option>
               {REMIND_OPTIONS.map((o) => (
@@ -332,12 +332,6 @@ function ScheduleRow({
             <BellRing className="w-3 h-3" />
             {item.remind_before_minutes === null ? "No alert" : (REMIND_OPTIONS.find((o) => o.value === item.remind_before_minutes)?.label ?? `${item.remind_before_minutes} min before`)}
           </span>
-          {ringing && item.notify_count > 0 && (
-            <>
-              <span>·</span>
-              <span>alerted {item.notify_count}×</span>
-            </>
-          )}
         </p>
         {item.notes && <p className="text-xs text-[var(--text-muted)] mt-1 break-words">{item.notes}</p>}
       </div>
@@ -459,7 +453,7 @@ function SchedulePage() {
         <div className="min-w-0">
           <h1 className="text-xl font-bold text-[var(--text)]">{history ? "Schedule history" : "Schedule & Duties"}</h1>
           <p className="text-sm text-[var(--text-faint)] mt-1">
-            {history ? "Finished and missed entries." : "Your timetable. You get a phone alert before each entry, repeated until you tap Done."}
+            {history ? "Finished and missed entries." : "Your timetable. You get one phone alert before each entry."}
           </p>
         </div>
         {!history && (
@@ -494,7 +488,7 @@ function SchedulePage() {
       {ringingCount > 0 && (
         <div className="rounded-xl border border-[var(--color-amber)] bg-[var(--color-amber-soft)] px-4 py-3 text-sm text-[var(--color-amber)] flex items-center gap-2">
           <BellRing className="w-4 h-4" />
-          {ringingCount} {ringingCount === 1 ? "entry is" : "entries are"} alerting you now. Tap Done to stop the pings.
+          {ringingCount} {ringingCount === 1 ? "entry is" : "entries are"} due now.
         </div>
       )}
 

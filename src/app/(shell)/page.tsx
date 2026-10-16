@@ -25,6 +25,7 @@ import { cn, formatTimeAgo } from "@/lib/utils";
 import { KIND_LABEL, type ScheduleItem } from "@/lib/schedule-types";
 import { safeLink, type AlertSeverity, type WorkspaceAlert, type WorkspaceSummary } from "@/lib/workspace-types";
 import { startOfDay, addDays } from "@/lib/schedule-occurrences";
+import { PushToggle } from "@/components/push-toggle";
 
 /* ───────────── helpers ───────────── */
 
@@ -347,6 +348,8 @@ export default function WorkspaceDashboard() {
           Schedule
         </Link>
       </div>
+
+      <PushToggle />
 
       {error && <p className="text-sm text-[var(--color-red)]">{error}</p>}
 
