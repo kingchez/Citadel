@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Plus, StickyNote } from "lucide-react";
+import { Loader2, Pencil, Plus, StickyNote, Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { parseVideoNotes } from "@/lib/video-notes";
 
 const MAX_NOTE_LENGTH = 2000;
@@ -12,6 +13,53 @@ export function VideoNotesTab({ videoId, notes, onUpdated }: { videoId: string; 
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [deleteKey, setDeleteKey] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  const saveEdit = async () => {
+    if (!editingKey) return;
+    setEditSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/videos/${videoId}/notes/${editingKey}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: editText }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Couldn't save the note.");
+        return;
+      }
+      setEditingKey(null);
+      onUpdated();
+    } catch {
+      setError("Network error - the note wasn't saved.");
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteKey) return;
+    setDeleteBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/videos/${videoId}/notes/${deleteKey}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setError(data.error || "Couldn't delete the note.");
+      else onUpdated();
+    } catch {
+      setError("Network error - the note wasn't deleted.");
+    } finally {
+      setDeleteBusy(false);
+      setDeleteKey(null);
+    }
+  };
 
   const add = async () => {
     setSaving(true);
@@ -69,8 +117,35 @@ export function VideoNotesTab({ videoId, notes, onUpdated }: { videoId: string; 
         <ul className="space-y-3">
           {list.map((n) => (
             <li key={n.key} className="card p-4 sm:p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-faint)] mb-1.5">Note {n.number}</p>
-              <p className="text-sm text-[var(--text)] whitespace-pre-wrap break-words">{n.text}</p>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-faint)]">Note {n.number}</p>
+                {editingKey !== n.key && (
+                  <div className="flex gap-1">
+                    <button type="button" className="btn-ghost" aria-label={`Edit note ${n.number}`} onClick={() => { setEditingKey(n.key); setEditText(n.text); setError(null); }}>
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button type="button" className="btn-ghost" aria-label={`Delete note ${n.number}`} onClick={() => setDeleteKey(n.key)}>
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+              {editingKey === n.key ? (
+                <div className="space-y-2">
+                  <textarea className="input-field text-sm resize-none" rows={4} value={editText} onChange={(e) => setEditText(e.target.value)} maxLength={MAX_NOTE_LENGTH} autoFocus />
+                  <div className="flex justify-end gap-2">
+                    <button type="button" className="btn-secondary text-sm" disabled={editSaving} onClick={() => setEditingKey(null)}>
+                      Cancel
+                    </button>
+                    <button type="button" className="btn-primary flex items-center gap-2 text-sm" disabled={!editText.trim() || editSaving} onClick={saveEdit}>
+                      {editSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                      Save
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-[var(--text)] whitespace-pre-wrap break-words">{n.text}</p>
+              )}
             </li>
           ))}
         </ul>
@@ -87,6 +162,17 @@ export function VideoNotesTab({ videoId, notes, onUpdated }: { videoId: string; 
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleteKey}
+        title="Delete this note?"
+        message="The note is removed from the video for good."
+        confirmLabel="Delete note"
+        danger
+        busy={deleteBusy}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteKey(null)}
+      />
     </div>
   );
 }
