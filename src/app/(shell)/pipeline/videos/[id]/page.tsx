@@ -9,6 +9,8 @@ import { SegmentRow, AudioPlayerBar } from "@/components/segment-row";
 import { VideoOutputModal } from "@/components/video-output-modal";
 import { MediaAssetCard } from "@/components/media-asset-card";
 import { AffiliateProductsTab } from "@/components/affiliate-products-tab";
+import { VideoNotesTab } from "@/components/video-notes-tab";
+import { parseVideoNotes } from "@/lib/video-notes";
 import { ScriptEditor } from "@/components/script-editor";
 import { formatTimeAgo } from "@/lib/utils";
 import {
@@ -27,6 +29,7 @@ import {
   MessageSquareWarning,
   Image as ImageIcon,
   ShoppingCart,
+  StickyNote,
 } from "lucide-react";
 
 interface VideoDetailProps {
@@ -48,7 +51,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [showOutputModal, setShowOutputModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"segments" | "media" | "products">("segments");
+  const [activeTab, setActiveTab] = useState<"segments" | "media" | "products" | "notes">("segments");
   const [audioBlobUrls, setAudioBlobUrls] = useState<Record<string, string>>({});
 
   const loadVideo = () => {
@@ -143,6 +146,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
   const segments: ScriptSegment[] = video.script_segments || [];
   const mediaEntries = Object.entries(video.media_assets || {});
   const products = video.product_ids || [];
+  const noteCount = parseVideoNotes(video.notes).notes.length;
   const revisionHistory = video.revision_history || [];
   const pendingRevisions = revisionHistory.filter((r) => r.status === "pending");
   const allSelected = segments.length > 0 && selectedIndices.size === segments.length;
@@ -494,6 +498,15 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
             </span>
           )}
         </button>
+        <button onClick={() => setActiveTab("notes")} className={`tab flex items-center gap-2 ${activeTab === "notes" ? "tab-active" : ""}`}>
+          <StickyNote className="w-4 h-4" />
+          Notes
+          {noteCount > 0 && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeTab === "notes" ? "bg-white/20 text-white" : "bg-[var(--border)] text-[var(--text-faint)]"}`}>
+              {noteCount}
+            </span>
+          )}
+        </button>
       </div>
 
       {activeTab === "segments" && segments.length > 0 && (
@@ -617,7 +630,9 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
         />
       )}
 
-      {segments.length === 0 && mediaEntries.length === 0 && products.length === 0 && activeTab !== "products" && (
+      {activeTab === "notes" && <VideoNotesTab videoId={video.id} notes={video.notes} onUpdated={loadVideo} />}
+
+      {segments.length === 0 && mediaEntries.length === 0 && products.length === 0 && activeTab !== "products" && activeTab !== "notes" && (
         <div className="card p-10 text-center">
           <Clock className="w-12 h-12 mx-auto mb-3 text-[var(--border-strong)]" />
           <p className="text-[var(--text-muted)] font-medium">Nothing here yet</p>
