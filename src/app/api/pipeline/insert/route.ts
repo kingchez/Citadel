@@ -26,6 +26,8 @@ function bad(message: string, extra?: Record<string, unknown>) {
  * Priority: `priority: true` flags the linked `videos` row (same boolean the news "convert to video" flow sets).
  * Channel scout: `scraped_video_id` is the review-pool row this video came from. It must still exist (so a video can't
  * be queued twice) and is deleted once the video is safely queued.
+ * Hold for merge: `hold_for_merge: true` (repurpose mode) puts the new item in waiting_merge so the pipeline leaves it alone
+ * until the merge is finished.
  * Notes (King's instructions for the agent, one item each) go to the LINKED `videos` row only. Subtitles answer follows the manual: yes/no is written to notes, "later"
  * writes nothing so the planning agent still asks before scene planning.
  */
@@ -38,6 +40,7 @@ export async function POST(request: NextRequest) {
     const channel = typeof body?.channel === "string" ? body.channel.trim() : "";
     const videoType = body?.video_type;
     const priority = body?.priority === true;
+    const holdForMerge = mode === "repurpose" && body?.hold_for_merge === true;
     const scrapedVideoId = typeof body?.scraped_video_id === "string" && body.scraped_video_id ? body.scraped_video_id : null;
     const subtitles: SubtitleChoice = SUBTITLE_CHOICES.includes(body?.subtitles) ? body.subtitles : "later";
 
@@ -145,6 +148,16 @@ export async function POST(request: NextRequest) {
     // The video is created at this point; anything below that fails is reported as a warning, not an error,
     // so the page never claims nothing was saved.
     const warnings: string[] = [];
+    if (holdForMerge) {
+      const { data: held, error: holdError } = await supabase
+        .from("repurpose_videos")
+        .update({ status: "waiting_merge" })
+        .eq("id", created?.repurpose_id)
+        .eq("status", "pending_download")
+        .select("id")
+        .maybeSingle();
+      if (holdError || !held) warnings.push("It was added, but couldn't be put on hold for merging (processing may have already started).");
+    }
     if (priority) {
       const { error: prioError } = await supabase.from("videos").update({ priority: true }).eq("id", created?.video_id);
       if (prioError) warnings.push(`It was added, but couldn't be marked priority: ${prioError.message}`);

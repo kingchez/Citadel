@@ -1,24 +1,13 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
-/** Statuses add_repurpose_source() accepts - anything else (running, handed off, cancelled) can't take another video. */
-const MERGEABLE_STATUSES = [
-  "pending_download",
-  "download_error",
-  "pending_split",
-  "split_error",
-  "split_done",
-  "voice_timing_error",
-  "voice_timing_done",
-];
-
-/** Recent repurpose items a scraped video can be merged into. */
+/** Items put on hold for merging (status waiting_merge) - the only ones a scraped video can be merged into. */
 export async function GET() {
   try {
     const { data, error } = await getSupabaseAdmin()
       .from("repurpose_videos")
       .select("id, title, status, video_type, sources")
-      .in("status", MERGEABLE_STATUSES)
+      .eq("status", "waiting_merge")
       .order("created_at", { ascending: false })
       .limit(40);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -16,7 +16,7 @@ import {
 
 type IntroMode = "keep_original" | "replace";
 type ViewMode = "vertical-shorts" | "horizontal-long";
-type AddKind = "single" | "merge";
+type AddKind = "single" | "start" | "merge";
 interface MergeTarget {
   id: string;
   title: string;
@@ -252,6 +252,8 @@ function ReviewCard({
   const [targetsLoading, setTargetsLoading] = useState(false);
   const [targetId, setTargetId] = useState(lastTargetId);
   const [pastedId, setPastedId] = useState("");
+  const [finishing, setFinishing] = useState(false);
+  const [finishNote, setFinishNote] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -281,6 +283,32 @@ function ReviewCard({
       setError(e instanceof Error ? e.message : "Couldn't load items.");
     } finally {
       setTargetsLoading(false);
+    }
+  };
+
+  // Merge complete: release the held item so the pipeline starts on it.
+  const finishMerge = async () => {
+    setFinishing(true);
+    setError(null);
+    setFinishNote(null);
+    try {
+      const res = await fetch(`/api/repurpose/${targetId}/hold`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hold: false }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Couldn't finish the merge.");
+        return;
+      }
+      setFinishNote(`“${pickedTarget?.title ?? "The item"}” is released and will start processing.`);
+      setTargets((prev) => prev.filter((t) => t.id !== targetId));
+      setTargetId("");
+    } catch {
+      setError("Network error - nothing changed.");
+    } finally {
+      setFinishing(false);
     }
   };
 
@@ -326,6 +354,7 @@ function ReviewCard({
           instructions: instructions.map((t) => t.trim()).filter(Boolean),
           products_raw: productsRaw,
           priority,
+          ...(kind === "start" ? { hold_for_merge: true } : {}),
           scraped_video_id: video.id,
           source_video_urls: [url.trim()],
           intro_mode: introMode,
@@ -350,7 +379,7 @@ function ReviewCard({
         video,
         messages.length > 0
           ? { tone: "warn", message: `“${title.trim()}” — ${messages.join(" ")}`, lines }
-          : { tone: "ok", message: `Added “${title.trim()}” to the repurpose queue.` }
+          : { tone: "ok", message: kind === "start" ? `Added “${title.trim()}” and holding it for a merge. It now shows in the “Merge into” list.` : `Added “${title.trim()}” to the repurpose queue.` }
       );
     } catch {
       setError("Network error - nothing was saved.");
@@ -427,10 +456,14 @@ function ReviewCard({
             <Choice value="single" current={kind} onSelect={() => setKind("single")}>
               Single video
             </Choice>
+            <Choice value="start" current={kind} onSelect={() => setKind("start")}>
+              Start a merge
+            </Choice>
             <Choice value="merge" current={kind} onSelect={openMerge}>
               Merge into another
             </Choice>
           </div>
+          {kind === "start" && <p className="text-xs text-[var(--text-faint)]">Added on hold: the pipeline leaves it alone until you press “Finish merge”.</p>}
         </Field>
 
         {!isMerge && (
@@ -462,15 +495,21 @@ function ReviewCard({
 
         {isMerge && (
           <div className="space-y-4 pl-4 border-l border-[var(--border)]">
-            <Field label="Merge into" hint="Items that can still take another video. Merging sends the item back to download, and only this new video is processed.">
+            <Field label="Merge into" hint="Only items on hold for merging. Start one with “Start a merge”, or press “Hold for merge” on the Repurpose page.">
               <select className="input-field text-sm" value={targetId} onChange={(e) => setTargetId(e.target.value)} disabled={targetsLoading}>
-                <option value="">{targetsLoading ? "Loading…" : targets.length === 0 ? "No items available" : "Choose an item…"}</option>
+                <option value="">{targetsLoading ? "Loading…" : targets.length === 0 ? "No items on hold" : "Choose an item…"}</option>
                 {targets.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.title} · {REPURPOSE_STATUS_LABELS[t.status] ?? t.status} · {t.source_count} video{t.source_count === 1 ? "" : "s"}
                   </option>
                 ))}
               </select>
+              {targetId && !pastedId.trim() && (
+                <button type="button" className="text-xs font-medium text-[var(--color-purple)] hover:underline disabled:opacity-50" disabled={finishing || submitting} onClick={finishMerge}>
+                  {finishing ? "Releasing…" : "Finish merge (start processing this item)"}
+                </button>
+              )}
+              {finishNote && <p className="text-xs text-[var(--color-green)]">{finishNote}</p>}
               {pickedTarget?.video_type && pickedTarget.video_type !== viewMode && !pastedId.trim() && (
                 <p className="text-xs text-[var(--color-amber)]">
                   That item is a {pickedTarget.video_type === "vertical-shorts" ? "Short" : "Long"} video and this one is set to {isShort ? "Short" : "Long"}.
@@ -577,7 +616,7 @@ function ReviewCard({
           </div>
           <button type="button" className="btn-primary flex items-center justify-center gap-2" disabled={!canSubmit || submitting} onClick={submit}>
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            {isMerge ? "Merge into item" : "Add to repurpose queue"}
+            {isMerge ? "Merge into item" : kind === "start" ? "Add and hold for merge" : "Add to repurpose queue"}
           </button>
         </div>
       </div>

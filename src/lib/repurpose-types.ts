@@ -2,6 +2,7 @@ import type { ProductEntry, VideoType } from "./types";
 import type { RepurposeSource, RepurposeIntro } from "./repurpose-sources";
 
 export type RepurposeStatus =
+  | "waiting_merge"
   | "pending_download"
   | "downloading"
   | "download_error"
@@ -49,6 +50,7 @@ export interface RepurposeRow {
 }
 
 export const REPURPOSE_STATUS_LABELS: Record<RepurposeStatus, string> = {
+  waiting_merge: "Waiting Merge",
   pending_download: "Pending Download",
   downloading: "Downloading",
   download_error: "Download Failed",
@@ -64,6 +66,7 @@ export const REPURPOSE_STATUS_LABELS: Record<RepurposeStatus, string> = {
 };
 
 export const REPURPOSE_STATUS_COLORS: Record<RepurposeStatus, "purple" | "cyan" | "green" | "amber" | "red"> = {
+  waiting_merge: "amber",
   pending_download: "purple",
   downloading: "cyan",
   download_error: "red",

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ChevronRight, Film, Loader2, Plus, Repeat, RotateCcw, Tag } from "lucide-react";
+import { AlertTriangle, ChevronRight, Film, Loader2, Pause, Play, Plus, Repeat, RotateCcw, Tag } from "lucide-react";
 import { RepurposeStatusBadge } from "@/components/repurpose-status-badge";
 import { cn, formatTimeAgo } from "@/lib/utils";
 import { formatSeconds, parseTimeToSeconds } from "@/lib/repurpose-utils";
@@ -12,7 +12,7 @@ import { REPURPOSE_ERROR_STATUSES, type RepurposeRow, type RepurposeStatus } fro
 const CARD_CLASS = "rounded-xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden";
 const TOP_CLASS = "group flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-2 px-4 sm:px-5 py-3.5 sm:py-4 transition-all duration-150";
 // A video can be added only while nothing is actively running on the item.
-const CAN_ADD: RepurposeStatus[] = ["pending_download", "download_error", "pending_split", "split_error", "split_done", "voice_timing_error", "voice_timing_done"];
+const CAN_ADD: RepurposeStatus[] = ["waiting_merge", "pending_download", "download_error", "pending_split", "split_error", "split_done", "voice_timing_error", "voice_timing_done"];
 const KIND_LABEL = { youtube: "YouTube", tiktok: "TikTok", direct: "Direct link" } as const;
 const CHIP: Record<SourceState, string> = {
   done: "bg-[var(--color-green-soft)] text-[var(--color-green)] border-[var(--color-green)]/30",
@@ -46,6 +46,7 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
   const isError = REPURPOSE_ERROR_STATUSES.includes(item.status);
   const hasError = isError && !!item.error_details;
   const [retrying, setRetrying] = useState(false);
+  const [holdBusy, setHoldBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [newUrl, setNewUrl] = useState("");
@@ -70,6 +71,28 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
       setActionError("Network error.");
     } finally {
       setRetrying(false);
+    }
+  };
+
+  // Hold for merge (pending_download -> waiting_merge) / Finish merge (waiting_merge -> pending_download).
+  const setHold = async (hold: boolean, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setHoldBusy(true);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/repurpose/${item.id}/hold`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hold }),
+      });
+      const data = await res.json();
+      if (!res.ok) setActionError(data.error || "Couldn't change the hold.");
+      else onChanged();
+    } catch {
+      setActionError("Network error.");
+    } finally {
+      setHoldBusy(false);
     }
   };
 
@@ -148,6 +171,28 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
         </span>
       </div>
       <div className="flex-shrink-0 flex items-center gap-2">
+        {item.status === "pending_download" && (
+          <button
+            type="button"
+            onClick={(e) => setHold(true, e)}
+            disabled={holdBusy}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[var(--border)] text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--surface-raised)] disabled:opacity-50"
+          >
+            {holdBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Pause className="w-3.5 h-3.5" />}
+            Hold for merge
+          </button>
+        )}
+        {item.status === "waiting_merge" && (
+          <button
+            type="button"
+            onClick={(e) => setHold(false, e)}
+            disabled={holdBusy}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[var(--color-purple)] text-white text-xs font-medium hover:opacity-90 disabled:opacity-50"
+          >
+            {holdBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+            Finish merge
+          </button>
+        )}
         {isError && (
           <button
             type="button"
