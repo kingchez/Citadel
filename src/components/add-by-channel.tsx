@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Choice, Field, PriorityField } from "@/components/add-video-ui";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { formatSeconds, parseTimeToSeconds } from "@/lib/repurpose-utils";
+import { MAX_SOURCES } from "@/lib/repurpose-sources";
 import { REPURPOSE_STATUS_LABELS, SUPPORTED_CHANNELS, type RepurposeStatus, type SubtitleChoice } from "@/lib/repurpose-types";
 import {
   CHANNEL_STATUS_LABELS,
@@ -248,6 +249,7 @@ function ReviewCard({
   const [instructions, setInstructions] = useState<string[]>([""]);
 
   const [kind, setKind] = useState<AddKind>("single");
+  const [extraUrls, setExtraUrls] = useState<string[]>([]);
   const [targets, setTargets] = useState<MergeTarget[]>([]);
   const [targetsLoading, setTargetsLoading] = useState(false);
   const [targetId, setTargetId] = useState(lastTargetId);
@@ -357,7 +359,7 @@ function ReviewCard({
           priority,
           ...(kind === "start" ? { hold_for_merge: true } : {}),
           scraped_video_id: video.id,
-          source_video_urls: [url.trim()],
+          source_video_urls: [url.trim(), ...(kind === "start" ? extraUrls.map((u) => u.trim()).filter(Boolean) : [])],
           intro_mode: introMode,
           ...(introMode === "replace" ? { new_intro_url: introUrl, new_intro_start: introStart } : {}),
         }),
@@ -380,7 +382,7 @@ function ReviewCard({
         video,
         messages.length > 0
           ? { tone: "warn", message: `“${title.trim()}” — ${messages.join(" ")}`, lines }
-          : { tone: "ok", message: kind === "start" ? `Added “${title.trim()}” and holding it for a merge. It now shows in the “Merge into” list.` : `Added “${title.trim()}” to the repurpose queue.` }
+          : { tone: "ok", message: kind === "start" ? `Added “${title.trim()}” (${1 + extraUrls.filter((u) => u.trim()).length} video${extraUrls.some((u) => u.trim()) ? "s" : ""}) and holding it for a merge. It now shows in the “Merge into” list.` : `Added “${title.trim()}” to the repurpose queue.` }
       );
     } catch {
       setError("Network error - nothing was saved.");
@@ -493,6 +495,31 @@ function ReviewCard({
             {video.description?.trim() || "No description."}
           </div>
         </Field>
+
+        {kind === "start" && (
+          <Field label="More videos for this merge" hint={`Optional. The video above is Video 1. Paste any other video links to merge with it (up to ${MAX_SOURCES} in total).`}>
+            <div className="space-y-2">
+              {extraUrls.map((u, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <input
+                    className="input-field text-sm font-mono flex-1"
+                    value={u}
+                    onChange={(e) => setExtraUrls((prev) => prev.map((x, idx) => (idx === i ? e.target.value : x)))}
+                    placeholder={`Video ${i + 2} link`}
+                  />
+                  <button type="button" onClick={() => setExtraUrls((prev) => prev.filter((_, idx) => idx !== i))} className="text-[var(--text-faint)] hover:text-[var(--color-red)] px-2" aria-label={`Remove video ${i + 2} link`}>
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              {extraUrls.length + 1 < MAX_SOURCES && (
+                <button type="button" onClick={() => setExtraUrls((prev) => [...prev, ""])} className="text-xs font-medium text-[var(--color-purple)] hover:underline">
+                  + Add another video link
+                </button>
+              )}
+            </div>
+          </Field>
+        )}
 
         {isMerge && (
           <div className="space-y-4 pl-4 border-l border-[var(--border)]">
