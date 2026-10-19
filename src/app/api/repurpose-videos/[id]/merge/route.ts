@@ -3,6 +3,8 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { resolveVideoSource } from "@/lib/video-source";
 import { newSourceItem } from "@/lib/repurpose-sources";
 
+const MAX_NOTE_LENGTH = 2000;
+const MAX_NOTES = 20;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -53,6 +55,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     // Merged - everything below is reported as a warning, never as a failure.
     const warnings: string[] = [];
+    // Notes written for this video join the notes the target video already has (next note_N each).
+    const notes: string[] = (Array.isArray(body?.instructions) ? body.instructions : [])
+      .filter((t: unknown): t is string => typeof t === "string")
+      .map((t: string) => t.trim())
+      .filter(Boolean)
+      .slice(0, MAX_NOTES);
+    let notesAdded = 0;
+    if (notes.length > 0) {
+      if (!item.video_id) {
+        warnings.push("It was merged, but the item has no linked video to save the notes on.");
+      } else {
+        for (const text of notes) {
+          const { error: noteError } = await supabase.rpc("add_video_note", { p_id: item.video_id, p_text: text.slice(0, MAX_NOTE_LENGTH) });
+          if (noteError) {
+            warnings.push(`It was merged, but a note couldn't be saved: ${noteError.message}`);
+            break;
+          }
+          notesAdded++;
+        }
+      }
+    }
     if (body?.priority === true && item.video_id) {
       const { error: prioError } = await supabase.from("videos").update({ priority: true }).eq("id", item.video_id);
       if (prioError) warnings.push(`It was merged, but the item couldn't be marked priority: ${prioError.message}`);
@@ -60,7 +83,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { error: delError } = await supabase.from("repurpose_scraped_videos").delete().eq("id", id);
     if (delError) warnings.push(`It was merged, but couldn't be removed from the review pool: ${delError.message}`);
 
-    return NextResponse.json({ item: { id: row.id, title: item.title, total_sources: row.total_sources }, warnings });
+    return NextResponse.json({ item: { id: row.id, title: item.title, total_sources: row.total_sources }, notes_added: notesAdded, warnings });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
   }

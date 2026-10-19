@@ -319,7 +319,7 @@ function ReviewCard({
       const res = await fetch(`/api/repurpose-videos/${video.id}/merge`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target: mergeTarget, url: url.trim(), priority }),
+        body: JSON.stringify({ target: mergeTarget, url: url.trim(), priority, instructions: instructions.map((t) => t.trim()).filter(Boolean) }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -328,7 +328,8 @@ function ReviewCard({
       }
       const warnings = (data.warnings as string[] | undefined) || [];
       if (!pastedId.trim()) onMergedInto(targetId);
-      const into = `“${data.item?.title || "the item"}” (${data.item?.total_sources ?? "?"} videos)`;
+      const added = (data.notes_added as number | undefined) || 0;
+      const into = `“${data.item?.title || "the item"}” (${data.item?.total_sources ?? "?"} videos)${added > 0 ? `, ${added} note${added === 1 ? "" : "s"} added` : ""}`;
       onQueued(video, warnings.length > 0 ? { tone: "warn", message: `Merged into ${into} - ${warnings.join(" ")}` } : { tone: "ok", message: `Merged into ${into}.` });
     } catch {
       setError("Network error - nothing was saved.");
@@ -561,7 +562,10 @@ function ReviewCard({
           <textarea className="input-field text-sm resize-none font-mono" rows={4} value={productsRaw} onChange={(e) => setProductsRaw(e.target.value)} placeholder="https://www.amazon.com/dp/B0XXXXXXXX" />
         </Field>
 
-        <Field label="Notes for the agent" hint="Optional. Anything the agent must know or do for this video - one instruction per box.">
+          </>
+        )}
+
+        <Field label="Notes for the agent" hint={isMerge ? "Optional. Added to the notes the item you merge into already has." : "Optional. Anything the agent must know or do for this video - one instruction per box."}>
           <div className="space-y-2">
             {instructions.map((t, i) => (
               <div key={i} className="flex gap-2 items-start">
@@ -586,6 +590,8 @@ function ReviewCard({
           </div>
         </Field>
 
+        {!isMerge && (
+          <>
         <Field label="Subtitles" hint="“Decide later” leaves it for the planning agent to ask.">
           <div className="flex gap-2 flex-wrap">
             <Choice value="yes" current={subtitles} onSelect={setSubtitles}>
