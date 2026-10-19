@@ -48,31 +48,6 @@ are still the right tool for anything that needs n8n to actually *do*
 something external (call a service, upload a file) — just not for a plain
 column update.
 
-## Product finder (script -> Amazon links)
-
-On every "Affiliate products" box (Add by Link, Add by Channel, a video's Affiliate Products tab) there is a
-**Find from script** button.
-
-1. Paste the full script. An AI call (OmniRoute) lists the products in order.
-2. Each product is matched against the **stored product lists** of the sites you picked (names are compared
-   ignoring case, `- _ , ( ) [ ]`, plural s, and one-letter spelling differences).
-   - **Exact / Likely**: one clear winner, pre-selected.
-   - **Pick one**: several close listings; the AI cleanup picks one or says it can't (pack sizes, colours and
-     models count as "can't"), you choose.
-   - **Not found**: search with other words or paste the Amazon link/ASIN yourself.
-3. The site's link is followed to the Amazon URL **without loading amazon.com** (redirect `Location` headers,
-   `amzn.to`, meta/JS redirects, or a "Buy on Amazon" link on a product page).
-4. You confirm each product; confirmed ones are appended to the box as `https://www.amazon.com/dp/ASIN`, and the
-   existing add-products logic takes it from there.
-
-**Sites** belong to a source channel (Add by Channel -> Manage channels -> "Product sites") or to nobody (available
-everywhere). A channel can have any number of sites; the finder searches all selected ones together and merges
-the same Amazon product listed on several sites. Adding a site reads it immediately and shows how many products
-were found - that is the "does it work" test. Tables: `product_sites`, `product_catalog`. Sites that build their
-list with JavaScript need the JSON link (advanced settings) or an item selector.
-
-Extra env vars: `OMNIROUTE_BASE_URL`, `OMNIROUTE_API_KEY`, `PRODUCT_AI_MODEL`.
-
 ## Setup
 
 1. `npm install`
