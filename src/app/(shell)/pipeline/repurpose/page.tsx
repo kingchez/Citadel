@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ChevronRight, Film, Loader2, Pause, Play, Plus, Repeat, RotateCcw, Tag } from "lucide-react";
+import { AlertTriangle, ChevronRight, Film, Loader2, Pause, Pencil, Play, Plus, Repeat, RotateCcw, Tag, Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { RepurposeStatusBadge } from "@/components/repurpose-status-badge";
 import { cn, formatTimeAgo } from "@/lib/utils";
 import { formatSeconds, parseTimeToSeconds } from "@/lib/repurpose-utils";
@@ -13,6 +14,8 @@ const CARD_CLASS = "rounded-xl bg-[var(--surface)] border border-[var(--border)]
 const TOP_CLASS = "group flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-2 px-4 sm:px-5 py-3.5 sm:py-4 transition-all duration-150";
 // A video can be added only while nothing is actively running on the item.
 const CAN_ADD: RepurposeStatus[] = ["waiting_merge", "pending_download", "download_error", "pending_split", "split_error", "split_done", "voice_timing_error", "voice_timing_done"];
+// A video's link can be changed or removed only before voice timing starts - after that the timing would be wrong.
+const CAN_EDIT_SOURCES: RepurposeStatus[] = ["waiting_merge", "pending_download", "download_error", "pending_split", "split_error", "split_done"];
 const KIND_LABEL = { youtube: "YouTube", tiktok: "TikTok", direct: "Direct link" } as const;
 const CHIP: Record<SourceState, string> = {
   done: "bg-[var(--color-green-soft)] text-[var(--color-green)] border-[var(--color-green)]/30",
@@ -55,6 +58,52 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
   const [saving, setSaving] = useState(false);
   const sources = item.sources ?? [];
   const canAdd = CAN_ADD.includes(item.status);
+  const canEditSources = CAN_EDIT_SOURCES.includes(item.status);
+  const [editIndex, setEditIndex] = useState<number | null>(null);
+  const [editUrl, setEditUrl] = useState("");
+  const [srcBusy, setSrcBusy] = useState(false);
+  const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
+
+  const saveSourceUrl = async () => {
+    if (editIndex === null) return;
+    setSrcBusy(true);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/repurpose/${item.id}/sources/${editIndex}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: editUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setActionError(data.error || "Couldn't change the link.");
+        return;
+      }
+      setEditIndex(null);
+      onChanged();
+    } catch {
+      setActionError("Network error - nothing was changed.");
+    } finally {
+      setSrcBusy(false);
+    }
+  };
+
+  const deleteSource = async () => {
+    if (deleteIndex === null) return;
+    setSrcBusy(true);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/repurpose/${item.id}/sources/${deleteIndex}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setActionError(data.error || "Couldn't remove the video.");
+      else onChanged();
+    } catch {
+      setActionError("Network error - nothing was removed.");
+    } finally {
+      setSrcBusy(false);
+      setDeleteIndex(null);
+    }
+  };
 
   const retry = async (e: React.MouseEvent) => {
     // The top of the card is a link to the video - don't navigate when pressing Retry.
@@ -237,7 +286,31 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
                 </span>
                 <SourceChips s={s} />
                 <span className="text-[var(--text-faint)] truncate max-w-[40ch]">{s.original_url}</span>
+                {canEditSources && editIndex !== s.index && (
+                  <span className="ml-auto flex gap-1">
+                    <button type="button" className="btn-ghost" aria-label={`Change the link of video ${s.index + 1}`} onClick={() => { setEditIndex(s.index); setEditUrl(s.original_url); setActionError(null); }}>
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    {sources.length > 1 && (
+                      <button type="button" className="btn-ghost" aria-label={`Remove video ${s.index + 1}`} onClick={() => setDeleteIndex(s.index)}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </span>
+                )}
               </div>
+              {editIndex === s.index && (
+                <div className="flex gap-2 items-center pt-1.5 sm:pl-16">
+                  <input className="input-field text-xs font-mono flex-1" value={editUrl} onChange={(e) => setEditUrl(e.target.value)} placeholder="https://…" autoFocus />
+                  <button type="button" className="btn-secondary text-xs" disabled={srcBusy} onClick={() => setEditIndex(null)}>
+                    Cancel
+                  </button>
+                  <button type="button" className="btn-primary text-xs flex items-center gap-1" disabled={srcBusy || !editUrl.trim()} onClick={saveSourceUrl}>
+                    {srcBusy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Save
+                  </button>
+                </div>
+              )}
               {stage.detail && <p className="text-[var(--color-red)] mt-0.5 pl-16 break-words">{stage.detail}</p>}
             </div>
           );
@@ -327,6 +400,17 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
           <p className="text-[11px] text-[var(--text-faint)]">A step is running - another video can be added when it finishes.</p>
         )}
         {actionError && <p className="text-xs text-[var(--color-red)]">{actionError}</p>}
+
+        <ConfirmDialog
+          open={deleteIndex !== null}
+          title={`Remove Video ${deleteIndex !== null ? deleteIndex + 1 : ""}?`}
+          message="It is removed from this merge and the remaining videos are renumbered. The item goes back to Pending Download; the other videos keep their progress."
+          confirmLabel="Remove video"
+          danger
+          busy={srcBusy}
+          onConfirm={deleteSource}
+          onCancel={() => setDeleteIndex(null)}
+        />
       </div>
     </div>
   );

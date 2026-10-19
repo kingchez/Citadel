@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { DIRECTION_VALUES, type DirectionChoice, type ScriptChoice } from "@/lib/video-options";
 
 export function Choice<T extends string>({
   value,
@@ -54,5 +55,49 @@ export function PriorityField({ priority, onChange }: { priority: boolean; onCha
         </Choice>
       </div>
     </Field>
+  );
+}
+
+/** "Change original product video script" and "Product listing direction" - answered like Subtitles (decide later = the agent asks). */
+export function ScriptAndDirectionFields({
+  script,
+  onScript,
+  direction,
+  onDirection,
+}: {
+  script: ScriptChoice;
+  onScript: (v: ScriptChoice) => void;
+  direction: DirectionChoice;
+  onDirection: (v: DirectionChoice) => void;
+}) {
+  return (
+    <>
+      <Field label="Change original product video script" hint="“Decide later” leaves it for the planning agent to ask.">
+        <div className="flex gap-2 flex-wrap">
+          <Choice value="yes" current={script} onSelect={onScript}>
+            Yes
+          </Choice>
+          <Choice value="no" current={script} onSelect={onScript}>
+            No
+          </Choice>
+          <Choice value="later" current={script} onSelect={onScript}>
+            Decide later
+          </Choice>
+        </div>
+      </Field>
+
+      <Field label="Product listing direction" hint="The order the products are listed in the video. “Decide later” leaves it for the planning agent to ask.">
+        <div className="flex gap-2 flex-wrap">
+          {DIRECTION_VALUES.map((d) => (
+            <Choice key={d} value={d} current={direction} onSelect={onDirection}>
+              {d}
+            </Choice>
+          ))}
+          <Choice value="later" current={direction} onSelect={onDirection}>
+            Decide later
+          </Choice>
+        </div>
+      </Field>
+    </>
   );
 }

@@ -5,6 +5,7 @@ import { addProductsToVideo } from "@/lib/add-products-to-video";
 import { parseTimeToSeconds } from "@/lib/repurpose-utils";
 import { MAX_SOURCES, newSourceItem } from "@/lib/repurpose-sources";
 import { SUPPORTED_CHANNELS, type SubtitleChoice } from "@/lib/repurpose-types";
+import { DIRECTION_VALUES, type DirectionChoice, type ScriptChoice } from "@/lib/video-options";
 
 const VIDEO_TYPES = ["vertical-shorts", "horizontal-long"];
 const SUBTITLE_CHOICES: SubtitleChoice[] = ["yes", "no", "later"];
@@ -43,6 +44,8 @@ export async function POST(request: NextRequest) {
     const holdForMerge = mode === "repurpose" && body?.hold_for_merge === true;
     const scrapedVideoId = typeof body?.scraped_video_id === "string" && body.scraped_video_id ? body.scraped_video_id : null;
     const subtitles: SubtitleChoice = SUBTITLE_CHOICES.includes(body?.subtitles) ? body.subtitles : "later";
+    const changeScript: ScriptChoice = body?.change_script === "yes" || body?.change_script === "no" ? body.change_script : "later";
+    const direction: DirectionChoice = (DIRECTION_VALUES as readonly string[]).includes(body?.product_direction) ? body.product_direction : "later";
 
     if (mode !== "new" && mode !== "repurpose") return bad("mode must be 'new' or 'repurpose'.");
     if (!title) return bad("Title is required.");
@@ -70,6 +73,9 @@ export async function POST(request: NextRequest) {
     } else if (subtitles === "no") {
       notes.subtitles = "no";
     }
+    // Same rule as subtitles: yes/no (or a direction) is written, "later" writes nothing so the agent asks.
+    if (changeScript !== "later") notes.change_product_video_script = changeScript;
+    if (direction !== "later") notes.product_listing_direction = direction;
     const notesOrNull = Object.keys(notes).length > 0 ? notes : null;
 
     const supabase = getSupabaseAdmin();

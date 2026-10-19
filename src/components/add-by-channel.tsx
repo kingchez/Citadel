@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExternalLink, Loader2, Plus, SkipForward, Trash2, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Choice, Field, PriorityField } from "@/components/add-video-ui";
+import { Choice, Field, PriorityField, ScriptAndDirectionFields } from "@/components/add-video-ui";
+import type { DirectionChoice, ScriptChoice } from "@/lib/video-options";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { formatSeconds, parseTimeToSeconds } from "@/lib/repurpose-utils";
 import { MAX_SOURCES } from "@/lib/repurpose-sources";
@@ -246,6 +247,8 @@ function ReviewCard({
   const [priority, setPriority] = useState(false);
   const [productsRaw, setProductsRaw] = useState("");
   const [subtitles, setSubtitles] = useState<SubtitleChoice>("later");
+  const [changeScript, setChangeScript] = useState<ScriptChoice>("later");
+  const [direction, setDirection] = useState<DirectionChoice>("later");
   const [instructions, setInstructions] = useState<string[]>([""]);
 
   const [kind, setKind] = useState<AddKind>("single");
@@ -354,6 +357,8 @@ function ReviewCard({
           channel: SUPPORTED_CHANNELS[0],
           video_type: viewMode,
           subtitles,
+          change_script: changeScript,
+          product_direction: direction,
           instructions: instructions.map((t) => t.trim()).filter(Boolean),
           products_raw: productsRaw,
           priority,
@@ -632,6 +637,8 @@ function ReviewCard({
             </Choice>
           </div>
         </Field>
+
+            <ScriptAndDirectionFields script={changeScript} onScript={setChangeScript} direction={direction} onDirection={setDirection} />
 
           </>
         )}

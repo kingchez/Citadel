@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
-import { Choice, Field, PriorityField } from "@/components/add-video-ui";
+import { Choice, Field, PriorityField, ScriptAndDirectionFields } from "@/components/add-video-ui";
+import type { DirectionChoice, ScriptChoice } from "@/lib/video-options";
 import { parseTimeToSeconds, formatSeconds } from "@/lib/repurpose-utils";
 import { classifyVideoUrl } from "@/lib/video-source";
 import { MAX_SOURCES } from "@/lib/repurpose-sources";
@@ -28,6 +29,8 @@ export function AddByLink() {
   const [introStart, setIntroStart] = useState("");
   const [productsRaw, setProductsRaw] = useState("");
   const [subtitles, setSubtitles] = useState<SubtitleChoice>("later");
+  const [changeScript, setChangeScript] = useState<ScriptChoice>("later");
+  const [direction, setDirection] = useState<DirectionChoice>("later");
   const [instructions, setInstructions] = useState<string[]>([""]);
   const [priority, setPriority] = useState(false);
 
@@ -84,6 +87,8 @@ export function AddByLink() {
           channel,
           video_type: videoType,
           subtitles,
+          change_script: changeScript,
+          product_direction: direction,
           instructions: instructions.map((t) => t.trim()).filter(Boolean),
           products_raw: productsRaw,
           priority,
@@ -342,6 +347,8 @@ export function AddByLink() {
                 </Choice>
               </div>
             </Field>
+
+            <ScriptAndDirectionFields script={changeScript} onScript={setChangeScript} direction={direction} onDirection={setDirection} />
           </>
         )}
 
