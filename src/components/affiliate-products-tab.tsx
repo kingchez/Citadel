@@ -5,6 +5,7 @@ import { ShoppingCart, ExternalLink, X, Pencil, Check, Loader2, PackagePlus, Tra
 import type { ProductEntry } from "@/lib/types";
 import { buildAmazonProductUrl } from "@/lib/amazon";
 import { formatTimeAgo } from "@/lib/utils";
+import { ProductFinderToggle, appendProductLines } from "@/components/product-finder";
 
 interface AffiliateProductsTabProps {
   videoId: string;
@@ -119,6 +120,7 @@ export function AffiliateProductsTab({ videoId, products, productOutputUrl, onUp
           Paste one or more Amazon product URLs, separated by commas or new lines — or just the ASINs directly. The ASIN
           gets extracted and stored automatically.
         </p>
+        <ProductFinderToggle onConfirm={(urls) => setRawInput((prev) => appendProductLines(prev, urls))} />
         <textarea
           value={rawInput}
           onChange={(e) => setRawInput(e.target.value)}

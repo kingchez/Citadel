@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ExternalLink, Loader2, Plus, SkipForward, Trash2, Users, X } from "lucide-react";
+import { ExternalLink, Globe, Loader2, Plus, SkipForward, Trash2, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Choice, Field, PriorityField, ScriptAndDirectionFields } from "@/components/add-video-ui";
 import type { DirectionChoice, ScriptChoice } from "@/lib/video-options";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ProductFinderToggle, appendProductLines } from "@/components/product-finder";
+import { ProductSitesManager } from "@/components/product-sites-manager";
 import { formatSeconds, parseTimeToSeconds } from "@/lib/repurpose-utils";
 import { MAX_SOURCES } from "@/lib/repurpose-sources";
 import { REPURPOSE_STATUS_LABELS, SUPPORTED_CHANNELS, type RepurposeStatus, type SubtitleChoice } from "@/lib/repurpose-types";
@@ -76,6 +78,7 @@ function ChannelsPanel({ onChanged }: { onChanged: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<SourceChannel | null>(null);
   const [removeBusy, setRemoveBusy] = useState(false);
+  const [sitesOpenFor, setSitesOpenFor] = useState<string | null>(null);
 
   const apply = useCallback((r: { channels?: SourceChannel[]; error?: string }) => {
     if (r.error) setError(r.error);
@@ -172,7 +175,8 @@ function ChannelsPanel({ onChanged }: { onChanged: () => void }) {
       ) : (
         <ul className="divide-y divide-[var(--border)]">
           {channels.map((c) => (
-            <li key={c.id} className="py-3 flex items-center gap-3">
+            <li key={c.id} className="py-3 space-y-3">
+              <div className="flex items-center gap-3">
               {c.avatar_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={c.avatar_url} alt="" className="w-9 h-9 rounded-full flex-shrink-0 bg-[var(--surface-raised)]" />
@@ -192,9 +196,24 @@ function ChannelsPanel({ onChanged }: { onChanged: () => void }) {
                 </p>
                 {c.status === "error" && c.error_details && <p className="text-xs text-[var(--color-red)] break-words">{c.error_details}</p>}
               </div>
+              <button
+                type="button"
+                className={cn("btn-ghost flex-shrink-0 flex items-center gap-1.5 text-xs", sitesOpenFor === c.id && "text-[var(--color-purple)]")}
+                onClick={() => setSitesOpenFor((cur) => (cur === c.id ? null : c.id))}
+                aria-label={`Product websites for ${c.channel_name || c.channel_username || "channel"}`}
+              >
+                <Globe className="w-4 h-4" />
+                <span className="hidden sm:inline">Product sites</span>
+              </button>
               <button type="button" className="btn-ghost flex-shrink-0" onClick={() => setRemoving(c)} aria-label={`Remove ${c.channel_name || c.channel_username || "channel"}`}>
                 <Trash2 className="w-4 h-4" />
               </button>
+              </div>
+              {sitesOpenFor === c.id && (
+                <div className="pl-12">
+                  <ProductSitesManager channelId={c.id} channelName={c.channel_name || c.channel_username || undefined} />
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -590,7 +609,8 @@ function ReviewCard({
 
         {!isMerge && (
           <>
-        <Field label="Affiliate products" hint="Optional. Paste Amazon URLs or ASINs, one per line or comma separated.">
+        <Field label="Affiliate products" hint="Optional. Paste Amazon URLs or ASINs, one per line or comma separated - or find them from the script.">
+          <ProductFinderToggle channelId={video.source_channel_id} onConfirm={(urls) => setProductsRaw((prev) => appendProductLines(prev, urls))} />
           <textarea className="input-field text-sm resize-none font-mono" rows={4} value={productsRaw} onChange={(e) => setProductsRaw(e.target.value)} placeholder="https://www.amazon.com/dp/B0XXXXXXXX" />
         </Field>
 

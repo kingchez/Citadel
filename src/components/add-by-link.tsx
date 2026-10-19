@@ -8,6 +8,7 @@ import type { DirectionChoice, ScriptChoice } from "@/lib/video-options";
 import { parseTimeToSeconds, formatSeconds } from "@/lib/repurpose-utils";
 import { classifyVideoUrl } from "@/lib/video-source";
 import { MAX_SOURCES } from "@/lib/repurpose-sources";
+import { ProductFinderToggle, appendProductLines } from "@/components/product-finder";
 import { SUPPORTED_CHANNELS, type SubtitleChoice } from "@/lib/repurpose-types";
 
 type Mode = "repurpose" | "new";
@@ -287,7 +288,8 @@ export function AddByLink() {
 
             <PriorityField priority={priority} onChange={setPriority} />
 
-            <Field label="Affiliate products" hint="Optional. Paste Amazon URLs or ASINs, one per line or comma separated.">
+            <Field label="Affiliate products" hint="Optional. Paste Amazon URLs or ASINs, one per line or comma separated - or find them from the script.">
+              <ProductFinderToggle onConfirm={(urls) => setProductsRaw((prev) => appendProductLines(prev, urls))} />
               <textarea
                 className="input-field text-sm resize-none font-mono"
                 rows={4}
