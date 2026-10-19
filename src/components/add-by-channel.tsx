@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Choice, Field, PriorityField, ScriptAndDirectionFields } from "@/components/add-video-ui";
 import type { DirectionChoice, ScriptChoice } from "@/lib/video-options";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ProductSearch, addAsins } from "@/components/product-search";
 import { formatSeconds, parseTimeToSeconds } from "@/lib/repurpose-utils";
 import { MAX_SOURCES } from "@/lib/repurpose-sources";
 import { REPURPOSE_STATUS_LABELS, SUPPORTED_CHANNELS, type RepurposeStatus, type SubtitleChoice } from "@/lib/repurpose-types";
@@ -67,6 +68,50 @@ async function fetchVideoBatch(): Promise<{ videos?: ScrapedVideo[]; total?: num
 // ---------------------------------------------------------------------------------------------------------------
 // Channels panel: add a channel, see its scrape status, remove it.
 // ---------------------------------------------------------------------------------------------------------------
+
+/** The channel's product website link(s), saved on the channel row. Usually one link; several can be separated by commas or new lines. */
+function ChannelSiteField({ channel }: { channel: SourceChannel }) {
+  const saved = (channel.product_sites || []).join(", ");
+  const [value, setValue] = useState(saved);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const save = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/repurpose-channels/${channel.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ product_sites: value }) });
+      const data = await res.json();
+      if (!res.ok) setMsg({ ok: false, text: data.error || "Couldn't save." });
+      else {
+        setValue((data.product_sites as string[]).join(", "));
+        setMsg({ ok: true, text: "Saved." });
+      }
+    } catch {
+      setMsg({ ok: false, text: "Network error." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="pl-12 space-y-1">
+      <div className="flex gap-2">
+        <input
+          className="input-field text-xs !py-1.5 flex-1 font-mono"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && value !== saved && !busy && save()}
+          placeholder="Product website link (several: separate with commas)"
+        />
+        <button type="button" className="btn-secondary text-xs !py-1.5 px-3 flex items-center gap-1.5" disabled={busy || value.trim() === saved} onClick={save}>
+          {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}Save
+        </button>
+      </div>
+      {msg && <p className={cn("text-xs", msg.ok ? "text-[var(--color-green)]" : "text-[var(--color-red)]")}>{msg.text}</p>}
+    </div>
+  );
+}
 
 function ChannelsPanel({ onChanged }: { onChanged: () => void }) {
   const [channels, setChannels] = useState<SourceChannel[] | null>(null);
@@ -172,7 +217,8 @@ function ChannelsPanel({ onChanged }: { onChanged: () => void }) {
       ) : (
         <ul className="divide-y divide-[var(--border)]">
           {channels.map((c) => (
-            <li key={c.id} className="py-3 flex items-center gap-3">
+            <li key={c.id} className="py-3 space-y-2">
+              <div className="flex items-center gap-3">
               {c.avatar_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={c.avatar_url} alt="" className="w-9 h-9 rounded-full flex-shrink-0 bg-[var(--surface-raised)]" />
@@ -195,6 +241,8 @@ function ChannelsPanel({ onChanged }: { onChanged: () => void }) {
               <button type="button" className="btn-ghost flex-shrink-0" onClick={() => setRemoving(c)} aria-label={`Remove ${c.channel_name || c.channel_username || "channel"}`}>
                 <Trash2 className="w-4 h-4" />
               </button>
+              </div>
+              <ChannelSiteField channel={c} />
             </li>
           ))}
         </ul>
@@ -324,7 +372,7 @@ function ReviewCard({
       const res = await fetch(`/api/repurpose-videos/${video.id}/merge`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target: mergeTarget, url: url.trim(), priority, instructions: instructions.map((t) => t.trim()).filter(Boolean) }),
+        body: JSON.stringify({ target: mergeTarget, url: url.trim(), priority, products_raw: productsRaw, instructions: instructions.map((t) => t.trim()).filter(Boolean) }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -588,14 +636,12 @@ function ReviewCard({
 
         <PriorityField priority={priority} onChange={setPriority} />
 
-        {!isMerge && (
-          <>
-        <Field label="Affiliate products" hint="Optional. Paste Amazon URLs or ASINs, one per line or comma separated.">
-          <textarea className="input-field text-sm resize-none font-mono" rows={4} value={productsRaw} onChange={(e) => setProductsRaw(e.target.value)} placeholder="https://www.amazon.com/dp/B0XXXXXXXX" />
+        <Field label="Affiliate products" hint={isMerge ? "Optional. Added to the item you merge into." : "Optional. Paste Amazon URLs or ASINs, one per line or comma separated - or use the search above."}>
+          <div className="space-y-2">
+            <ProductSearch channelId={video.source_channel_id} onAsins={(asins) => setProductsRaw((prev) => addAsins(prev, asins))} />
+            <textarea className="input-field text-sm resize-none font-mono" rows={4} value={productsRaw} onChange={(e) => setProductsRaw(e.target.value)} placeholder="https://www.amazon.com/dp/B0XXXXXXXX" />
+          </div>
         </Field>
-
-          </>
-        )}
 
         <Field label="Notes for the agent" hint={isMerge ? "Optional. Added to the notes the item you merge into already has." : "Optional. Anything the agent must know or do for this video - one instruction per box."}>
           <div className="space-y-2">

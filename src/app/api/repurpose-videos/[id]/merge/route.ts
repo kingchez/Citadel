@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { resolveVideoSource } from "@/lib/video-source";
 import { newSourceItem } from "@/lib/repurpose-sources";
+import { addProductsToVideo } from "@/lib/add-products-to-video";
 
 const MAX_NOTE_LENGTH = 2000;
 const MAX_NOTES = 20;
@@ -79,6 +80,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (body?.priority === true && item.video_id) {
       const { error: prioError } = await supabase.from("videos").update({ priority: true }).eq("id", item.video_id);
       if (prioError) warnings.push(`It was merged, but the item couldn't be marked priority: ${prioError.message}`);
+    }
+    // Products picked for this video join the target video's product list (same logic as everywhere else).
+    if (item.video_id) {
+      const products = await addProductsToVideo(item.video_id, body?.products_raw);
+      if (products?.error) warnings.push(`It was merged, but the products couldn't be added: ${products.error}`);
+      else if (products && products.failed.length > 0) warnings.push(`It was merged, but these product links couldn't be read: ${products.failed.join(", ")}`);
     }
     const { error: delError } = await supabase.from("repurpose_scraped_videos").delete().eq("id", id);
     if (delError) warnings.push(`It was merged, but couldn't be removed from the review pool: ${delError.message}`);

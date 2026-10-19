@@ -9,7 +9,7 @@ export async function GET() {
     const [channels, pool] = await Promise.all([
       supabase
         .from("repurpose_source_channels")
-        .select("id, platform, channel_username, channel_id, channel_name, avatar_url, status, error_details, last_checked_at, created_at")
+        .select("id, platform, channel_username, channel_id, channel_name, avatar_url, status, error_details, last_checked_at, created_at, product_sites")
         .order("created_at", { ascending: false }),
       supabase.from("repurpose_scraped_videos").select("source_channel_id").range(0, 9999),
     ]);

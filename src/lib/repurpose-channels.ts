@@ -13,6 +13,8 @@ export interface SourceChannel {
   error_details: string | null;
   last_checked_at: string | null;
   created_at: string;
+  /** The website(s) that list this channel's products (jsonb array of links). Usually one. */
+  product_sites: string[];
   /** Videos from this channel currently waiting in the review pool. */
   video_count: number;
 }
@@ -80,4 +82,22 @@ export function parseYoutubeChannelInput(input: unknown): ParsedChannel {
   const m = raw.match(HANDLE_RE);
   if (m) return { ok: true, channel_username: `@${m[1]}`, channel_id: null };
   return { ok: false, error: "That doesn't look like a YouTube @handle or channel link." };
+}
+
+/** Reads the product-website box: one or several links separated by new lines, commas or spaces. */
+export function parseSiteLinks(input: unknown): { ok: true; sites: string[] } | { ok: false; error: string } {
+  const raw = Array.isArray(input) ? input.join("\n") : typeof input === "string" ? input : "";
+  const parts = raw.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
+  const sites: string[] = [];
+  for (const part of parts) {
+    const withProto = /^https?:\/\//i.test(part) ? part : `https://${part}`;
+    try {
+      const u = new URL(withProto);
+      if (!u.hostname.includes(".")) throw new Error("bad host");
+      if (!sites.includes(u.toString())) sites.push(u.toString());
+    } catch {
+      return { ok: false, error: `"${part}" isn't a valid link.` };
+    }
+  }
+  return { ok: true, sites };
 }
