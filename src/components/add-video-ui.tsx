@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DIRECTION_VALUES, type DirectionChoice, type ScriptChoice } from "@/lib/video-options";
 
@@ -99,5 +101,27 @@ export function ScriptAndDirectionFields({
         </div>
       </Field>
     </>
+  );
+}
+
+/**
+ * The "Affiliate products" box is optional now: products are found automatically after the voice timing and
+ * confirmed on the Products page. The box stays available behind a click for when the ASINs are already known,
+ * and stays open whenever something has been typed into it.
+ */
+export function OptionalProducts({ hasValue, children }: { hasValue: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  if (open || hasValue) return <>{children}</>;
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-[var(--border)] text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--surface-raised)]"
+      >
+        <Plus className="w-3.5 h-3.5" /> Add affiliate products now (optional)
+      </button>
+      <p className="text-xs text-[var(--text-faint)] mt-1">Not needed - the products are found after the voice timing and you confirm them on the Products page.</p>
+    </div>
   );
 }

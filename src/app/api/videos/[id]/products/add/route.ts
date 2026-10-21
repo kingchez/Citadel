@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { extractAsin, splitProductInput, resolveShortAmazonLink, buildAmazonProductUrl } from "@/lib/amazon";
 import type { ProductEntry } from "@/lib/types";
+import { applyShopInfo, isProductStepOpen, lookupShopProducts, statusAfterProductChange } from "@/lib/product-items";
 
 /**
  * Adds one or more affiliate products from pasted URLs/ASINs (newline or
@@ -43,7 +44,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const supabase = getSupabaseAdmin();
-    const { data: video, error: fetchError } = await supabase.from("videos").select("product_ids").eq("id", id).single();
+    const { data: video, error: fetchError } = await supabase
+      .from("videos")
+      .select("product_ids, Products_Processing_Status")
+      .eq("id", id)
+      .single();
 
     if (fetchError) {
       return NextResponse.json({ error: fetchError.message }, { status: 500 });
@@ -60,14 +65,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       existingAsins.add(asin);
     }
 
-    const merged = [...existing, ...newEntries];
+    // Shop check for every NEW ASIN: already in the shop -> its data is attached and no new clip is ever made for it.
+    const shop = await lookupShopProducts(newEntries.map((p) => p.asin));
+    const checked = newEntries.map((p) => applyShopInfo(p, shop.get(p.asin)));
+    const merged = [...existing, ...checked];
 
-    const { data, error } = await supabase
-      .from("videos")
-      .update({ product_ids: merged, with_product: merged.length > 0 })
-      .eq("id", id)
-      .select()
-      .single();
+    // A new product must always return to the shop pass (check -> scrape -> WooCommerce) - unless this is a
+    // repurposed video still in its product step, where the pass has to wait for the clips.
+    const currentStatus: string | null = video?.Products_Processing_Status ?? null;
+    const nextStatus = statusAfterProductChange(currentStatus, checked.length > 0, merged, await isProductStepOpen(id));
+    const updates: Record<string, unknown> = { product_ids: merged, with_product: merged.length > 0 };
+    if (nextStatus !== currentStatus && nextStatus !== null) updates.Products_Processing_Status = nextStatus;
+
+    const { data, error } = await supabase.from("videos").update(updates).eq("id", id).select().single();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -76,6 +86,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({
       video: data,
       added: newEntries.length,
+      alreadyInShop: checked.filter((p) => p.clip === "exists" || p.clip === "done").length,
       skippedDuplicates: extractedAsins.length - newEntries.length,
       failed,
     });

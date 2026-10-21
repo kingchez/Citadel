@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExternalLink, Loader2, Plus, SkipForward, Trash2, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Choice, Field, PriorityField, ScriptAndDirectionFields } from "@/components/add-video-ui";
+import { Choice, Field, OptionalProducts, PriorityField, ScriptAndDirectionFields } from "@/components/add-video-ui";
 import type { DirectionChoice, ScriptChoice } from "@/lib/video-options";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ProductSearch, addAsins } from "@/components/product-search";
@@ -636,12 +636,14 @@ function ReviewCard({
 
         <PriorityField priority={priority} onChange={setPriority} />
 
+        <OptionalProducts hasValue={productsRaw.trim() !== ""}>
         <Field label="Affiliate products" hint={isMerge ? "Optional. Added to the item you merge into." : "Optional. Paste Amazon URLs or ASINs, one per line or comma separated - or use the search above."}>
           <div className="space-y-2">
             <ProductSearch channelId={video.source_channel_id} onAsins={(asins) => setProductsRaw((prev) => addAsins(prev, asins))} />
             <textarea className="input-field text-sm resize-none font-mono" rows={4} value={productsRaw} onChange={(e) => setProductsRaw(e.target.value)} placeholder="https://www.amazon.com/dp/B0XXXXXXXX" />
           </div>
         </Field>
+        </OptionalProducts>
 
         <Field label="Notes for the agent" hint={isMerge ? "Optional. Added to the notes the item you merge into already has." : "Optional. Anything the agent must know or do for this video - one instruction per box."}>
           <div className="space-y-2">

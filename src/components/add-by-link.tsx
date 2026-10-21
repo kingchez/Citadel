@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
-import { Choice, Field, PriorityField, ScriptAndDirectionFields } from "@/components/add-video-ui";
+import { Choice, Field, OptionalProducts, PriorityField, ScriptAndDirectionFields } from "@/components/add-video-ui";
 import type { DirectionChoice, ScriptChoice } from "@/lib/video-options";
 import { parseTimeToSeconds, formatSeconds } from "@/lib/repurpose-utils";
 import { classifyVideoUrl } from "@/lib/video-source";
@@ -287,6 +287,7 @@ export function AddByLink() {
 
             <PriorityField priority={priority} onChange={setPriority} />
 
+            <OptionalProducts hasValue={productsRaw.trim() !== ""}>
             <Field label="Affiliate products" hint="Optional. Paste Amazon URLs or ASINs, one per line or comma separated.">
               <textarea
                 className="input-field text-sm resize-none font-mono"
@@ -296,6 +297,7 @@ export function AddByLink() {
                 placeholder="https://www.amazon.com/dp/B0XXXXXXXX"
               />
             </Field>
+            </OptionalProducts>
 
             <Field
               label="Notes for the agent"

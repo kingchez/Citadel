@@ -40,6 +40,9 @@ export interface RepurposeRow {
   new_intro_original_url: RepurposeIntro | null;
   new_intro_start_seconds: number | null;
   notes: unknown;
+  /** Product step (Citadel Products page): null = not started, extracting = agent reading the transcript,
+   * review = waiting for King to confirm, confirmed = products + footage windows locked in. */
+  products_step?: "extracting" | "review" | "confirmed" | null;
   voice_timing: unknown;
   error_details: string | null;
   video_id: string | null;

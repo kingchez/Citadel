@@ -84,11 +84,26 @@ export interface MediaAssetEntry {
 
 export type RevisionStatus = "pending" | "resolved";
 
+/** Where a product's own video clip stands: pending = waiting to be cut, done = clip uploaded as ASIN.mp4,
+ * error = the cut failed (see clip_error), exists = the product is already in the shop (no new clip),
+ * none = deliberately no clip (the product is created without a video). */
+export type ProductClipStatus = "pending" | "done" | "error" | "exists" | "none";
+
 export interface ProductEntry {
   index: number;
   asin: string;
   source_url?: string;
   added_at: string;
+  /** The product's name as listed next to its ASIN (site listing / existing shop product). */
+  name?: string;
+  /** Footage window of this product: which video (repurpose source index) and seconds inside that video. */
+  video_index?: number | null;
+  start?: number | null;
+  end?: number | null;
+  clip?: ProductClipStatus;
+  clip_error?: string | null;
+  /** Set by the shop check: the WooCommerce post id when the product already exists, otherwise false. */
+  Exist?: string | number | false | null;
 }
 export interface RevisionEntry {
   id: string;
