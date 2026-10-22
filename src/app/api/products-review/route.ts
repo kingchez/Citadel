@@ -8,7 +8,7 @@ export async function GET() {
     const { data, error } = await getSupabaseAdmin()
       .from("repurpose_videos")
       .select(
-        "id, title, channel, status, products_step, products_step_at, sources, video_id, created_at, updated_at, video:videos!repurpose_videos_video_id_fkey(product_ids, Products_Processing_Status)"
+        "id, title, channel, status, products_step, sources, video_id, created_at, updated_at, video:videos!repurpose_videos_video_id_fkey(product_ids, Products_Processing_Status)"
       )
       .in("status", ["voice_timing_done", "handed_off"])
       .order("created_at", { ascending: false })
@@ -24,7 +24,6 @@ export async function GET() {
         channel: r.channel,
         status: r.status,
         products_step: r.products_step,
-        products_step_at: r.products_step_at,
         source_count: Array.isArray(r.sources) ? r.sources.length : 0,
         created_at: r.created_at,
         updated_at: r.updated_at,

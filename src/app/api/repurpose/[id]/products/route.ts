@@ -213,9 +213,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const step = action === "confirm" ? "confirmed" : "review";
+    // Once confirmed, the agent's proposals have done their job - clear them so nothing stale is left behind.
     const { error: stepError } = await supabase
       .from("repurpose_videos")
-      .update({ products_step: step, products_step_at: new Date().toISOString() })
+      .update(action === "confirm" ? { products_step: step, product_candidates: null } : { products_step: step })
       .eq("id", id);
     if (stepError) return NextResponse.json({ error: `Products saved, but the step could not be updated: ${stepError.message}. Press the button again.` }, { status: 500 });
 

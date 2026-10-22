@@ -9,7 +9,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from("repurpose_videos")
-      .update({ products_step: null, products_step_at: null, product_candidates: null })
+      .update({ products_step: null, product_candidates: null })
       .eq("id", id)
       .eq("status", "voice_timing_done")
       .select("id")
