@@ -169,6 +169,12 @@ export async function POST(request: NextRequest) {
       if (prioError) warnings.push(`It was added, but couldn't be marked priority: ${prioError.message}`);
     }
     if (scrapedVideoId) {
+      // Remember which source channel this came from (its product site(s) are read when the products are searched).
+      const { data: pooledRow } = await supabase.from("repurpose_scraped_videos").select("source_channel_id").eq("id", scrapedVideoId).maybeSingle();
+      if (pooledRow?.source_channel_id) {
+        const { error: chError } = await supabase.from("repurpose_videos").update({ source_channel_id: pooledRow.source_channel_id }).eq("id", created?.repurpose_id);
+        if (chError) warnings.push(`It was added, but its source channel couldn't be saved (the product search will read every channel's site): ${chError.message}`);
+      }
       const { error: delError } = await supabase.from("repurpose_scraped_videos").delete().eq("id", scrapedVideoId);
       if (delError) warnings.push(`It was added, but couldn't be removed from the review pool: ${delError.message}`);
     }
