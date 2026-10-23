@@ -90,3 +90,18 @@ export function statusAfterProductChange(
   if (hadNewProducts) return "pending"; // a new product must always be seen by the shop pass
   return current;
 }
+
+/**
+ * A repurposed video whose products were already confirmed, and then gets a NEW product that still needs its
+ * footage window (not already in the shop, not already cut), goes back to the Products page: the product step is
+ * reopened (review) so the shop pass waits for that product's clip instead of creating it without a video.
+ * Returns true when the step was reopened.
+ */
+export async function reopenStepIfNeeded(videoId: string, newItems: ProductEntry[]): Promise<boolean> {
+  if (!newItems.some((p) => !p.clip)) return false;
+  const supabase = getSupabaseAdmin();
+  const { data } = await supabase.from("repurpose_videos").select("id, products_step").eq("video_id", videoId).maybeSingle();
+  if (!data || data.products_step !== "confirmed") return false;
+  const { error } = await supabase.from("repurpose_videos").update({ products_step: "review" }).eq("id", data.id);
+  return !error;
+}

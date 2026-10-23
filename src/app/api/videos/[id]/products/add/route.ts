@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { extractAsin, splitProductInput, resolveShortAmazonLink, buildAmazonProductUrl } from "@/lib/amazon";
 import type { ProductEntry } from "@/lib/types";
-import { applyShopInfo, isProductStepOpen, lookupShopProducts, statusAfterProductChange } from "@/lib/product-items";
+import { applyShopInfo, isProductStepOpen, lookupShopProducts, reopenStepIfNeeded, statusAfterProductChange } from "@/lib/product-items";
 
 /**
  * Adds one or more affiliate products from pasted URLs/ASINs (newline or
@@ -73,7 +73,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // A new product must always return to the shop pass (check -> scrape -> WooCommerce) - unless this is a
     // repurposed video still in its product step, where the pass has to wait for the clips.
     const currentStatus: string | null = video?.Products_Processing_Status ?? null;
-    const nextStatus = statusAfterProductChange(currentStatus, checked.length > 0, merged, await isProductStepOpen(id));
+    const reopened = await reopenStepIfNeeded(id, checked);
+    const nextStatus = statusAfterProductChange(currentStatus, checked.length > 0, merged, reopened || (await isProductStepOpen(id)));
     const updates: Record<string, unknown> = { product_ids: merged, with_product: merged.length > 0 };
     if (nextStatus !== currentStatus && nextStatus !== null) updates.Products_Processing_Status = nextStatus;
 

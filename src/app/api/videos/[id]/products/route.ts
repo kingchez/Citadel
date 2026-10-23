@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import type { ProductEntry } from "@/lib/types";
 import { buildAmazonProductUrl } from "@/lib/amazon";
-import { applyShopInfo, isProductStepOpen, lookupShopProducts, statusAfterProductChange } from "@/lib/product-items";
+import { applyShopInfo, isProductStepOpen, lookupShopProducts, reopenStepIfNeeded, statusAfterProductChange } from "@/lib/product-items";
 
 /**
  * Replaces the whole product list - covers editing an ASIN in place,
@@ -70,7 +70,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       if (!storedByAsin.has(cleaned[i].asin)) cleaned[i] = applyShopInfo(cleaned[i], shop.get(cleaned[i].asin));
     }
     const currentStatus: string | null = current?.Products_Processing_Status ?? null;
-    const nextStatus = statusAfterProductChange(currentStatus, fresh.length > 0, cleaned, await isProductStepOpen(id));
+    const freshChecked = cleaned.filter((p) => !storedByAsin.has(p.asin));
+    const reopened = await reopenStepIfNeeded(id, freshChecked);
+    const nextStatus = statusAfterProductChange(currentStatus, fresh.length > 0, cleaned, reopened || (await isProductStepOpen(id)));
 
     const updates: Record<string, unknown> = { product_ids: cleaned, with_product: cleaned.length > 0 };
     if (nextStatus !== currentStatus && nextStatus !== null) updates.Products_Processing_Status = nextStatus;
