@@ -398,6 +398,10 @@ export function ProductEditor({ id, onChanged }: { id: string; onChanged: () => 
                       <a href={buildAmazonProductUrl(extractAsin(r.asin) as string)} target="_blank" rel="noopener noreferrer" title="Open this product on Amazon (new tab)" className="flex-shrink-0 p-1.5 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--color-purple)] hover:bg-[var(--surface-raised)]">
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
+                    ) : r.name.trim() ? (
+                      <a href={`https://www.amazon.com/s?k=${encodeURIComponent(r.name.trim())}`} target="_blank" rel="noopener noreferrer" title="Search Amazon for this product (new tab)" className="flex-shrink-0 p-1.5 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--color-purple)] hover:bg-[var(--surface-raised)]">
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
                     ) : null}
                   </div>
                 </div>
@@ -483,7 +487,7 @@ export function ProductEditor({ id, onChanged }: { id: string; onChanged: () => 
             {busy === "save" ? "Saving…" : "Save draft"}
           </button>
         )}
-        {detail.status === "voice_timing_done" && detail.products_step !== "extracting" && (
+        {(detail.status === "voice_timing_done" || detail.status === "handed_off") && detail.products_step !== "extracting" && (
           <button type="button" disabled={busy !== null || dirty} onClick={() => void extractAgain()} title={dirty ? "Save your changes first" : undefined} className="ml-auto px-3 py-2 rounded-lg border border-[var(--border)] text-xs text-[var(--text-muted)] hover:bg-[var(--surface-raised)] disabled:opacity-50">
             {busy === "extract" ? "Starting…" : "Find products again"}
           </button>

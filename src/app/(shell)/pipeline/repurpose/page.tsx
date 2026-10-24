@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ChevronRight, Film, Loader2, Pause, Pencil, Play, Plus, Repeat, RotateCcw, Tag, Trash2 } from "lucide-react";
+import { AlertTriangle, ChevronRight, Film, Loader2, PackageCheck, Pause, Pencil, Play, Plus, Repeat, RotateCcw, Tag, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { RepurposeStatusBadge } from "@/components/repurpose-status-badge";
 import { cn, formatTimeAgo } from "@/lib/utils";
@@ -271,6 +271,25 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
         </Link>
       ) : (
         <div className={TOP_CLASS}>{top}</div>
+      )}
+
+      {/* After voice timing: the products step lives on its own page. */}
+      {(item.status === "voice_timing_done" || item.status === "handed_off") && (
+        <Link
+          href={`/pipeline/products/${item.id}`}
+          className={cn(
+            "flex items-center gap-2 border-t border-[var(--border)] px-5 py-2.5 text-xs font-medium hover:bg-[var(--surface-raised)]",
+            item.products_step === "confirmed" ? "text-[var(--text-muted)]" : "text-[var(--color-purple)]"
+          )}
+        >
+          <PackageCheck className="w-3.5 h-3.5" />
+          {item.products_step === "confirmed"
+            ? "Products confirmed - view"
+            : item.products_step === "extracting"
+              ? "Finding the products in this video…"
+              : "Products: check them and add the Amazon links"}
+          <ChevronRight className="w-3.5 h-3.5 ml-auto" />
+        </Link>
       )}
 
       {/* One line per video: its own progress, so a failed one is easy to spot. */}

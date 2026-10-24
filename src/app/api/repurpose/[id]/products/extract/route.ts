@@ -11,11 +11,11 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       .from("repurpose_videos")
       .update({ products_step: null, product_candidates: null })
       .eq("id", id)
-      .eq("status", "voice_timing_done")
+      .in("status", ["voice_timing_done", "handed_off"])
       .select("id")
       .maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    if (!data) return NextResponse.json({ error: "Only an item at \"voice timing done\" can search again." }, { status: 409 });
+    if (!data) return NextResponse.json({ error: "Only an item at \"voice timing done\" or already handed off can search again." }, { status: 409 });
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
