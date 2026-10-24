@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Check, Film, Loader2, Play, Plus, RefreshCw, RotateCcw, SkipForward, Trash2 } from "lucide-react";
+import { AlertTriangle, Check, ExternalLink, Film, Loader2, Play, Plus, RefreshCw, RotateCcw, SkipForward, Trash2 } from "lucide-react";
+import { buildAmazonProductUrl, extractAsin } from "@/lib/amazon";
 import { cn } from "@/lib/utils";
 import { formatSeconds, parseTimeToSeconds } from "@/lib/repurpose-utils";
 import type { ProductClipStatus, ProductEntry } from "@/lib/types";
@@ -126,6 +127,7 @@ export function ProductEditor({ id, onChanged }: { id: string; onChanged: () => 
   const [activeVideo, setActiveVideo] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const stopAt = useRef<number | null>(null);
+  const [playing, setPlaying] = useState<string | null>(null);
   const dirtyRef = useRef(false);
   const markDirty = (v: boolean) => {
     dirtyRef.current = v;
@@ -161,6 +163,25 @@ export function ProductEditor({ id, onChanged }: { id: string; onChanged: () => 
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...p } : r)));
     markDirty(true);
   };
+  // Neighbouring products in one video usually touch (the narration goes straight from one product to the next),
+  // so a shared cut point moves with both: change one product's end and the next product's start follows, and back.
+  const patchTime = (key: string, field: "start" | "end", value: string) => {
+    setRows((rs) => {
+      const me = rs.find((r) => r.key === key);
+      if (!me) return rs;
+      const oldSec = parseTimeToSeconds(me[field]);
+      const newSec = parseTimeToSeconds(value);
+      return rs.map((r) => {
+        if (r.key === key) return { ...r, [field]: value };
+        if (oldSec === null || newSec === null || r.videoIndex !== me.videoIndex || r.clip === "done" || r.clip === "exists") return r;
+        const other = field === "end" ? "start" : "end";
+        const otherSec = parseTimeToSeconds(r[other]);
+        if (otherSec !== null && Math.abs(otherSec - oldSec) < 0.05) return { ...r, [other]: formatSeconds(newSec) };
+        return r;
+      });
+    });
+    markDirty(true);
+  };
   const remove = (key: string) => {
     setRows((rs) => rs.filter((r) => r.key !== key));
     markDirty(true);
@@ -180,7 +201,7 @@ export function ProductEditor({ id, onChanged }: { id: string; onChanged: () => 
       return setNotice(`Player switched to video ${row.videoIndex + 1} - find the moment, then press the button again.`);
     }
     if (!v) return;
-    patch(row.key, { [field]: formatSeconds(Math.round(v.currentTime * 10) / 10) } as Partial<EditRow>);
+    patchTime(row.key, field, formatSeconds(Math.round(v.currentTime * 10) / 10));
     setNotice(null);
   };
   const playWindow = (row: EditRow) => {
@@ -195,6 +216,7 @@ export function ProductEditor({ id, onChanged }: { id: string; onChanged: () => 
     if (!v) return;
     v.currentTime = s;
     stopAt.current = e;
+    setPlaying(`${row.name || row.asin || "Product"}: ${formatSeconds(s)} to ${e !== null ? formatSeconds(e) : "…"}`);
     void v.play();
   };
 
@@ -276,18 +298,11 @@ export function ProductEditor({ id, onChanged }: { id: string; onChanged: () => 
   const noSound = detail.timing.length === 0 || detail.timing.every((t) => t.segments.length === 0);
 
   return (
-    <div className="border-t border-[var(--border)] bg-[var(--surface-raised)]/40 px-4 sm:px-5 py-4 space-y-4">
-      {detail.products_step === "extracting" && (
-        <p className="text-xs text-[var(--text-muted)] flex items-center gap-2">
-          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Reading the transcript and searching the site for the products… they appear here when ready. You can also add them by hand below.
-        </p>
-      )}
-      {noSound && detail.products_step !== "extracting" && (
-        <p className="text-xs text-[var(--text-muted)]">No speech was found in these videos, so nothing could be read automatically - add each product by hand with its video and start/end time.</p>
-      )}
-
-      {/* player */}
-      <div className="space-y-2">
+    <div className="space-y-4">
+      <h1 className="text-lg font-semibold text-[var(--text)] truncate">{detail.title}</h1>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] items-start">
+      {/* player (stays in view while you work through the products) */}
+      <div className="space-y-2 lg:sticky lg:top-4">
         <div className="flex flex-wrap items-center gap-2">
           <Film className="w-3.5 h-3.5 text-[var(--text-faint)]" />
           {detail.sources.map((s) => (
@@ -308,22 +323,37 @@ export function ProductEditor({ id, onChanged }: { id: string; onChanged: () => 
             src={source.url}
             controls
             preload="metadata"
-            className="w-full max-h-[340px] rounded-lg bg-black"
+            className="w-full max-h-[70vh] rounded-lg bg-black"
             onTimeUpdate={(e) => {
               if (stopAt.current !== null && e.currentTarget.currentTime >= stopAt.current) {
                 e.currentTarget.pause();
                 stopAt.current = null;
+                setPlaying(null);
               }
             }}
           />
         ) : (
           <p className="text-xs text-[var(--text-faint)]">This video has no playable link yet.</p>
         )}
+        {playing && <p className="text-xs font-medium text-[var(--text)]">Playing {playing}</p>}
         {notice && <p className="text-xs text-[var(--color-purple)]">{notice}</p>}
       </div>
 
       {/* products */}
-      <div className="space-y-3">
+      <div className="space-y-4">
+      {detail.products_step === "extracting" && (
+        <p className="text-xs text-[var(--text-muted)] flex items-center gap-2">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Reading the transcript and searching the site for the products… they appear here when ready. You can also add them by hand below.
+        </p>
+      )}
+      {noSound && detail.products_step !== "extracting" && (
+        <p className="text-xs text-[var(--text-muted)]">No speech was found in these videos, so nothing could be read automatically - add each product by hand with its video and start/end time.</p>
+      )}
+
+
+        <p className="text-[11px] text-[var(--text-faint)]">Products that follow each other share one cut point - change one end or start and its neighbour moves with it.</p>
+
+        <div className="space-y-3">
         {rows.length === 0 && <p className="text-xs text-[var(--text-faint)]">No products yet.</p>}
         {rows.map((r, i) => {
           const done = r.clip === "done" && !r.recut;
@@ -362,7 +392,14 @@ export function ProductEditor({ id, onChanged }: { id: string; onChanged: () => 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <label className="text-[10px] uppercase tracking-wide text-[var(--text-faint)]">ASIN or Amazon link</label>
-                  <input className={INPUT} value={r.asin} disabled={done || exists} onChange={(e) => patch(r.key, { asin: e.target.value })} placeholder="B0XXXXXXXX" />
+                  <div className="flex items-center gap-1.5">
+                    <input className={INPUT} value={r.asin} disabled={done || exists} onChange={(e) => patch(r.key, { asin: e.target.value })} placeholder="B0XXXXXXXX" />
+                    {extractAsin(r.asin) ? (
+                      <a href={buildAmazonProductUrl(extractAsin(r.asin) as string)} target="_blank" rel="noopener noreferrer" title="Open this product on Amazon (new tab)" className="flex-shrink-0 p-1.5 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--color-purple)] hover:bg-[var(--surface-raised)]">
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    ) : null}
+                  </div>
                 </div>
                 <div>
                   <label className="text-[10px] uppercase tracking-wide text-[var(--text-faint)]">Product name (used as the shop title)</label>
@@ -382,12 +419,12 @@ export function ProductEditor({ id, onChanged }: { id: string; onChanged: () => 
                 </div>
                 <div>
                   <label className="text-[10px] uppercase tracking-wide text-[var(--text-faint)]">Starts at</label>
-                  <input className={INPUT} disabled={done} value={r.start} onChange={(e) => patch(r.key, { start: e.target.value })} placeholder="0:00" />
+                  <input className={INPUT} disabled={done} value={r.start} onChange={(e) => patchTime(r.key, "start", e.target.value)} placeholder="0:00" />
                   {!done && <button type="button" onClick={() => grab(r, "start")} className="mt-1 text-[10px] text-[var(--color-purple)] hover:underline">use player time</button>}
                 </div>
                 <div>
                   <label className="text-[10px] uppercase tracking-wide text-[var(--text-faint)]">Ends at</label>
-                  <input className={INPUT} disabled={done} value={r.end} onChange={(e) => patch(r.key, { end: e.target.value })} placeholder="0:30" />
+                  <input className={INPUT} disabled={done} value={r.end} onChange={(e) => patchTime(r.key, "end", e.target.value)} placeholder="0:30" />
                   {!done && <button type="button" onClick={() => grab(r, "end")} className="mt-1 text-[10px] text-[var(--color-purple)] hover:underline">use player time</button>}
                 </div>
                 <button type="button" onClick={() => playWindow(r)} className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg border border-[var(--border)] text-xs text-[var(--text-muted)] hover:bg-[var(--surface-raised)]">
@@ -451,6 +488,8 @@ export function ProductEditor({ id, onChanged }: { id: string; onChanged: () => 
             {busy === "extract" ? "Starting…" : "Find products again"}
           </button>
         )}
+      </div>
+      </div>
       </div>
     </div>
   );
