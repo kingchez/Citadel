@@ -46,6 +46,8 @@ interface EditRow {
   clipError?: string | null;
   matches: Match[];
   reason?: string;
+  /** Shown under the row, e.g. which heard product an ASIN was paired with. */
+  note?: string;
 }
 
 const CLIP_CHIP: Record<ProductClipStatus, { label: string; cls: string }> = {
@@ -74,6 +76,25 @@ function toRows(d: Detail): EditRow[] {
     clipError: p.clip_error,
     matches: [],
   }));
+  // Products that already had ASINs (typed at insert, in the order they appear in the video) but no footage window yet:
+  // when the agent found exactly as many products as there are ASINs, pair them by order - the ASIN comes from the
+  // list, the name and start/end from what the agent heard. Anything else is left for you to line up by hand.
+  const unplaced = rows.filter((r) => r.videoIndex === null && !r.start && !r.end);
+  const pool = d.candidates;
+  if (unplaced.length > 0 && unplaced.length === rows.length && unplaced.length === pool.length) {
+    unplaced.forEach((r, k) => {
+      const c = pool[k];
+      const matches = (c.matches ?? []).filter((m) => m && m.asin);
+      const confirmed = matches.find((m) => m.asin.toUpperCase() === r.asin.toUpperCase());
+      r.videoIndex = c.video_index;
+      r.start = typeof c.start === "number" ? formatSeconds(c.start) : "";
+      r.end = typeof c.end === "number" ? formatSeconds(c.end) : "";
+      if (!r.name) r.name = confirmed?.title ?? c.name;
+      r.matches = matches;
+      r.note = confirmed ? `Paired by order with "${c.name}" - the site confirms this ASIN.` : `Paired by order with "${c.name}" - check it is the right product.`;
+    });
+    return rows.sort((a, b) => (a.videoIndex ?? 99) - (b.videoIndex ?? 99) || (parseTimeToSeconds(a.start) ?? 0) - (parseTimeToSeconds(b.start) ?? 0));
+  }
   const have = new Set(rows.map((r) => r.asin));
   for (const c of d.candidates) {
     const matches = (c.matches ?? []).filter((m) => m && m.asin);
@@ -375,6 +396,7 @@ export function ProductEditor({ id, onChanged }: { id: string; onChanged: () => 
               </div>
 
               {hint && <p className="text-[11px] italic text-[var(--text-faint)] line-clamp-2">“{hint}”</p>}
+              {r.note && <p className="text-[11px] text-[var(--text-muted)]">{r.note}</p>}
 
               <div className="flex items-center gap-3 flex-wrap text-xs text-[var(--text-muted)]">
                 {!done && !exists && (
