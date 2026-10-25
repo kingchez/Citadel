@@ -63,6 +63,15 @@ let keySeq = 0;
 const nextKey = () => `r${++keySeq}`;
 const INPUT = "w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--text)] disabled:opacity-50";
 
+/** A video with a single product does not need a clip by default (the video IS that product): King can still tick it back on. */
+function withSingleDefault(rows: EditRow[]): EditRow[] {
+  if (rows.length === 1 && !rows[0].clip) {
+    rows[0].noClip = true;
+    rows[0].note = rows[0].note ?? 'Only one product in this video, so no clip by default - untick "No clip" if you want one.';
+  }
+  return rows;
+}
+
 function toRows(d: Detail): EditRow[] {
   const rows: EditRow[] = d.items.map((p) => ({
     key: nextKey(),
@@ -94,7 +103,7 @@ function toRows(d: Detail): EditRow[] {
       r.matches = matches;
       r.note = confirmed ? `Paired by order with "${c.name}" - the site confirms this ASIN.` : `Paired by order with "${c.name}" - check it is the right product.`;
     });
-    return rows.sort((a, b) => (a.videoIndex ?? 99) - (b.videoIndex ?? 99) || (parseTimeToSeconds(a.start) ?? 0) - (parseTimeToSeconds(b.start) ?? 0));
+    return withSingleDefault(rows.sort((a, b) => (a.videoIndex ?? 99) - (b.videoIndex ?? 99) || (parseTimeToSeconds(a.start) ?? 0) - (parseTimeToSeconds(b.start) ?? 0)));
   }
   const have = new Set(rows.map((r) => r.asin));
   for (const c of d.candidates) {
@@ -114,7 +123,7 @@ function toRows(d: Detail): EditRow[] {
       reason: c.reason,
     });
   }
-  return rows.sort((a, b) => (a.videoIndex ?? 99) - (b.videoIndex ?? 99) || (parseTimeToSeconds(a.start) ?? 0) - (parseTimeToSeconds(b.start) ?? 0));
+  return withSingleDefault(rows.sort((a, b) => (a.videoIndex ?? 99) - (b.videoIndex ?? 99) || (parseTimeToSeconds(a.start) ?? 0) - (parseTimeToSeconds(b.start) ?? 0)));
 }
 
 export function ProductEditor({ id, onChanged }: { id: string; onChanged: () => void }) {
@@ -482,6 +491,11 @@ export function ProductEditor({ id, onChanged }: { id: string; onChanged: () => 
           {busy === "confirm" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
           {detail.products_step === "confirmed" ? "Save changes" : "Confirm products & start clips"}
         </button>
+        {detail.products_step !== "confirmed" && rows.length > 1 && (
+          <button type="button" disabled={busy !== null} onClick={() => { setRows((rs) => rs.map((r) => (r.clip ? r : { ...r, noClip: true }))); markDirty(true); }} className="px-3.5 py-2 rounded-lg border border-[var(--border)] text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--surface-raised)] disabled:opacity-50">
+            No clips for this video
+          </button>
+        )}
         {detail.products_step !== "confirmed" && (
           <button type="button" disabled={busy !== null} onClick={() => void submit("save")} className="px-3.5 py-2 rounded-lg border border-[var(--border)] text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--surface-raised)] disabled:opacity-50">
             {busy === "save" ? "Saving…" : "Save draft"}

@@ -10,6 +10,7 @@ export async function GET() {
       .select(
         "id, title, channel, status, products_step, sources, video_id, created_at, updated_at, video:videos!repurpose_videos_video_id_fkey(product_ids, Products_Processing_Status)"
       )
+      .eq("channel", "Viral Shop")
       .in("status", ["voice_timing_done", "handed_off"])
       .order("created_at", { ascending: false })
       .limit(60);

@@ -274,7 +274,7 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
       )}
 
       {/* After voice timing: the products step lives on its own page. */}
-      {(item.status === "voice_timing_done" || item.status === "handed_off") && (
+      {item.channel === "Viral Shop" && (item.status === "voice_timing_done" || item.status === "handed_off") && (
         <Link
           href={`/pipeline/products/${item.id}`}
           className={cn(

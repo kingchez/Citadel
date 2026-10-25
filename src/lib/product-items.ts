@@ -59,13 +59,17 @@ export function applyShopInfo(entry: ProductEntry, info: ShopProductInfo | undef
  * because the product clips don't exist yet. Videos that are not repurposed are never gated.
  * (A repurpose row that was already handed off before this feature existed is not gated either.)
  */
+/** Only repurposed Viral Shop videos go through the products step (clips + Products page). Every other video simply
+ * gets the shop check and goes to WooCommerce, without clips. */
+export const PRODUCT_STEP_CHANNEL = "Viral Shop";
+
 export async function isProductStepOpen(videoId: string): Promise<boolean> {
   const { data } = await getSupabaseAdmin()
     .from("repurpose_videos")
-    .select("status, products_step")
+    .select("status, products_step, channel")
     .eq("video_id", videoId)
     .maybeSingle();
-  if (!data) return false;
+  if (!data || data.channel !== PRODUCT_STEP_CHANNEL) return false;
   if (data.products_step === "confirmed") return false;
   if (data.products_step == null && data.status === "handed_off") return false;
   return data.status !== "cancelled";
@@ -100,8 +104,8 @@ export function statusAfterProductChange(
 export async function reopenStepIfNeeded(videoId: string, newItems: ProductEntry[]): Promise<boolean> {
   if (!newItems.some((p) => !p.clip)) return false;
   const supabase = getSupabaseAdmin();
-  const { data } = await supabase.from("repurpose_videos").select("id, products_step").eq("video_id", videoId).maybeSingle();
-  if (!data || data.products_step !== "confirmed") return false;
+  const { data } = await supabase.from("repurpose_videos").select("id, products_step, channel").eq("video_id", videoId).maybeSingle();
+  if (!data || data.channel !== PRODUCT_STEP_CHANNEL || data.products_step !== "confirmed") return false;
   const { error } = await supabase.from("repurpose_videos").update({ products_step: "review" }).eq("id", data.id);
   return !error;
 }
