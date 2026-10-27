@@ -9,6 +9,7 @@ import { SegmentRow, AudioPlayerBar } from "@/components/segment-row";
 import { VideoOutputModal } from "@/components/video-output-modal";
 import { MediaAssetCard } from "@/components/media-asset-card";
 import { AffiliateProductsTab } from "@/components/affiliate-products-tab";
+import { ClipProductsSection } from "@/components/clip-products-section";
 import { VideoNotesTab } from "@/components/video-notes-tab";
 import { parseVideoNotes } from "@/lib/video-notes";
 import { ScriptEditor } from "@/components/script-editor";
@@ -629,6 +630,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
           onUpdated={loadVideo}
         />
       )}
+      {activeTab === "products" && <ClipProductsSection videoId={video.id} />}
 
       {activeTab === "notes" && <VideoNotesTab videoId={video.id} notes={video.notes} onUpdated={loadVideo} />}
 

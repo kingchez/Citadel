@@ -10,6 +10,7 @@ interface ReviewItem {
   id: string;
   title: string;
   status: string;
+  kind: "repurpose" | "clip_job";
   products_step: "extracting" | "review" | "confirmed" | null;
   source_count: number;
   updated_at: string;
@@ -25,7 +26,11 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "done", label: "Done" },
 ];
 
+const READY_STATUSES = ["voice_timing_done", "handed_off"];
+
 function groupOf(i: ReviewItem): Tab {
+  // A clip job still downloading / splitting / reading the voice is "in progress" until its products can be reviewed.
+  if (i.kind === "clip_job" && !READY_STATUSES.includes(i.status)) return "working";
   if (i.products_step !== "confirmed") return "review";
   const clipsOpen = i.products.some((p) => p.clip === "pending" || p.clip === "error");
   const shopOpen = i.shop_status === "awaiting_clips" || i.shop_status === "pending" || i.shop_status === "processed";
@@ -73,8 +78,8 @@ export default function ProductsPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-5">
       <div>
-        <h1 className="text-lg font-semibold text-[var(--text)] flex items-center gap-2"><PackageCheck className="w-5 h-5" /> Products</h1>
-        <p className="text-xs text-[var(--text-faint)] mt-1">Products for repurposed videos. Open one to check each product, its ASIN and where it starts and ends, then confirm. Each new product gets its own video clip.</p>
+        <h1 className="text-lg font-semibold text-[var(--text)] flex items-center gap-2"><PackageCheck className="w-5 h-5" /> Product Clips</h1>
+        <p className="text-xs text-[var(--text-faint)] mt-1">Product clips for repurposed Viral Shop videos and for videos you started a clip job on. Open one to check each product, its ASIN and where it starts and ends, then confirm. Each new product gets its own video clip.</p>
       </div>
 
       <div className="flex flex-wrap gap-1 border-b border-[var(--border)]">
@@ -101,9 +106,12 @@ export default function ProductsPage() {
         {list.map((i) => (
           <Link key={i.id} href={`/pipeline/products/${i.id}`} className="flex items-center gap-3 px-4 sm:px-5 py-3.5 rounded-xl bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--surface-raised)]/60">
             <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-semibold text-[var(--text)] truncate">{i.title}</h3>
+              <h3 className="text-sm font-semibold text-[var(--text)] truncate">
+                {i.title}
+                {i.kind === "clip_job" && <span className="ml-2 px-1.5 py-0.5 rounded border border-[var(--border)] text-[10px] font-medium text-[var(--text-muted)] align-middle">Clip job</span>}
+              </h3>
               <p className="text-xs text-[var(--text-faint)] mt-0.5">
-                {i.products_step === "extracting" ? "Reading the transcript…" : summary(i)} · {i.source_count} video{i.source_count === 1 ? "" : "s"} · {formatTimeAgo(i.updated_at)}
+                {i.kind === "clip_job" && !READY_STATUSES.includes(i.status) ? "Getting the video ready (download, split, voice timing)…" : i.products_step === "extracting" ? "Reading the transcript…" : summary(i)} · {i.source_count} video{i.source_count === 1 ? "" : "s"} · {formatTimeAgo(i.updated_at)}
               </p>
             </div>
             <ChevronRight className="w-4 h-4 text-[var(--text-faint)]" />

@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
 import type { ProductEntry } from "@/lib/types";
+import { isClipJob } from "@/lib/repurpose-utils";
 
 /**
  * Shared rules for the product list on a videos row (videos.product_ids), used by every place that changes it:
@@ -59,20 +60,25 @@ export function applyShopInfo(entry: ProductEntry, info: ShopProductInfo | undef
  * because the product clips don't exist yet. Videos that are not repurposed are never gated.
  * (A repurpose row that was already handed off before this feature existed is not gated either.)
  */
-/** Only repurposed Viral Shop videos go through the products step (clips + Products page). Every other video simply
- * gets the shop check and goes to WooCommerce, without clips. */
+/** Only repurposed Viral Shop videos, and videos King started a clip job for, go through the products step (clips + Product
+ * Clips page). Every other video simply gets the shop check and goes to WooCommerce, without clips. */
 export const PRODUCT_STEP_CHANNEL = "Viral Shop";
 
 export async function isProductStepOpen(videoId: string): Promise<boolean> {
   const { data } = await getSupabaseAdmin()
     .from("repurpose_videos")
-    .select("status, products_step, channel")
+    .select("status, products_step, channel, notes")
     .eq("video_id", videoId)
+    .neq("status", "cancelled")
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
-  if (!data || data.channel !== PRODUCT_STEP_CHANNEL) return false;
+  if (!data) return false;
+  const clipJob = isClipJob(data.notes);
+  if (!clipJob && data.channel !== PRODUCT_STEP_CHANNEL) return false;
   if (data.products_step === "confirmed") return false;
-  if (data.products_step == null && data.status === "handed_off") return false;
-  return data.status !== "cancelled";
+  if (!clipJob && data.products_step == null && data.status === "handed_off") return false;
+  return true;
 }
 
 /**
@@ -104,8 +110,15 @@ export function statusAfterProductChange(
 export async function reopenStepIfNeeded(videoId: string, newItems: ProductEntry[]): Promise<boolean> {
   if (!newItems.some((p) => !p.clip)) return false;
   const supabase = getSupabaseAdmin();
-  const { data } = await supabase.from("repurpose_videos").select("id, products_step, channel").eq("video_id", videoId).maybeSingle();
-  if (!data || data.channel !== PRODUCT_STEP_CHANNEL || data.products_step !== "confirmed") return false;
+  const { data } = await supabase
+    .from("repurpose_videos")
+    .select("id, products_step, channel, notes")
+    .eq("video_id", videoId)
+    .neq("status", "cancelled")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data || (data.channel !== PRODUCT_STEP_CHANNEL && !isClipJob(data.notes)) || data.products_step !== "confirmed") return false;
   const { error } = await supabase.from("repurpose_videos").update({ products_step: "review" }).eq("id", data.id);
   return !error;
 }

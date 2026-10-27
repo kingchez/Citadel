@@ -6,7 +6,7 @@ import { AlertTriangle, ChevronRight, Film, Loader2, PackageCheck, Pause, Pencil
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { RepurposeStatusBadge } from "@/components/repurpose-status-badge";
 import { cn, formatTimeAgo } from "@/lib/utils";
-import { formatSeconds, parseTimeToSeconds } from "@/lib/repurpose-utils";
+import { formatSeconds, isClipJob, parseTimeToSeconds } from "@/lib/repurpose-utils";
 import { sourceStage, introStage, type RepurposeSource, type SourceState } from "@/lib/repurpose-sources";
 import { REPURPOSE_ERROR_STATUSES, type RepurposeRow, type RepurposeStatus } from "@/lib/repurpose-types";
 
@@ -254,6 +254,7 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
           </button>
         )}
         <RepurposeStatusBadge status={item.status} />
+        {isClipJob(item.notes) && <span className="px-1.5 py-0.5 rounded border border-[var(--border)] text-[10px] font-medium text-[var(--text-muted)]">Clip job</span>}
       </div>
       <div className="flex items-center gap-2 flex-shrink-0 max-sm:ml-auto">
         <span className="text-xs text-[var(--text-faint)]">{formatTimeAgo(item.updated_at)}</span>
@@ -274,7 +275,7 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
       )}
 
       {/* After voice timing: the products step lives on its own page. */}
-      {item.channel === "Viral Shop" && (item.status === "voice_timing_done" || item.status === "handed_off") && (
+      {(item.channel === "Viral Shop" || isClipJob(item.notes)) && (item.status === "voice_timing_done" || item.status === "handed_off") && (
         <Link
           href={`/pipeline/products/${item.id}`}
           className={cn(

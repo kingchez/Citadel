@@ -53,7 +53,7 @@ const PROJECTS: ProjectDef[] = [
       { label: "Done", href: "/pipeline/videos?view=done", icon: CheckCircle, countKey: "video.done" },
       { label: "Add Video", href: "/pipeline/new", icon: Plus },
       { label: "Repurpose Queue", href: "/pipeline/repurpose", icon: Repeat, countKey: "repurpose.active" },
-      { label: "Products", href: "/pipeline/products", icon: PackageCheck },
+      { label: "Product Clips", href: "/pipeline/products", icon: PackageCheck },
     ],
   },
   {

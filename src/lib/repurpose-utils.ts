@@ -40,3 +40,10 @@ export function formatSeconds(seconds: number): string {
 export function isDriveFolderUrl(url: string): boolean {
   return /\/drive\/(u\/\d+\/)?folders\//.test(url) || /\/folders\/[a-zA-Z0-9_-]+/.test(url);
 }
+
+/** A "clip job" is a repurpose row made only to cut product clips out of a video for an existing, non-repurposed video:
+ * it uses the same download / split / voice-timing flows, never goes to the planning agent, and is deleted (with its
+ * temporary files) once the clips are done. */
+export function isClipJob(notes: unknown): boolean {
+  return !!notes && typeof notes === "object" && (notes as { clip_job?: unknown }).clip_job === true;
+}
