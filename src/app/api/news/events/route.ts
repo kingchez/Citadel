@@ -10,7 +10,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("events")
       .select(
-        "id, event_title, snapshot_summary, global_relevance_score, confidence, created_at, article, usablethumbnails, usablevideos, social_headline, alt_thumbnail, thumbnail, status, category_reference, wordpress_posted, is_reviewed, golden_window_hours, video_id"
+        "id, event_title, snapshot_summary, global_relevance_score, confidence, created_at, article, usablethumbnails, usablevideos, social_headline, alt_thumbnail, thumbnail, status, category_reference, wordpress_posted, is_reviewed, golden_window_hours, video_id, post_format, selected_videos"
       )
       .order("golden_window_hours", { ascending: true, nullsFirst: false })
       .order("global_relevance_score", { ascending: false });

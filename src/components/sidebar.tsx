@@ -20,6 +20,7 @@ import {
   FolderKanban,
   Newspaper,
   Inbox,
+  ListChecks,
   Plus,
   Repeat,
   CalendarClock,
@@ -62,6 +63,7 @@ const PROJECTS: ProjectDef[] = [
     icon: Newspaper,
     items: [
       { label: "Dashboard", href: "/news/dashboard", icon: LayoutDashboard },
+      { label: "Trend Review", href: "/news/review", icon: ListChecks, countKey: "news.trendReview" },
       { label: "All Events", href: "/news/events", icon: Grid },
       { label: "Needs Review", href: "/news/events?view=needs_review", icon: Inbox, countKey: "news.needsReview" },
       { label: "Reviewed", href: "/news/events?view=reviewed", icon: CheckCircle, countKey: "news.reviewed" },
@@ -102,6 +104,13 @@ export function Sidebar() {
       .then((data: { items?: { status: string }[] }) => {
         const active = (data.items || []).filter((i) => i.status !== "handed_off" && i.status !== "cancelled").length;
         setCounts((prev) => ({ ...prev, "repurpose.active": active }));
+      })
+      .catch(() => {});
+
+    fetch("/api/news/trends")
+      .then((r) => r.json())
+      .then((data: { trends?: unknown[] }) => {
+        setCounts((prev) => ({ ...prev, "news.trendReview": (data.trends || []).length }));
       })
       .catch(() => {});
 
