@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import type { SelectedVideo } from "@/lib/news-types";
+import type { MediaItem } from "@/lib/news-types";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -21,22 +21,26 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-function validSelectedVideos(value: unknown): value is SelectedVideo[] {
+function validMedia(value: unknown): value is MediaItem[] {
   return (
     Array.isArray(value) &&
-    value.every(
-      (v) =>
-        v &&
-        typeof v === "object" &&
-        typeof v.url === "string" &&
-        v.url !== "" &&
-        typeof v.start === "number" &&
-        typeof v.end === "number" &&
-        v.start >= 0 &&
-        v.end > v.start &&
-        (v.note === undefined || typeof v.note === "string")
-    )
+    value.every((m) => {
+      if (!m || typeof m !== "object" || typeof m.url !== "string" || m.url === "") return false;
+      if (m.type === "image") return true;
+      return (
+        m.type === "clip" &&
+        typeof m.start === "number" &&
+        typeof m.end === "number" &&
+        m.start >= 0 &&
+        m.end > m.start &&
+        (m.note === undefined || typeof m.note === "string")
+      );
+    })
   );
+}
+
+function validThumbnails(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((u) => typeof u === "string" && u !== "");
 }
 
 /** Saves the reviewer's choices. status "approved" releases the trend to the
@@ -50,7 +54,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const { data: current, error: readError } = await supabase
       .from("Trend_Processing")
-      .select("status, post_format, selected_thumbnail, selected_videos")
+      .select("status, post_format, selected_thumbnails, selected_media, voiceover")
       .eq("id", id)
       .single();
 
@@ -69,38 +73,48 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
       update.post_format = body.post_format;
     }
-    if ("selected_thumbnail" in body) {
-      if (body.selected_thumbnail !== null && typeof body.selected_thumbnail !== "string") {
-        return NextResponse.json({ error: "selected_thumbnail must be a URL." }, { status: 400 });
+    if ("selected_thumbnails" in body) {
+      if (!validThumbnails(body.selected_thumbnails)) {
+        return NextResponse.json({ error: "selected_thumbnails must be a list of image URLs." }, { status: 400 });
       }
-      update.selected_thumbnail = body.selected_thumbnail;
+      update.selected_thumbnails = body.selected_thumbnails;
+      // The first one is the main thumbnail the rest of the pipeline uses.
+      update.selected_thumbnail = body.selected_thumbnails[0] ?? null;
     }
-    if ("selected_videos" in body) {
-      if (!validSelectedVideos(body.selected_videos)) {
+    if ("selected_media" in body) {
+      if (!validMedia(body.selected_media)) {
         return NextResponse.json(
-          { error: "Each selected video needs a URL and a start time before its end time." },
+          { error: "Each clip needs a start time before its end time, and every item needs a URL." },
           { status: 400 }
         );
       }
-      update.selected_videos = body.selected_videos;
+      update.selected_media = body.selected_media;
+    }
+    if ("voiceover" in body) {
+      if (typeof body.voiceover !== "boolean") {
+        return NextResponse.json({ error: "voiceover must be true or false." }, { status: 400 });
+      }
+      update.voiceover = body.voiceover;
     }
 
     if (body.status === "approved") {
       const format = (update.post_format ?? current.post_format) as string | null;
-      const thumbnail = (update.selected_thumbnail ?? current.selected_thumbnail) as string | null;
-      const videos = (update.selected_videos ?? current.selected_videos ?? []) as SelectedVideo[];
+      const thumbnails = (update.selected_thumbnails ?? current.selected_thumbnails ?? []) as string[];
+      const media = (update.selected_media ?? current.selected_media ?? []) as MediaItem[];
 
-      if (!thumbnail) {
-        return NextResponse.json({ error: "Select a thumbnail before approving." }, { status: 400 });
+      if (thumbnails.length === 0) {
+        return NextResponse.json({ error: "Select at least one thumbnail before approving." }, { status: 400 });
       }
       if (format !== "video" && format !== "static") {
         return NextResponse.json({ error: "Choose Video or Static before approving." }, { status: 400 });
       }
-      if (format === "video" && videos.length === 0) {
-        return NextResponse.json({ error: "Select at least one video (with start and end times) for a video post." }, { status: 400 });
+      if (format === "video" && media.length === 0) {
+        return NextResponse.json({ error: "Add at least one clip or image to a video post." }, { status: 400 });
       }
       if (format === "static") {
-        update.selected_videos = [];
+        // Static posts have no video content and no voice-over.
+        update.selected_media = [];
+        update.voiceover = false;
       }
       update.status = "approved";
       update.reviewed_at = new Date().toISOString();

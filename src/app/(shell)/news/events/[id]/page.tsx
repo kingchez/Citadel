@@ -218,7 +218,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
             <div className="flex items-center gap-2 flex-wrap mb-2">
               <span className="badge badge-cyan">{EVENT_STATUS_LABELS[event.status]}</span>
               {event.post_format && (
-                <span className="badge badge-purple">{event.post_format === "video" ? "Video post" : "Static post"}</span>
+                <span className="badge badge-purple">{event.post_format === "video" ? (event.voiceover ? "Video post · voice-over" : "Video post · Canva short") : "Static post"}</span>
               )}
               {event.golden_window_hours != null && (
                 <span className="inline-flex items-center gap-1 text-xs text-[var(--color-amber)] font-medium">

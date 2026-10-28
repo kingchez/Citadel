@@ -38,7 +38,9 @@ export interface NewsEvent {
   golden_window_hours?: number;
   video_id?: string | null;
   post_format?: PostFormat | null;
-  selected_videos?: SelectedVideo[] | null;
+  selected_media?: MediaItem[] | null;
+  selected_thumbnails?: string[] | null;
+  voiceover?: boolean;
 }
 
 /** Pulls a flat array of candidate thumbnail URLs out of usablethumbnails,
@@ -87,12 +89,23 @@ export const EVENT_STATUS_COLORS: Record<EventStatus, "purple" | "cyan" | "green
 // Trend review (first human review, before a trend becomes an event)
 // ---------------------------------------------------------------------------
 
-/** A video the reviewer picked, with the window to cut out of it (seconds). */
-export interface SelectedVideo {
-  url: string;
-  note?: string;
-  start: number;
-  end: number;
+/** One piece of a video post, in the order it will be merged: a still image,
+ * or a window (seconds) cut out of a source video. The same source video can
+ * appear several times with different windows. */
+export type MediaItem =
+  | { type: "image"; url: string }
+  | { type: "clip"; url: string; start: number; end: number; note?: string };
+
+/** How long a still image stays on screen when merged into a video. */
+export const IMAGE_SECONDS = 3;
+
+export function mediaDuration(items: MediaItem[]): number {
+  return items.reduce((sum, m) => sum + (m.type === "image" ? IMAGE_SECONDS : m.end - m.start), 0);
+}
+
+const IMAGE_EXT = /\.(png|jpe?g|webp|gif|avif)(\?|#|$)/i;
+export function isImageUrl(url: string): boolean {
+  return IMAGE_EXT.test(url);
 }
 
 /** A video Diffbot found inside one of the trend's articles. */
@@ -123,8 +136,11 @@ export interface TrendReview {
   status: string;
   created_at: string;
   post_format?: PostFormat | null;
+  /** Main thumbnail (the first of selected_thumbnails). */
   selected_thumbnail?: string | null;
-  selected_videos?: SelectedVideo[] | null;
+  selected_thumbnails?: string[] | null;
+  selected_media?: MediaItem[] | null;
+  voiceover?: boolean;
   reviewed_at?: string | null;
 }
 

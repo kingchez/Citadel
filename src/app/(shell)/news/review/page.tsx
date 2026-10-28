@@ -2,56 +2,81 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import type { PostFormat, SelectedVideo, TrendReview, TrendVideo } from "@/lib/news-types";
+import type { MediaItem, PostFormat, TrendReview, TrendVideo } from "@/lib/news-types";
 import {
+  IMAGE_SECONDS,
   extractThumbnailCandidates,
   extractTrendNewsItems,
   extractTrendVideos,
   formatTimecode,
+  isImageUrl,
   parseTimecode,
 } from "@/lib/news-types";
 import { formatTimeAgo } from "@/lib/utils";
 import { ThumbnailLightbox } from "@/components/thumbnail-lightbox";
 import {
+  ArrowDown,
+  ArrowUp,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  CheckCircle2,
-  XCircle,
-  Video,
+  ExternalLink,
   Image as ImageIcon,
   Loader2,
-  ExternalLink,
   Maximize2,
-  Plus,
+  Mic,
   Newspaper,
+  Plus,
+  Trash2,
+  Video,
+  XCircle,
 } from "lucide-react";
 
-interface VideoDraft {
-  on: boolean;
+/** One row of the video being put together. Times are text while editing. */
+interface DraftItem {
+  id: number;
+  type: "image" | "clip";
+  url: string;
   start: string;
   end: string;
   note: string;
 }
 
 interface Draft {
-  thumb: string | null;
+  thumbs: string[];
   format: PostFormat | null;
-  videos: Record<string, VideoDraft>;
+  voiceover: boolean;
+  media: DraftItem[];
+  /** Video links added by hand, on top of the ones found in the articles. */
   extra: string[];
 }
 
-const EMPTY_VIDEO: VideoDraft = { on: false, start: "", end: "", note: "" };
+let nextItemId = 1;
+const newItem = (type: DraftItem["type"], url: string): DraftItem => ({
+  id: nextItemId++,
+  type,
+  url,
+  start: "",
+  end: "",
+  note: "",
+});
 
 /** Builds the starting draft from whatever was already saved on the trend. */
 function initialDraft(trend: TrendReview): Draft {
-  const videos: Record<string, VideoDraft> = {};
   const extracted = new Set(extractTrendVideos(trend.usableVideos).map((v) => v.url));
-  const extra: string[] = [];
-  for (const v of trend.selected_videos || []) {
-    videos[v.url] = { on: true, start: formatTimecode(v.start), end: formatTimecode(v.end), note: v.note || "" };
-    if (!extracted.has(v.url)) extra.push(v.url);
-  }
-  return { thumb: trend.selected_thumbnail || null, format: trend.post_format || null, videos, extra };
+  const saved = trend.selected_media || [];
+  const thumbs = trend.selected_thumbnails?.length
+    ? trend.selected_thumbnails
+    : trend.selected_thumbnail
+      ? [trend.selected_thumbnail]
+      : [];
+  const media = saved.map((m) =>
+    m.type === "image"
+      ? newItem("image", m.url)
+      : { ...newItem("clip", m.url), start: formatTimecode(m.start), end: formatTimecode(m.end), note: m.note || "" }
+  );
+  const extra = Array.from(new Set(saved.filter((m) => m.type === "clip" && !extracted.has(m.url)).map((m) => m.url)));
+  return { thumbs, format: trend.post_format || null, voiceover: !!trend.voiceover, media, extra };
 }
 
 /** How to show a video link: an embed player, a plain file player, or just a link. */
@@ -94,6 +119,22 @@ function VideoPlayer({ url }: { url: string }) {
   );
 }
 
+/** Total running time of the merged video, or null while a clip has no valid window yet. */
+function totalSeconds(media: DraftItem[]): number | null {
+  let total = 0;
+  for (const m of media) {
+    if (m.type === "image") {
+      total += IMAGE_SECONDS;
+      continue;
+    }
+    const start = parseTimecode(m.start);
+    const end = parseTimecode(m.end);
+    if (start === null || end === null || end <= start) return null;
+    total += end - start;
+  }
+  return total;
+}
+
 export default function TrendReviewPage() {
   const [trends, setTrends] = useState<TrendReview[]>([]);
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
@@ -102,7 +143,7 @@ export default function TrendReviewPage() {
   const [busy, setBusy] = useState<"approved" | "rejected" | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [customThumbUrl, setCustomThumbUrl] = useState("");
-  const [manualVideo, setManualVideo] = useState("");
+  const [linkInput, setLinkInput] = useState("");
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const load = useCallback(() => {
@@ -141,38 +182,57 @@ export default function TrendReviewPage() {
   }
 
   const draft = drafts[trend.id] || initialDraft(trend);
-  const setDraft = (next: Partial<Draft>) =>
-    setDrafts((prev) => ({ ...prev, [trend.id]: { ...(prev[trend.id] || initialDraft(trend)), ...next } }));
-  const setVideo = (url: string, next: Partial<VideoDraft>) =>
-    setDraft({ videos: { ...draft.videos, [url]: { ...(draft.videos[url] || EMPTY_VIDEO), ...next } } });
+  const update = (fn: (d: Draft) => Draft) =>
+    setDrafts((prev) => ({ ...prev, [trend.id]: fn(prev[trend.id] || initialDraft(trend)) }));
+  const editItem = (id: number, patch: Partial<DraftItem>) =>
+    update((d) => ({ ...d, media: d.media.map((m) => (m.id === id ? { ...m, ...patch } : m)) }));
+  const removeItem = (id: number) => update((d) => ({ ...d, media: d.media.filter((m) => m.id !== id) }));
+  const moveItem = (id: number, dir: -1 | 1) =>
+    update((d) => {
+      const i = d.media.findIndex((m) => m.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= d.media.length) return d;
+      const media = [...d.media];
+      [media[i], media[j]] = [media[j], media[i]];
+      return { ...d, media };
+    });
+  const toggleThumb = (url: string) =>
+    update((d) => ({ ...d, thumbs: d.thumbs.includes(url) ? d.thumbs.filter((u) => u !== url) : [...d.thumbs, url] }));
+  const addImage = (url: string) =>
+    update((d) => (d.media.some((m) => m.type === "image" && m.url === url) ? d : { ...d, media: [...d.media, newItem("image", url)] }));
+  const addClip = (url: string) => update((d) => ({ ...d, media: [...d.media, newItem("clip", url)] }));
 
   const newsItems = extractTrendNewsItems(trend.news_items);
   const extracted = extractTrendVideos(trend.usableVideos);
   const videoList: TrendVideo[] = [
     ...extracted,
-    ...draft.extra.filter((u) => !extracted.some((v) => v.url === u)).map((url) => ({ url, article_title: "Added manually" })),
+    ...draft.extra.filter((u) => !extracted.some((v) => v.url === u)).map((url) => ({ url, article_title: "Added by link" })),
   ];
-  const thumbCandidates = Array.from(
+  const imageCandidates = Array.from(
     new Set(
       [...extractThumbnailCandidates(trend.usableThumbnails), trend.picture, ...newsItems.map((n) => n.picture)].filter(
         (v): v is string => !!v
       )
     )
   );
-  const lightboxImages = Array.from(new Set([draft.thumb, ...thumbCandidates].filter((v): v is string => !!v)));
+  const thumbCandidates = Array.from(new Set([...draft.thumbs, ...imageCandidates]));
+  const labelFor = (url: string) => videoList.find((v) => v.url === url)?.article_title || url;
+  const total = totalSeconds(draft.media);
 
-  /** Turns the video rows the reviewer ticked into validated {url, note, start, end}. */
-  const buildSelectedVideos = (): SelectedVideo[] | string => {
-    const out: SelectedVideo[] = [];
-    for (const v of videoList) {
-      const d = draft.videos[v.url];
-      if (!d?.on) continue;
-      const start = parseTimecode(d.start);
-      const end = parseTimecode(d.end);
-      if (start === null || end === null || end <= start) {
-        return "Every selected video needs a start time before its end time (like 0:12 and 0:25).";
+  /** Turns the rows into validated media items, or an error message. */
+  const buildMedia = (): MediaItem[] | string => {
+    const out: MediaItem[] = [];
+    for (const m of draft.media) {
+      if (m.type === "image") {
+        out.push({ type: "image", url: m.url });
+        continue;
       }
-      out.push({ url: v.url, start, end, ...(d.note.trim() ? { note: d.note.trim() } : {}) });
+      const start = parseTimecode(m.start);
+      const end = parseTimecode(m.end);
+      if (start === null || end === null || end <= start) {
+        return "Every clip needs a start time before its end time (like 0:12 and 0:25).";
+      }
+      out.push({ type: "clip", url: m.url, start, end, ...(m.note.trim() ? { note: m.note.trim() } : {}) });
     }
     return out;
   };
@@ -180,15 +240,16 @@ export default function TrendReviewPage() {
   const finish = async (status: "approved" | "rejected") => {
     const body: Record<string, unknown> = { status };
     if (status === "approved") {
-      if (!draft.thumb) return showFeedback("Select a thumbnail first.");
+      if (draft.thumbs.length === 0) return showFeedback("Select at least one thumbnail first.");
       if (!draft.format) return showFeedback("Choose Video or Static first.");
       body.post_format = draft.format;
-      body.selected_thumbnail = draft.thumb;
+      body.selected_thumbnails = draft.thumbs;
       if (draft.format === "video") {
-        const videos = buildSelectedVideos();
-        if (typeof videos === "string") return showFeedback(videos, 5000);
-        if (videos.length === 0) return showFeedback("Select at least one video for a video post.");
-        body.selected_videos = videos;
+        const media = buildMedia();
+        if (typeof media === "string") return showFeedback(media, 5000);
+        if (media.length === 0) return showFeedback("Add at least one clip or image to the video.");
+        body.selected_media = media;
+        body.voiceover = draft.voiceover;
       }
     }
 
@@ -211,17 +272,23 @@ export default function TrendReviewPage() {
     }
   };
 
-  const addManualVideo = () => {
-    const url = manualVideo.trim();
+  const addByLink = () => {
+    const url = linkInput.trim();
     if (!url) return;
-    setDraft({
-      extra: draft.extra.includes(url) ? draft.extra : [...draft.extra, url],
-      videos: { ...draft.videos, [url]: { ...(draft.videos[url] || EMPTY_VIDEO), on: true } },
-    });
-    setManualVideo("");
+    if (isImageUrl(url)) {
+      addImage(url);
+    } else {
+      update((d) => ({
+        ...d,
+        extra: d.extra.includes(url) || extracted.some((v) => v.url === url) ? d.extra : [...d.extra, url],
+        media: [...d.media, newItem("clip", url)],
+      }));
+    }
+    setLinkInput("");
   };
 
   const position = Math.min(index, trends.length - 1);
+  const lightboxImages = thumbCandidates;
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
@@ -285,44 +352,43 @@ export default function TrendReviewPage() {
       <div className="card p-4 sm:p-5 space-y-4">
         <div className="flex items-center gap-2">
           <ImageIcon className="w-5 h-5 text-[var(--color-purple)]" />
-          <h3 className="text-sm font-semibold text-[var(--text)]">Thumbnail</h3>
+          <h3 className="text-sm font-semibold text-[var(--text)]">Thumbnails</h3>
+          <span className="text-xs text-[var(--text-faint)]">{draft.thumbs.length} selected</span>
         </div>
-
-        {draft.thumb && (
-          <button
-            onClick={() => setLightboxIndex(Math.max(0, lightboxImages.indexOf(draft.thumb!)))}
-            className="relative group rounded-xl overflow-hidden border-2 border-[var(--color-purple)] w-fit block"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={draft.thumb} alt="Selected thumbnail" className="max-h-48" />
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-              <Maximize2 className="w-6 h-6 text-white" />
-            </div>
-          </button>
-        )}
+        <p className="text-xs text-[var(--text-faint)]">
+          Click to select. The first one you pick is the main thumbnail; pick more if the post needs several images.
+        </p>
 
         {thumbCandidates.length > 0 && (
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-            {thumbCandidates.map((url) => (
-              <div key={url} className="relative group">
-                <button
-                  onClick={() => setDraft({ thumb: url })}
-                  className={`w-full rounded-lg overflow-hidden border-2 transition-colors block ${
-                    draft.thumb === url ? "border-[var(--color-purple)]" : "border-[var(--border)] hover:border-[var(--border-strong)]"
-                  }`}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt="Thumbnail candidate" className="w-full h-24 object-cover" />
-                </button>
-                <button
-                  onClick={() => setLightboxIndex(Math.max(0, lightboxImages.indexOf(url)))}
-                  className="absolute top-1.5 right-1.5 p-1.5 rounded-lg bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                  aria-label="Expand thumbnail"
-                >
-                  <Maximize2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
+            {thumbCandidates.map((url) => {
+              const order = draft.thumbs.indexOf(url);
+              return (
+                <div key={url} className="relative group">
+                  <button
+                    onClick={() => toggleThumb(url)}
+                    className={`w-full rounded-lg overflow-hidden border-2 transition-colors block ${
+                      order >= 0 ? "border-[var(--color-purple)]" : "border-[var(--border)] hover:border-[var(--border-strong)]"
+                    }`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt="Thumbnail candidate" className="w-full h-24 object-cover" />
+                  </button>
+                  {order >= 0 && (
+                    <span className="absolute top-1.5 left-1.5 min-w-5 h-5 px-1 rounded-full bg-[var(--color-purple)] text-white text-[11px] font-semibold flex items-center justify-center">
+                      {order + 1}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => setLightboxIndex(Math.max(0, lightboxImages.indexOf(url)))}
+                    className="absolute top-1.5 right-1.5 p-1.5 rounded-lg bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-label="Expand thumbnail"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -330,19 +396,20 @@ export default function TrendReviewPage() {
           <input
             value={customThumbUrl}
             onChange={(e) => setCustomThumbUrl(e.target.value)}
-            placeholder="Or paste a thumbnail URL directly..."
+            placeholder="Or paste an image URL to add it..."
             className="input-field text-sm py-2 flex-1"
           />
           <button
             onClick={() => {
-              if (customThumbUrl.trim()) {
-                setDraft({ thumb: customThumbUrl.trim() });
+              const url = customThumbUrl.trim();
+              if (url) {
+                update((d) => (d.thumbs.includes(url) ? d : { ...d, thumbs: [...d.thumbs, url] }));
                 setCustomThumbUrl("");
               }
             }}
             className="btn-secondary text-sm py-2 px-4 flex-shrink-0"
           >
-            Set
+            Add
           </button>
         </div>
       </div>
@@ -353,12 +420,12 @@ export default function TrendReviewPage() {
           {(
             [
               { key: "static", label: "Static post", hint: "Image and headline", icon: ImageIcon },
-              { key: "video", label: "Video", hint: "Short with clips", icon: Video },
+              { key: "video", label: "Video", hint: "Short made of clips and images", icon: Video },
             ] as const
           ).map((opt) => (
             <button
               key={opt.key}
-              onClick={() => setDraft({ format: opt.key })}
+              onClick={() => update((d) => ({ ...d, format: opt.key }))}
               className={`flex items-center gap-3 rounded-xl border-2 p-3 text-left transition-colors ${
                 draft.format === opt.key
                   ? "border-[var(--color-purple)] bg-[var(--color-purple-soft)]"
@@ -376,73 +443,182 @@ export default function TrendReviewPage() {
       </div>
 
       {draft.format === "video" && (
-        <div className="card p-4 sm:p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <Video className="w-5 h-5 text-[var(--color-purple)]" />
-            <h3 className="text-sm font-semibold text-[var(--text)]">Videos</h3>
+        <>
+          <div className="card p-4 sm:p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <Mic className="w-5 h-5 text-[var(--color-purple)]" />
+              <h3 className="text-sm font-semibold text-[var(--text)]">Voice-over</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {(
+                [
+                  { value: false, label: "No voice-over", hint: "Canva short with music" },
+                  { value: true, label: "With voice-over", hint: "Full video production pipeline" },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={String(opt.value)}
+                  onClick={() => update((d) => ({ ...d, voiceover: opt.value }))}
+                  className={`rounded-xl border-2 p-3 text-left transition-colors ${
+                    draft.voiceover === opt.value
+                      ? "border-[var(--color-purple)] bg-[var(--color-purple-soft)]"
+                      : "border-[var(--border)] hover:border-[var(--border-strong)]"
+                  }`}
+                >
+                  <span className="block text-sm font-semibold text-[var(--text)]">{opt.label}</span>
+                  <span className="block text-xs text-[var(--text-faint)]">{opt.hint}</span>
+                </button>
+              ))}
+            </div>
           </div>
-          <p className="text-xs text-[var(--text-faint)]">
-            Tick each video you want to use and give the part to cut (start and end, like 0:12 and 0:25). The note is for you.
-          </p>
 
-          {videoList.length === 0 && (
-            <p className="text-sm text-[var(--text-muted)]">No videos were found in these articles. You can add a link below.</p>
-          )}
+          <div className="card p-4 sm:p-5 space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <h3 className="text-sm font-semibold text-[var(--text)]">Your video, in order</h3>
+              <span className="text-xs text-[var(--text-faint)]">
+                {draft.media.length} items · about {total === null ? "—" : formatTimecode(total)}
+                {" "}(images count {IMAGE_SECONDS}s each)
+              </span>
+            </div>
 
-          {videoList.map((v) => {
-            const d = draft.videos[v.url] || EMPTY_VIDEO;
-            return (
-              <div key={v.url} className="rounded-xl border border-[var(--border)] p-3 space-y-3">
-                <VideoPlayer url={v.url} />
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <p className="text-xs text-[var(--text-faint)] truncate max-w-full">
-                    {v.article_title || v.url}
-                    {v.source ? ` · ${v.source}` : ""}
-                  </p>
-                  <label className="inline-flex items-center gap-2 text-sm font-medium text-[var(--text)] cursor-pointer">
-                    <input type="checkbox" checked={d.on} onChange={(e) => setVideo(v.url, { on: e.target.checked })} />
-                    Use this video
-                  </label>
+            {draft.media.length === 0 && (
+              <p className="text-sm text-[var(--text-muted)]">
+                Nothing added yet. Add images or clips below — you can use several clips from the same video.
+              </p>
+            )}
+
+            {draft.media.map((m, i) => (
+              <div key={m.id} className="flex items-start gap-3 rounded-xl border border-[var(--border)] p-3">
+                <span className="text-xs font-mono text-[var(--text-faint)] pt-1 w-5">{i + 1}</span>
+                <div className="flex-1 min-w-0 space-y-2">
+                  {m.type === "image" ? (
+                    <div className="flex items-center gap-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={m.url} alt="Image in the video" className="h-14 w-20 object-cover rounded-lg" />
+                      <span className="text-sm text-[var(--text)]">Image · {IMAGE_SECONDS}s</span>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-xs text-[var(--text-faint)] truncate">Clip · {labelFor(m.url)}</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          value={m.start}
+                          onChange={(e) => editItem(m.id, { start: e.target.value })}
+                          placeholder="Start (0:12)"
+                          className="input-field text-sm py-2"
+                        />
+                        <input
+                          value={m.end}
+                          onChange={(e) => editItem(m.id, { end: e.target.value })}
+                          placeholder="End (0:25)"
+                          className="input-field text-sm py-2"
+                        />
+                        <input
+                          value={m.note}
+                          onChange={(e) => editItem(m.id, { note: e.target.value })}
+                          placeholder="Note — what happens in this part (optional)"
+                          className="input-field text-sm py-2 col-span-2"
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
-                {d.on && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <input
-                      value={d.start}
-                      onChange={(e) => setVideo(v.url, { start: e.target.value })}
-                      placeholder="Start (0:12)"
-                      className="input-field text-sm py-2"
-                    />
-                    <input
-                      value={d.end}
-                      onChange={(e) => setVideo(v.url, { end: e.target.value })}
-                      placeholder="End (0:25)"
-                      className="input-field text-sm py-2"
-                    />
-                    <input
-                      value={d.note}
-                      onChange={(e) => setVideo(v.url, { note: e.target.value })}
-                      placeholder="Note — what happens in this part (optional)"
-                      className="input-field text-sm py-2 col-span-2"
-                    />
-                  </div>
-                )}
+                <div className="flex flex-col gap-1">
+                  <button
+                    onClick={() => moveItem(m.id, -1)}
+                    disabled={i === 0}
+                    className="btn-ghost p-1.5 disabled:opacity-30"
+                    aria-label="Move up"
+                  >
+                    <ArrowUp className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => moveItem(m.id, 1)}
+                    disabled={i === draft.media.length - 1}
+                    className="btn-ghost p-1.5 disabled:opacity-30"
+                    aria-label="Move down"
+                  >
+                    <ArrowDown className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => removeItem(m.id)} className="btn-ghost p-1.5 text-[var(--color-red)]" aria-label="Remove">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-            );
-          })}
-
-          <div className="flex items-center gap-2">
-            <input
-              value={manualVideo}
-              onChange={(e) => setManualVideo(e.target.value)}
-              placeholder="Add a video link (YouTube, TikTok or a direct file)..."
-              className="input-field text-sm py-2 flex-1"
-            />
-            <button onClick={addManualVideo} className="btn-secondary text-sm py-2 px-4 flex-shrink-0 inline-flex items-center gap-1.5">
-              <Plus className="w-4 h-4" />
-              Add
-            </button>
+            ))}
           </div>
-        </div>
+
+          <div className="card p-4 sm:p-5 space-y-4">
+            <h3 className="text-sm font-semibold text-[var(--text)]">Add images</h3>
+            {imageCandidates.length === 0 ? (
+              <p className="text-sm text-[var(--text-muted)]">No images were found. Add one by link below.</p>
+            ) : (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                {imageCandidates.map((url) => {
+                  const added = draft.media.some((m) => m.type === "image" && m.url === url);
+                  return (
+                    <button
+                      key={url}
+                      onClick={() => (added ? update((d) => ({ ...d, media: d.media.filter((m) => !(m.type === "image" && m.url === url)) })) : addImage(url))}
+                      className={`relative rounded-lg overflow-hidden border-2 transition-colors block ${
+                        added ? "border-[var(--color-purple)]" : "border-[var(--border)] hover:border-[var(--border-strong)]"
+                      }`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt="Image candidate" className="w-full h-24 object-cover" />
+                      {added && (
+                        <span className="absolute top-1.5 left-1.5 rounded-full bg-[var(--color-purple)] text-white p-0.5">
+                          <CheckCircle2 className="w-4 h-4" />
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="card p-4 sm:p-5 space-y-4">
+            <h3 className="text-sm font-semibold text-[var(--text)]">Add clips</h3>
+            {videoList.length === 0 && (
+              <p className="text-sm text-[var(--text-muted)]">No videos were found in these articles. Add one by link below.</p>
+            )}
+            {videoList.map((v) => {
+              const count = draft.media.filter((m) => m.type === "clip" && m.url === v.url).length;
+              return (
+                <div key={v.url} className="rounded-xl border border-[var(--border)] p-3 space-y-3">
+                  <VideoPlayer url={v.url} />
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <p className="text-xs text-[var(--text-faint)] truncate max-w-full">
+                      {v.article_title || v.url}
+                      {v.source ? ` · ${v.source}` : ""}
+                    </p>
+                    <button
+                      onClick={() => addClip(v.url)}
+                      className="btn-secondary text-sm py-1.5 px-3 inline-flex items-center gap-1.5"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add a clip{count > 0 ? ` (${count} added)` : ""}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            <div className="flex items-center gap-2">
+              <input
+                value={linkInput}
+                onChange={(e) => setLinkInput(e.target.value)}
+                placeholder="Add a video or image link (YouTube, TikTok, a file)..."
+                className="input-field text-sm py-2 flex-1"
+              />
+              <button onClick={addByLink} className="btn-secondary text-sm py-2 px-4 flex-shrink-0 inline-flex items-center gap-1.5">
+                <Plus className="w-4 h-4" />
+                Add
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-3 [&>*]:flex-1 sm:[&>*]:flex-none [&>*]:justify-center">
@@ -468,10 +644,10 @@ export default function TrendReviewPage() {
         <ThumbnailLightbox
           images={lightboxImages}
           startIndex={lightboxIndex}
-          selectedUrl={draft.thumb || undefined}
+          selectedUrl={draft.thumbs[0]}
           onClose={() => setLightboxIndex(null)}
           onSelect={(url) => {
-            setDraft({ thumb: url });
+            toggleThumb(url);
             setLightboxIndex(null);
           }}
         />
