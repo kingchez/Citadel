@@ -51,7 +51,7 @@ export async function GET() {
         : null;
     const recent = [...videos]
       .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-      .slice(0, 4)
+      .slice(0, 6)
       .map((v) => ({ id: v.id, title: v.title, channel: v.channel ?? "", status: v.status, updated_at: v.updated_at, hasError: hasAnyError(v) }));
 
     const events = (eventsRes.data || []) as {
@@ -93,12 +93,12 @@ export async function GET() {
         recentlyReviewed: events
           .filter((e) => e.status === "reviewed")
           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-          .slice(0, 3)
+          .slice(0, 5)
           .map((e) => ({ id: e.id, title: e.social_headline || e.event_title || `Event #${e.id}`, toVideo: !!e.video_id, created_at: e.created_at })),
         urgent: unreviewed
           .filter((e) => e.golden_window_hours != null)
           .sort((a, b) => (a.golden_window_hours ?? 0) - (b.golden_window_hours ?? 0))
-          .slice(0, 4)
+          .slice(0, 5)
           .map((e) => ({ id: e.id, title: e.social_headline || e.event_title || "Untitled event", hours: e.golden_window_hours })),
       },
     };
