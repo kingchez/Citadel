@@ -110,47 +110,78 @@ const SERVICES = [
 
 /* ───────────── small pieces ───────────── */
 
-const SubLabel = ({ children }: { children: React.ReactNode }) => (
-  <p className="text-[10px] uppercase tracking-wider text-[var(--text-faint)] mb-1">{children}</p>
-);
+type Tone = "neutral" | "red" | "amber" | "green" | "purple" | "cyan";
+const TONE: Record<Tone, string> = {
+  neutral: "var(--text)",
+  red: "var(--color-red)",
+  amber: "var(--color-amber)",
+  green: "var(--color-green)",
+  purple: "var(--color-purple)",
+  cyan: "var(--color-cyan)",
+};
 
-function SummaryCard({
-  label,
-  value,
-  sub,
-  href,
-  tone = "neutral",
-  icon,
-}: {
-  label: string;
-  value: string | number;
-  sub?: string;
-  href?: string;
-  tone?: "neutral" | "red" | "amber" | "green" | "purple" | "cyan";
-  icon: React.ReactNode;
-}) {
-  const color =
-    tone === "red" ? "var(--color-red)" : tone === "amber" ? "var(--color-amber)" : tone === "green" ? "var(--color-green)" : tone === "purple" ? "var(--color-purple)" : tone === "cyan" ? "var(--color-cyan)" : "var(--text)";
+/** Compact number tile used in the single stats section. */
+function Kpi({ label, value, sub, href, tone = "neutral" }: { label: string; value: string | number; sub?: string; href?: string; tone?: Tone }) {
   const body = (
-    <div className="card p-4 h-full transition-all duration-150 hover:border-[var(--border-strong)]">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{label}</p>
-        <span style={{ color }}>{icon}</span>
-      </div>
-      <p className="text-2xl sm:text-3xl font-bold tabular-nums" style={{ color }}>
+    <div className="rounded-xl bg-[var(--surface-raised)] border border-transparent px-3 py-2.5 h-full transition-colors hover:border-[var(--border-strong)]">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] truncate">{label}</p>
+      <p className="text-xl sm:text-2xl font-bold tabular-nums leading-tight mt-0.5" style={{ color: TONE[tone] }}>
         {value}
       </p>
-      {sub && <p className="text-xs text-[var(--text-faint)] mt-1 truncate">{sub}</p>}
+      {sub && <p className="text-[11px] text-[var(--text-faint)] truncate mt-0.5">{sub}</p>}
     </div>
   );
   return href ? (
-    <Link href={href} className="block h-full">
+    <Link href={href} className="block min-w-0">
       {body}
     </Link>
   ) : (
-    body
+    <div className="min-w-0">{body}</div>
   );
 }
+
+function KpiGroup({ icon, title, meta, href, children }: { icon: React.ReactNode; title: string; meta?: string; href?: string; children: React.ReactNode }) {
+  const head = (
+    <div className="flex items-center justify-between gap-2 mb-2">
+      <h2 className="text-xs font-semibold text-[var(--text)] flex items-center gap-1.5 min-w-0">
+        {icon}
+        <span className="truncate">{title}</span>
+      </h2>
+      {meta && <span className="text-[11px] text-[var(--text-faint)] flex-shrink-0">{meta}</span>}
+    </div>
+  );
+  return (
+    <div className="min-w-0">
+      {href ? (
+        <Link href={href} className="block hover:opacity-80">
+          {head}
+        </Link>
+      ) : (
+        head
+      )}
+      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-2 xl:grid-cols-4 gap-2">{children}</div>
+    </div>
+  );
+}
+
+function Panel({ title, icon, action, children, className }: { title: string; icon: React.ReactNode; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
+  return (
+    <section className={cn("card p-4 space-y-3 min-w-0", className)}>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2 min-w-0">
+          {icon}
+          <span className="truncate">{title}</span>
+        </h3>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+const SubLabel = ({ children }: { children: React.ReactNode }) => (
+  <p className="text-[10px] uppercase tracking-wider text-[var(--text-faint)] mb-1">{children}</p>
+);
 
 function AlertRow({ alert, onResolve, busy }: { alert: WorkspaceAlert; onResolve: () => void; busy: boolean }) {
   const [open, setOpen] = useState(false);
@@ -206,6 +237,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState<string | null>(null);
+  const [newsTab, setNewsTab] = useState<"urgent" | "reviewed">("urgent");
 
   // add-todo form
   const [title, setTitle] = useState("");
@@ -359,15 +391,16 @@ export default function Dashboard() {
   const n = data.news;
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
+      {/* Header */}
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-[var(--text)]">{greeting()}, Kingsley 👋</h1>
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-[var(--text)] truncate">{greeting()}, Kingsley 👋</h1>
           <p className="mt-1 text-sm text-[var(--text-faint)]">{today}</p>
         </div>
         <Link href="/schedule" className="btn-secondary text-sm inline-flex items-center gap-2 flex-shrink-0">
           <CalendarClock className="w-4 h-4" />
-          Schedule
+          <span className="hidden sm:inline">Schedule</span>
         </Link>
       </div>
 
@@ -375,52 +408,35 @@ export default function Dashboard() {
 
       {error && <p className="text-sm text-[var(--color-red)]">{error}</p>}
 
-      {/* At a glance */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
-        <SummaryCard
-          label="Needs attention"
-          value={alertCount}
-          sub={alertCount === 0 ? "All clear" : `${data.alerts.filter((a) => a.severity === "error").length} errors`}
-          tone={alertCount === 0 ? "green" : "red"}
-          icon={<AlertTriangle className="w-4 h-4" />}
-        />
-        <SummaryCard
-          label="Today"
-          value={todayEntries.length}
-          sub={nextUp ? `Next: ${hhmm(nextUp.at!)} ${nextUp.title}` : "Nothing coming up"}
-          href="/schedule"
-          tone="purple"
-          icon={<CalendarClock className="w-4 h-4" />}
-        />
-        <SummaryCard
-          label="To-dos"
-          value={openTodos}
-          sub={overdueCount > 0 ? `${overdueCount} overdue` : "On track"}
-          tone={overdueCount > 0 ? "amber" : "neutral"}
-          icon={<ListTodo className="w-4 h-4" />}
-        />
-        <SummaryCard
-          label="Video pipeline"
-          value={v.progress}
-          sub={`in progress · ${v.review} to review`}
-          href="/pipeline/videos"
-          tone="cyan"
-          icon={<Video className="w-4 h-4" />}
-        />
-        <SummaryCard
-          label="News to review"
-          value={n.needsReview}
-          sub={n.paused > 0 ? `${n.paused} paused` : "No paused items"}
-          href="/news/events?view=needs_review"
-          tone={n.needsReview > 0 ? "cyan" : "neutral"}
-          icon={<Newspaper className="w-4 h-4" />}
-        />
-        <SummaryCard label="Done today" value={data.doneToday} sub="to-dos completed" tone="green" icon={<CheckCircle2 className="w-4 h-4" />} />
-      </div>
+      {/* All the numbers, one section */}
+      <section className="card p-4 sm:p-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-4 xl:gap-6 md:divide-x md:divide-[var(--border)] md:[&>*:not(:first-child)]:pl-4 xl:[&>*:not(:first-child)]:pl-6">
+          <KpiGroup icon={<CalendarClock className="w-3.5 h-3.5 text-[var(--color-purple)]" />} title="Workspace">
+            <Kpi label="Attention" value={alertCount} sub={alertCount === 0 ? "All clear" : `${data.alerts.filter((a) => a.severity === "error").length} errors`} tone={alertCount === 0 ? "green" : "red"} />
+            <Kpi label="Today" value={todayEntries.length} sub={nextUp ? `${hhmm(nextUp.at!)} ${nextUp.title}` : "Nothing next"} href="/schedule" tone="purple" />
+            <Kpi label="To-dos" value={openTodos} sub={overdueCount > 0 ? `${overdueCount} overdue` : "On track"} tone={overdueCount > 0 ? "amber" : "neutral"} />
+            <Kpi label="Done today" value={data.doneToday} sub="completed" tone="green" />
+          </KpiGroup>
 
-      {/* Your day: alerts + my day on the left, shortcuts and review queue on the right */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2 space-y-6">
+          <KpiGroup icon={<Video className="w-3.5 h-3.5 text-[var(--color-cyan)]" />} title="Video Pipeline" meta={`${v.total} total`} href="/pipeline/videos">
+            <Kpi label="Errors" value={v.errors} href="/pipeline/videos?view=errors" tone={v.errors > 0 ? "red" : "neutral"} />
+            <Kpi label="In progress" value={v.progress} href="/pipeline/videos?view=progress" tone="cyan" />
+            <Kpi label="Review" value={v.review} href="/pipeline/videos?view=review" tone="amber" />
+            <Kpi label="Done" value={v.done} href="/pipeline/videos?view=done" tone="green" />
+          </KpiGroup>
+
+          <KpiGroup icon={<Newspaper className="w-3.5 h-3.5 text-[var(--color-cyan)]" />} title="News Pipeline" href="/news/events">
+            <Kpi label="To review" value={n.needsReview} href="/news/events?view=needs_review" tone={n.needsReview > 0 ? "cyan" : "neutral"} />
+            <Kpi label="Reviewed" value={n.reviewed} href="/news/events?view=reviewed" tone="green" />
+            <Kpi label="Paused" value={n.paused} href="/news/events" tone={n.paused > 0 ? "amber" : "neutral"} />
+            <Kpi label="Videos" value={n.converted} sub="from news" href="/news/events" tone="purple" />
+          </KpiGroup>
+        </div>
+      </section>
+
+      {/* Main: my work on the left, pipeline status on the right */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+        <div className="xl:col-span-2 space-y-6 min-w-0">
           {/* Alerts */}
           <section className="space-y-3">
             <div className="flex items-center justify-between">
@@ -574,9 +590,49 @@ export default function Dashboard() {
           </section>
         </div>
 
-        <aside className="space-y-4">
-          <div className="card p-4">
-            <h3 className="text-sm font-semibold text-[var(--text)] mb-2">Quick links</h3>
+        <aside className="space-y-4 min-w-0">
+          <Panel
+            title="Pipeline Health"
+            icon={<Activity className="w-4 h-4 text-[var(--color-purple)]" />}
+            action={<span className="text-[11px] text-[var(--text-faint)]">{v.avgTurnaroundHours !== null ? `Avg ${v.avgTurnaroundHours.toFixed(1)}h per video` : ""}</span>}
+          >
+            <div className="grid grid-cols-2 gap-2">
+              {SERVICES.map((svc) => {
+                const inUse = v.activeJob?.service === svc.key;
+                return (
+                  <div key={svc.key} className="rounded-xl bg-[var(--surface-raised)] border border-[var(--border)] px-3 py-2 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={cn("w-2 h-2 rounded-full flex-shrink-0", inUse && "animate-pulse")}
+                        style={{ backgroundColor: inUse ? "var(--color-green)" : "var(--text-faint)", boxShadow: inUse ? "0 0 6px var(--color-green-glow)" : "none" }}
+                      />
+                      <p className="text-xs font-semibold text-[var(--text)] truncate">{svc.label}</p>
+                    </div>
+                    <p className="text-[10px] uppercase tracking-wide mt-0.5 pl-4" style={{ color: inUse ? "var(--color-green)" : "var(--text-faint)" }}>
+                      {inUse ? "In use" : "Idle"}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+            {v.activeJob && (
+              <Link href={`/pipeline/videos/${v.activeJob.id}`} className="block text-xs text-[var(--text-muted)] hover:text-[var(--text)] truncate">
+                Running now: {v.activeJob.title}
+              </Link>
+            )}
+            {v.needsReview.length > 0 && (
+              <div>
+                <SubLabel>Waiting for your review</SubLabel>
+                {v.needsReview.map((x) => (
+                  <Link key={x.id} href={`/pipeline/videos/${x.id}`} className="block text-xs text-[var(--text)] truncate py-0.5 hover:text-[var(--color-purple)]">
+                    • {x.title}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="Quick links" icon={<ArrowRight className="w-4 h-4 text-[var(--color-purple)]" />}>
             <div className="grid grid-cols-2 gap-2 text-xs">
               {[
                 ["/pipeline/new", "Add video"],
@@ -584,212 +640,118 @@ export default function Dashboard() {
                 ["/news/events", "Review news"],
                 ["/schedule?view=calendar", "Calendar"],
               ].map(([href, label]) => (
-                <Link key={href} href={href} className="rounded-lg border border-[var(--border)] px-3 py-2 text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]">
+                <Link key={href} href={href} className="rounded-lg border border-[var(--border)] px-3 py-2 text-center text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]">
                   {label}
                 </Link>
               ))}
             </div>
-          </div>
-
-          {(v.needsReview.length > 0 || v.activeJob) && (
-            <div className="card p-4 space-y-3">
-              <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
-                <Video className="w-4 h-4 text-[var(--color-cyan)]" />
-                Video queue
-              </h3>
-              {v.activeJob && (
-                <Link href={`/pipeline/videos/${v.activeJob.id}`} className="block text-xs text-[var(--text-muted)] hover:text-[var(--text)]">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--color-green)] mr-1.5 animate-pulse" />
-                  Running now: {v.activeJob.title}
-                  {v.activeJob.service ? ` (${v.activeJob.service})` : ""}
-                </Link>
-              )}
-              {v.needsReview.length > 0 && (
-                <div className="space-y-1">
-                  <SubLabel>Waiting for your review</SubLabel>
-                  {v.needsReview.map((x) => (
-                    <Link key={x.id} href={`/pipeline/videos/${x.id}`} className="block text-xs text-[var(--text)] truncate hover:text-[var(--color-purple)]">
-                      • {x.title}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          </Panel>
         </aside>
       </div>
 
-      {/* Video Pipeline (everything from the old Video dashboard) */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
-            <Video className="w-4 h-4 text-[var(--color-cyan)]" />
-            Video Pipeline
-          </h2>
-          <Link href="/pipeline/videos" className="text-xs text-[var(--color-purple)] inline-flex items-center gap-1 hover:opacity-80">
-            Open pipeline <ArrowRight className="w-3 h-3" />
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <SummaryCard label="Total videos" value={v.total} href="/pipeline/videos" tone="purple" icon={<Video className="w-4 h-4" />} />
-          <SummaryCard label="Errors" value={v.errors} href="/pipeline/videos?view=errors" tone={v.errors > 0 ? "red" : "neutral"} icon={<AlertTriangle className="w-4 h-4" />} />
-          <SummaryCard label="In progress" value={v.progress} href="/pipeline/videos?view=progress" tone="cyan" icon={<Clock className="w-4 h-4" />} />
-          <SummaryCard label="Needs review" value={v.review} href="/pipeline/videos?view=review" tone="amber" icon={<ListTodo className="w-4 h-4" />} />
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          <div className="lg:col-span-2 card p-5 space-y-4">
-            <h3 className="font-semibold text-[var(--text)] flex items-center gap-2 text-sm">
-              <Activity className="w-4 h-4 text-[var(--color-purple)]" />
-              Pipeline Health
-            </h3>
-            <div className="space-y-2">
-              {SERVICES.map((svc) => {
-                const inUse = v.activeJob?.service === svc.key;
-                return (
-                  <div key={svc.key} className="flex items-center justify-between p-3 rounded-xl bg-[var(--surface-raised)] border border-[var(--border)]">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0 inline-block"
-                        style={{ backgroundColor: inUse ? "var(--color-green)" : "var(--text-faint)", boxShadow: inUse ? "0 0 6px var(--color-green-glow)" : "none" }}
-                      />
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-[var(--text)]">{svc.label}</p>
-                        {inUse && v.activeJob && <p className="text-[11px] text-[var(--text-faint)] truncate">{v.activeJob.title}</p>}
-                      </div>
-                    </div>
-                    <span className="text-[11px] font-semibold uppercase tracking-wide flex-shrink-0" style={{ color: inUse ? "var(--color-green)" : "var(--text-faint)" }}>
-                      {inUse ? "In use" : "Idle"}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 rounded-xl bg-[var(--color-green-soft)] border border-[var(--color-green)]/20 text-center">
-                <p className="text-xl font-bold text-[var(--color-green)]">{v.done}</p>
-                <p className="text-[10px] text-[var(--text-faint)] uppercase tracking-wider mt-0.5">Finished</p>
-              </div>
-              <div className="p-3 rounded-xl bg-[var(--color-cyan-soft)] border border-[var(--color-cyan)]/20 text-center">
-                <p className="text-xl font-bold text-[var(--color-cyan)]">{v.avgTurnaroundHours !== null ? `${v.avgTurnaroundHours.toFixed(1)}h` : "—"}</p>
-                <p className="text-[10px] text-[var(--text-faint)] uppercase tracking-wider mt-0.5">Avg Turnaround</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="lg:col-span-3 card p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-[var(--text)] flex items-center gap-2 text-sm">
-                <Zap className="w-4 h-4 text-[var(--color-amber)]" />
-                Recent Activity
-              </h3>
-              <Link href="/pipeline/videos" className="text-xs text-[var(--color-purple)] hover:opacity-80 inline-flex items-center gap-1">
-                View all <ChevronRight className="w-3.5 h-3.5" />
+      {/* Activity: videos and news side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Panel
+          title="Recent Videos"
+          icon={<Zap className="w-4 h-4 text-[var(--color-amber)]" />}
+          action={
+            <Link href="/pipeline/videos" className="text-xs text-[var(--color-purple)] hover:opacity-80 inline-flex items-center gap-1">
+              View all <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
+          }
+        >
+          <div className="space-y-0.5 -mx-1">
+            {v.recent.length === 0 && <p className="text-sm text-[var(--text-faint)] py-4 text-center">No videos yet.</p>}
+            {v.recent.slice(0, 5).map((x) => (
+              <Link key={x.id} href={`/pipeline/videos/${x.id}`} className="flex items-center gap-3 p-2 rounded-xl hover:bg-[var(--surface-raised)] transition-colors group">
+                <div
+                  className={cn(
+                    "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
+                    x.hasError ? "bg-[var(--color-red-soft)]" : DONE.has(x.status) ? "bg-[var(--color-green-soft)]" : "bg-[var(--surface-raised)]"
+                  )}
+                >
+                  {x.hasError ? (
+                    <AlertTriangle className="w-4 h-4 text-[var(--color-red)]" />
+                  ) : DONE.has(x.status) ? (
+                    <CheckCircle2 className="w-4 h-4 text-[var(--color-green)]" />
+                  ) : (
+                    <Clock className="w-4 h-4 text-[var(--text-muted)]" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[var(--text)] truncate">{x.title}</p>
+                  <p className="text-[11px] text-[var(--text-faint)] truncate">
+                    {x.channel} · {formatTimeAgo(x.updated_at)}
+                  </p>
+                </div>
+                <div className="hidden min-[420px]:block flex-shrink-0">
+                  <StatusBadge status={x.status as VideoStatus} size="sm" showIcon={false} />
+                </div>
+                <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] flex-shrink-0" />
               </Link>
-            </div>
-            <div className="space-y-1">
-              {v.recent.length === 0 && <p className="text-sm text-[var(--text-faint)] py-4 text-center">No videos yet.</p>}
-              {v.recent.map((x) => (
-                <Link key={x.id} href={`/pipeline/videos/${x.id}`} className="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-1.5 p-2.5 rounded-xl hover:bg-[var(--surface-raised)] transition-colors group">
-                  <div
-                    className={cn(
-                      "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-                      x.hasError ? "bg-[var(--color-red-soft)]" : DONE.has(x.status) ? "bg-[var(--color-green-soft)]" : "bg-[var(--surface-raised)]"
-                    )}
-                  >
-                    {x.hasError ? (
-                      <AlertTriangle className="w-4 h-4 text-[var(--color-red)]" />
-                    ) : DONE.has(x.status) ? (
-                      <CheckCircle2 className="w-4 h-4 text-[var(--color-green)]" />
-                    ) : (
-                      <Clock className="w-4 h-4 text-[var(--text-muted)]" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-[calc(100%-3.25rem)] sm:min-w-0">
-                    <p className="text-sm font-medium text-[var(--text)] truncate">{x.title}</p>
-                    <p className="text-[11px] text-[var(--text-faint)]">
-                      {x.channel} · {formatTimeAgo(x.updated_at)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0 max-sm:ml-11">
-                    <StatusBadge status={x.status as VideoStatus} size="sm" showIcon={false} />
-                    <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] transition-colors" />
-                  </div>
-                </Link>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel
+          title="News"
+          icon={<Newspaper className="w-4 h-4 text-[var(--color-cyan)]" />}
+          action={
+            <div className="inline-flex rounded-lg border border-[var(--border)] p-0.5 text-[11px]">
+              {([
+                ["urgent", "Time-sensitive"],
+                ["reviewed", "Reviewed"],
+              ] as const).map(([k, label]) => (
+                <button
+                  key={k}
+                  onClick={() => setNewsTab(k)}
+                  className={cn("px-2.5 py-1 rounded-md transition-colors", newsTab === k ? "bg-[var(--surface-raised)] text-[var(--text)] font-semibold" : "text-[var(--text-faint)] hover:text-[var(--text)]")}
+                >
+                  {label}
+                </button>
               ))}
             </div>
+          }
+        >
+          <div className="space-y-0.5 -mx-1">
+            {newsTab === "urgent" ? (
+              <>
+                {n.urgent.length === 0 && <p className="text-sm text-[var(--text-faint)] py-4 text-center">Nothing urgent waiting on review.</p>}
+                {n.urgent.map((e) => (
+                  <Link key={e.id} href={`/news/events/${e.id}`} className="flex items-center gap-3 p-2 rounded-xl hover:bg-[var(--surface-raised)] transition-colors group">
+                    <div className="w-8 h-8 rounded-lg bg-[var(--color-amber-soft)] flex items-center justify-center flex-shrink-0">
+                      <Clock className="w-4 h-4 text-[var(--color-amber)]" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-[var(--text)] truncate">{e.title}</p>
+                      <p className="text-[11px] text-[var(--text-faint)]">{e.hours != null ? `Window closes in ${Math.round(e.hours)}h` : "No deadline"}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] flex-shrink-0" />
+                  </Link>
+                ))}
+              </>
+            ) : (
+              <>
+                {n.recentlyReviewed.length === 0 && <p className="text-sm text-[var(--text-faint)] py-4 text-center">Nothing reviewed yet.</p>}
+                {n.recentlyReviewed.map((e) => (
+                  <Link key={e.id} href={`/news/events/${e.id}`} className="flex items-center gap-3 p-2 rounded-xl hover:bg-[var(--surface-raised)] transition-colors group">
+                    <div className="w-8 h-8 rounded-lg bg-[var(--color-green-soft)] flex items-center justify-center flex-shrink-0">
+                      {e.toVideo ? <Video className="w-4 h-4 text-[var(--color-green)]" /> : <TrendingUp className="w-4 h-4 text-[var(--color-green)]" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-[var(--text)] truncate">{e.title}</p>
+                      <p className="text-[11px] text-[var(--text-faint)]">
+                        {e.toVideo ? "Turned into a video" : "Reviewed"} · {formatTimeAgo(e.created_at)}
+                      </p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] flex-shrink-0" />
+                  </Link>
+                ))}
+              </>
+            )}
           </div>
-        </div>
-      </section>
-
-      {/* News Pipeline (everything from the old News dashboard) */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
-            <Newspaper className="w-4 h-4 text-[var(--color-cyan)]" />
-            News Pipeline
-          </h2>
-          <Link href="/news/events" className="text-xs text-[var(--color-purple)] inline-flex items-center gap-1 hover:opacity-80">
-            Review events <ArrowRight className="w-3 h-3" />
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <SummaryCard label="Needs review" value={n.needsReview} href="/news/events?view=needs_review" tone={n.needsReview > 0 ? "cyan" : "neutral"} icon={<Newspaper className="w-4 h-4" />} />
-          <SummaryCard label="Reviewed" value={n.reviewed} href="/news/events?view=reviewed" tone="green" icon={<CheckCircle2 className="w-4 h-4" />} />
-          <SummaryCard label="Paused" value={n.paused} href="/news/events" tone={n.paused > 0 ? "amber" : "neutral"} icon={<Clock className="w-4 h-4" />} />
-          <SummaryCard label="Turned into videos" value={n.converted} href="/news/events" tone="purple" icon={<Video className="w-4 h-4" />} />
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="card p-5 space-y-3">
-            <h3 className="font-semibold text-[var(--text)] flex items-center gap-2 text-sm">
-              <Clock className="w-4 h-4 text-[var(--color-amber)]" />
-              Most Time-Sensitive
-            </h3>
-            <div className="space-y-1">
-              {n.urgent.length === 0 && <p className="text-sm text-[var(--text-faint)] py-4 text-center">Nothing urgent waiting on review.</p>}
-              {n.urgent.map((e) => (
-                <Link key={e.id} href={`/news/events/${e.id}`} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[var(--surface-raised)] transition-colors group">
-                  <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-[var(--color-amber-soft)] flex items-center justify-center">
-                    <Clock className="w-4 h-4 text-[var(--color-amber)]" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[var(--text)] truncate">{e.title}</p>
-                    <p className="text-[11px] text-[var(--text-faint)]">{e.hours != null ? `Window closes in ${Math.round(e.hours)}h` : "No deadline"}</p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] transition-colors flex-shrink-0" />
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          <div className="card p-5 space-y-3">
-            <h3 className="font-semibold text-[var(--text)] flex items-center gap-2 text-sm">
-              <Zap className="w-4 h-4 text-[var(--color-green)]" />
-              Recently Reviewed
-            </h3>
-            <div className="space-y-1">
-              {n.recentlyReviewed.length === 0 && <p className="text-sm text-[var(--text-faint)] py-4 text-center">Nothing reviewed yet.</p>}
-              {n.recentlyReviewed.map((e) => (
-                <Link key={e.id} href={`/news/events/${e.id}`} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[var(--surface-raised)] transition-colors group">
-                  <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-[var(--color-green-soft)] flex items-center justify-center">
-                    {e.toVideo ? <Video className="w-4 h-4 text-[var(--color-green)]" /> : <TrendingUp className="w-4 h-4 text-[var(--color-green)]" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[var(--text)] truncate">{e.title}</p>
-                    <p className="text-[11px] text-[var(--text-faint)]">
-                      {e.toVideo ? "Turned into a video" : "Reviewed"} · {formatTimeAgo(e.created_at)}
-                    </p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] transition-colors flex-shrink-0" />
-                </Link>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
+        </Panel>
+      </div>
     </div>
   );
 }
