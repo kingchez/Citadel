@@ -181,3 +181,53 @@ export function formatTimecode(seconds: number): string {
   const secText = Number.isInteger(sec) ? String(sec).padStart(2, "0") : sec.toFixed(1).padStart(4, "0");
   return `${m}:${secText}`;
 }
+
+
+// ---------------------------------------------------------------------------
+// Canva news shorts (news_shorts table): one row per video made without voice-over
+// ---------------------------------------------------------------------------
+
+export type NewsShortStatus =
+  | "queued"
+  | "downloading"
+  | "assembling"
+  | "media_ready"
+  | "designing"
+  | "done"
+  | "error";
+
+export const NEWS_SHORT_STATUS_LABELS: Record<NewsShortStatus, string> = {
+  queued: "Queued",
+  downloading: "Downloading",
+  assembling: "Merging",
+  media_ready: "Ready for Canva",
+  designing: "In Canva",
+  done: "Done",
+  error: "Failed",
+};
+
+export const NEWS_SHORT_STATUS_COLORS: Record<NewsShortStatus, "purple" | "cyan" | "green" | "amber" | "red"> = {
+  queued: "purple",
+  downloading: "amber",
+  assembling: "amber",
+  media_ready: "cyan",
+  designing: "amber",
+  done: "green",
+  error: "red",
+};
+
+export interface NewsShort {
+  id: string;
+  event_id: number;
+  status: NewsShortStatus;
+  headline?: string | null;
+  summary?: string | null;
+  media?: MediaItem[] | null;
+  media_url?: string | null;
+  canva_design_id?: string | null;
+  export_url?: string | null;
+  error?: string | null;
+  created_at: string;
+  updated_at: string;
+  events?: { event_title?: string | null } | null;
+}

@@ -21,6 +21,7 @@ import {
   Newspaper,
   Inbox,
   ListChecks,
+  Film,
   Plus,
   Repeat,
   CalendarClock,
@@ -65,6 +66,7 @@ const PROJECTS: ProjectDef[] = [
       { label: "All Events", href: "/news/events", icon: Grid },
       { label: "Needs Review", href: "/news/events?view=needs_review", icon: Inbox, countKey: "news.needsReview" },
       { label: "Reviewed", href: "/news/events?view=reviewed", icon: CheckCircle, countKey: "news.reviewed" },
+      { label: "Shorts", href: "/news/shorts", icon: Film, countKey: "news.shorts" },
     ],
   },
 ];
@@ -109,6 +111,14 @@ export function Sidebar() {
       .then((r) => r.json())
       .then((data: { trends?: unknown[] }) => {
         setCounts((prev) => ({ ...prev, "news.trendReview": (data.trends || []).length }));
+      })
+      .catch(() => {});
+
+    fetch("/api/news/shorts")
+      .then((r) => r.json())
+      .then((data: { shorts?: { status: string }[] }) => {
+        const open = (data.shorts || []).filter((x) => x.status !== "done").length;
+        setCounts((prev) => ({ ...prev, "news.shorts": open }));
       })
       .catch(() => {});
 
