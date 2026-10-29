@@ -174,7 +174,7 @@ export default function TrendReviewPage() {
       <div className="p-4 sm:p-6 max-w-4xl mx-auto text-center py-20">
         <Newspaper className="w-10 h-10 mx-auto text-[var(--text-faint)] mb-3" />
         <p className="text-[var(--text-muted)]">Nothing is waiting for review.</p>
-        <Link href="/news/dashboard" className="text-[var(--color-purple)] hover:opacity-80 text-sm mt-2 inline-block">
+        <Link href="/" className="text-[var(--color-purple)] hover:opacity-80 text-sm mt-2 inline-block">
           Back to Dashboard
         </Link>
       </div>

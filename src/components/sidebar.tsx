@@ -46,7 +46,6 @@ const PROJECTS: ProjectDef[] = [
     label: "Video Pipeline",
     icon: Video,
     items: [
-      { label: "Dashboard", href: "/pipeline/dashboard", icon: LayoutDashboard },
       { label: "All Videos", href: "/pipeline/videos", icon: Grid },
       { label: "Errors", href: "/pipeline/videos?view=errors", icon: AlertTriangle, countKey: "video.errors" },
       { label: "In Progress", href: "/pipeline/videos?view=progress", icon: Clock, countKey: "video.progress" },
@@ -62,7 +61,6 @@ const PROJECTS: ProjectDef[] = [
     label: "News Pipeline",
     icon: Newspaper,
     items: [
-      { label: "Dashboard", href: "/news/dashboard", icon: LayoutDashboard },
       { label: "Trend Review", href: "/news/review", icon: ListChecks, countKey: "news.trendReview" },
       { label: "All Events", href: "/news/events", icon: Grid },
       { label: "Needs Review", href: "/news/events?view=needs_review", icon: Inbox, countKey: "news.needsReview" },
@@ -168,7 +166,7 @@ export function Sidebar() {
     >
       {/* Logo Area */}
       <div className="p-5 border-b border-[var(--border)]">
-        <Link href="/" className="flex items-center gap-3" aria-label="Citadel Home">
+        <Link href="/" className="flex items-center gap-3" aria-label="Citadel Dashboard">
           <div className="relative p-2 rounded-xl bg-[var(--color-purple-soft)] glow-purple">
             <Castle className="w-6 h-6 text-[var(--color-purple)]" />
             <div className="absolute inset-0 rounded-xl bg-[var(--color-purple)]/30 blur-xl animate-pulse-glow" />
@@ -199,7 +197,7 @@ export function Sidebar() {
           aria-current={pathname === "/" ? "page" : undefined}
         >
           <LayoutDashboard className="w-4.5 h-4.5 text-[var(--color-purple)] flex-shrink-0" />
-          <span className="flex-1 truncate">Home</span>
+          <span className="flex-1 truncate">Dashboard</span>
         </Link>
 
         <Link

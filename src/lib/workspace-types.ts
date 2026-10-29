@@ -28,12 +28,16 @@ export interface WorkspaceSummary {
     done: number;
     liveIssues: number;
     needsReview: { id: string; title: string; status: string }[];
+    avgTurnaroundHours: number | null;
+    recent: { id: string; title: string; channel: string; status: string; updated_at: string; hasError: boolean }[];
     activeJob: { id: string; title: string; service: string | null } | null;
   };
   news: {
     needsReview: number;
     paused: number;
     reviewed: number;
+    converted: number;
+    recentlyReviewed: { id: string; title: string; toVideo: boolean; created_at: string }[];
     urgent: { id: string; title: string; hours: number | null }[];
   };
 }

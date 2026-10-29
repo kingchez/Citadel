@@ -9,7 +9,7 @@ import {
   BellRing,
   CalendarClock,
   Check,
-  CheckCircle2,
+  ChevronRight,
   Circle,
   ExternalLink,
   Info,
@@ -26,6 +26,8 @@ import { KIND_LABEL, type ScheduleItem } from "@/lib/schedule-types";
 import { safeLink, type AlertSeverity, type WorkspaceAlert, type WorkspaceSummary } from "@/lib/workspace-types";
 import { startOfDay, addDays } from "@/lib/schedule-occurrences";
 import { PushToggle } from "@/components/push-toggle";
+import { StatusBadge } from "@/components/status-badge";
+import type { VideoStatus } from "@/lib/types";
 
 /* ───────────── helpers ───────────── */
 
@@ -92,7 +94,43 @@ function groupOf(e: AgendaEntry, now: number): GroupKey {
   return "week";
 }
 
+const SERVICES = [
+  { key: "chatterbox", label: "Voice" },
+  { key: "whisperx", label: "Timing" },
+  { key: "render", label: "Render" },
+  { key: "autobrowse", label: "Media" },
+] as const;
+
 /* ───────────── small pieces ───────────── */
+
+function Tile({ label, value, color, href }: { label: string; value: number | string; color?: string; href: string }) {
+  return (
+    <Link href={href} className="rounded-lg bg-[var(--surface-raised)] py-2 text-center hover:ring-1 hover:ring-[var(--border-strong)] transition">
+      <p className="text-lg font-bold tabular-nums" style={{ color: color ?? "var(--text)" }}>
+        {value}
+      </p>
+      <p className="text-[10px] uppercase tracking-wider text-[var(--text-faint)]">{label}</p>
+    </Link>
+  );
+}
+
+function PanelHeader({ icon, title, href, linkLabel }: { icon: React.ReactNode; title: string; href: string; linkLabel: string }) {
+  return (
+    <div className="flex items-center justify-between">
+      <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
+        {icon}
+        {title}
+      </h3>
+      <Link href={href} className="text-xs text-[var(--color-purple)] inline-flex items-center gap-1 hover:opacity-80">
+        {linkLabel} <ArrowRight className="w-3 h-3" />
+      </Link>
+    </div>
+  );
+}
+
+const SubLabel = ({ children }: { children: React.ReactNode }) => (
+  <p className="text-[10px] uppercase tracking-wider text-[var(--text-faint)] mb-1">{children}</p>
+);
 
 function SummaryCard({
   label,
@@ -181,7 +219,7 @@ function AlertRow({ alert, onResolve, busy }: { alert: WorkspaceAlert; onResolve
 
 /* ───────────── page ───────────── */
 
-export default function WorkspaceDashboard() {
+export default function Dashboard() {
   const [data, setData] = useState<WorkspaceSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -315,8 +353,8 @@ export default function WorkspaceDashboard() {
     return (
       <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-4">
         <div className="h-9 w-72 rounded-lg bg-[var(--surface)] animate-pulse" />
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-          {[...Array(6)].map((_, i) => (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[...Array(4)].map((_, i) => (
             <div key={i} className="h-24 rounded-xl bg-[var(--surface)] border border-[var(--border)] animate-pulse" />
           ))}
         </div>
@@ -335,25 +373,22 @@ export default function WorkspaceDashboard() {
     return rank[a.severity] - rank[b.severity] || new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime();
   });
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const v = data.videos;
+  const n = data.news;
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-[var(--text)]">{greeting()}, Kingsley 👋</h1>
-          <p className="mt-1 text-sm text-[var(--text-faint)]">{today}</p>
-        </div>
-        <Link href="/schedule" className="btn-secondary text-sm inline-flex items-center gap-2 flex-shrink-0">
-          <CalendarClock className="w-4 h-4" />
-          Schedule
-        </Link>
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
+      <div>
+        <h1 className="text-xl sm:text-2xl font-bold text-[var(--text)]">{greeting()}, Kingsley 👋</h1>
+        <p className="mt-1 text-sm text-[var(--text-faint)]">{today}</p>
       </div>
 
       <PushToggle />
 
       {error && <p className="text-sm text-[var(--color-red)]">{error}</p>}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
+      {/* Four numbers that matter: what needs me, what is next, how each pipeline stands */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
         <SummaryCard
           label="Needs attention"
           value={alertCount}
@@ -370,33 +405,26 @@ export default function WorkspaceDashboard() {
           icon={<CalendarClock className="w-4 h-4" />}
         />
         <SummaryCard
-          label="To-dos"
-          value={openTodos}
-          sub={overdueCount > 0 ? `${overdueCount} overdue` : "On track"}
-          tone={overdueCount > 0 ? "amber" : "neutral"}
-          icon={<ListTodo className="w-4 h-4" />}
-        />
-        <SummaryCard
           label="Video pipeline"
-          value={data.videos.progress}
-          sub={`in progress · ${data.videos.review} to review`}
-          href="/pipeline/dashboard"
-          tone="cyan"
+          value={v.progress}
+          sub={v.errors > 0 ? `in progress · ${v.errors} error${v.errors === 1 ? "" : "s"}` : `in progress · ${v.review} to review`}
+          href="/pipeline/videos"
+          tone={v.errors > 0 ? "red" : "cyan"}
           icon={<Video className="w-4 h-4" />}
         />
         <SummaryCard
           label="News to review"
-          value={data.news.needsReview}
-          sub={data.news.paused > 0 ? `${data.news.paused} paused` : "No paused items"}
-          href="/news/dashboard"
-          tone={data.news.needsReview > 0 ? "cyan" : "neutral"}
+          value={n.needsReview}
+          sub={n.paused > 0 ? `${n.paused} paused` : "No paused items"}
+          href="/news/events?view=needs_review"
+          tone={n.needsReview > 0 ? "cyan" : "neutral"}
           icon={<Newspaper className="w-4 h-4" />}
         />
-        <SummaryCard label="Done today" value={data.doneToday} sub="to-dos completed" tone="green" icon={<CheckCircle2 className="w-4 h-4" />} />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2 space-y-6">
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+        {/* Left: what needs me, then my day */}
+        <div className="xl:col-span-3 space-y-6">
           {/* Alerts */}
           <section className="space-y-3">
             <div className="flex items-center justify-between">
@@ -413,9 +441,9 @@ export default function WorkspaceDashboard() {
               )}
             </div>
             {sortedAlerts.length === 0 ? (
-              <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-8 text-center text-sm text-[var(--text-faint)]">
-                <Sparkles className="w-6 h-6 mx-auto mb-2 text-[var(--color-green)]" />
-                Nothing needs you right now. Alerts from your n8n workflows land here, and leave when you resolve them.
+              <div className="rounded-xl bg-[var(--surface)] border border-[var(--border)] px-4 py-3 text-sm text-[var(--text-faint)] flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[var(--color-green)] flex-shrink-0" />
+                All clear. Alerts from your n8n workflows land here and leave when you resolve them.
               </div>
             ) : (
               <div className="space-y-2">
@@ -428,10 +456,20 @@ export default function WorkspaceDashboard() {
 
           {/* My day */}
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
-              <ListTodo className="w-4 h-4 text-[var(--color-purple)]" />
-              My day
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
+                <ListTodo className="w-4 h-4 text-[var(--color-purple)]" />
+                My day
+                <span className="text-xs font-normal text-[var(--text-faint)]">
+                  {openTodos} to-do{openTodos === 1 ? "" : "s"}
+                  {overdueCount > 0 && ` · ${overdueCount} overdue`}
+                  {data.doneToday > 0 && ` · ${data.doneToday} done today`}
+                </span>
+              </h2>
+              <Link href="/schedule" className="text-xs text-[var(--color-purple)] inline-flex items-center gap-1 hover:opacity-80">
+                Schedule <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
 
             <div className="card p-3 space-y-2">
               <div className="flex gap-2">
@@ -540,105 +578,105 @@ export default function WorkspaceDashboard() {
           </section>
         </div>
 
-        {/* Projects */}
-        <aside className="space-y-4">
-          <h2 className="text-sm font-semibold text-[var(--text)]">Projects</h2>
-
+        {/* Right: both pipelines, side by side with everything else */}
+        <aside className="xl:col-span-2 space-y-4">
+          {/* Video pipeline */}
           <div className="card p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
-                <Video className="w-4 h-4 text-[var(--color-cyan)]" />
-                Video Pipeline
-              </h3>
-              <Link href="/pipeline/dashboard" className="text-xs text-[var(--color-purple)] inline-flex items-center gap-1">
-                Open <ArrowRight className="w-3 h-3" />
-              </Link>
+            <PanelHeader icon={<Video className="w-4 h-4 text-[var(--color-cyan)]" />} title="Video Pipeline" href="/pipeline/videos" linkLabel="All videos" />
+            <div className="grid grid-cols-4 gap-2">
+              <Tile label="Errors" value={v.errors} color={v.errors > 0 ? "var(--color-red)" : undefined} href="/pipeline/videos?view=errors" />
+              <Tile label="Running" value={v.progress} color="var(--color-cyan)" href="/pipeline/videos?view=progress" />
+              <Tile label="Review" value={v.review} color="var(--color-amber)" href="/pipeline/videos?view=review" />
+              <Tile label="Done" value={v.done} color="var(--color-green)" href="/pipeline/videos?view=done" />
             </div>
-            <div className="grid grid-cols-4 gap-2 text-center">
-              {[
-                { l: "Errors", v: data.videos.errors, c: data.videos.errors > 0 ? "var(--color-red)" : "var(--text)" },
-                { l: "Running", v: data.videos.progress, c: "var(--color-cyan)" },
-                { l: "Review", v: data.videos.review, c: "var(--color-amber)" },
-                { l: "Done", v: data.videos.done, c: "var(--color-green)" },
-              ].map((s) => (
-                <div key={s.l} className="rounded-lg bg-[var(--surface-raised)] py-2">
-                  <p className="text-lg font-bold tabular-nums" style={{ color: s.c }}>
-                    {s.v}
-                  </p>
-                  <p className="text-[10px] uppercase tracking-wider text-[var(--text-faint)]">{s.l}</p>
-                </div>
-              ))}
+
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-[var(--text-muted)]">
+              {SERVICES.map((svc) => {
+                const inUse = v.activeJob?.service === svc.key;
+                return (
+                  <span key={svc.key} className="inline-flex items-center gap-1.5" title={inUse ? "In use" : "Idle"}>
+                    <span
+                      className={cn("w-2 h-2 rounded-full inline-block", inUse && "animate-pulse")}
+                      style={{ backgroundColor: inUse ? "var(--color-green)" : "var(--text-faint)" }}
+                    />
+                    <span className={inUse ? "text-[var(--text)] font-semibold" : undefined}>{svc.label}</span>
+                  </span>
+                );
+              })}
+              <span className="ml-auto text-[var(--text-faint)]">
+                {v.avgTurnaroundHours !== null ? `Avg ${v.avgTurnaroundHours.toFixed(1)}h` : ""}
+              </span>
             </div>
-            {data.videos.activeJob && (
-              <Link href={`/pipeline/videos/${data.videos.activeJob.id}`} className="block text-xs text-[var(--text-muted)] hover:text-[var(--text)]">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--color-green)] mr-1.5 animate-pulse" />
-                Running now: {data.videos.activeJob.title}
-                {data.videos.activeJob.service ? ` (${data.videos.activeJob.service})` : ""}
+            {v.activeJob && (
+              <Link href={`/pipeline/videos/${v.activeJob.id}`} className="block text-xs text-[var(--text-muted)] hover:text-[var(--text)] truncate">
+                Running now: {v.activeJob.title}
               </Link>
             )}
-            {data.videos.needsReview.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-[10px] uppercase tracking-wider text-[var(--text-faint)]">Waiting for your review</p>
-                {data.videos.needsReview.map((v) => (
-                  <Link key={v.id} href={`/pipeline/videos/${v.id}`} className="block text-xs text-[var(--text)] truncate hover:text-[var(--color-purple)]">
-                    • {v.title}
+
+            {v.needsReview.length > 0 && (
+              <div>
+                <SubLabel>Waiting for your review</SubLabel>
+                {v.needsReview.slice(0, 3).map((x) => (
+                  <Link key={x.id} href={`/pipeline/videos/${x.id}`} className="block text-xs text-[var(--text)] truncate py-0.5 hover:text-[var(--color-purple)]">
+                    • {x.title}
+                  </Link>
+                ))}
+              </div>
+            )}
+
+            {v.recent.length > 0 && (
+              <div>
+                <SubLabel>Recent activity</SubLabel>
+                {v.recent.map((x) => (
+                  <Link key={x.id} href={`/pipeline/videos/${x.id}`} className="flex items-center gap-2 py-1.5 group">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-[var(--text)] truncate group-hover:text-[var(--color-purple)]">{x.title}</p>
+                      <p className="text-[10px] text-[var(--text-faint)] truncate">
+                        {x.channel} · {formatTimeAgo(x.updated_at)}
+                      </p>
+                    </div>
+                    {x.hasError && <AlertTriangle className="w-3.5 h-3.5 text-[var(--color-red)] flex-shrink-0" />}
+                    <StatusBadge status={x.status as VideoStatus} size="sm" showIcon={false} />
+                    <ChevronRight className="w-3.5 h-3.5 text-[var(--border-strong)] flex-shrink-0" />
                   </Link>
                 ))}
               </div>
             )}
           </div>
 
+          {/* News pipeline */}
           <div className="card p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
-                <Newspaper className="w-4 h-4 text-[var(--color-cyan)]" />
-                News Pipeline
-              </h3>
-              <Link href="/news/dashboard" className="text-xs text-[var(--color-purple)] inline-flex items-center gap-1">
-                Open <ArrowRight className="w-3 h-3" />
-              </Link>
+            <PanelHeader icon={<Newspaper className="w-4 h-4 text-[var(--color-cyan)]" />} title="News Pipeline" href="/news/events" linkLabel="All events" />
+            <div className="grid grid-cols-4 gap-2">
+              <Tile label="To review" value={n.needsReview} color="var(--color-cyan)" href="/news/events?view=needs_review" />
+              <Tile label="Paused" value={n.paused} color={n.paused > 0 ? "var(--color-amber)" : undefined} href="/news/events" />
+              <Tile label="Reviewed" value={n.reviewed} color="var(--color-green)" href="/news/events?view=reviewed" />
+              <Tile label="Videos" value={n.converted} href="/news/events" />
             </div>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              {[
-                { l: "To review", v: data.news.needsReview, c: "var(--color-cyan)" },
-                { l: "Paused", v: data.news.paused, c: data.news.paused > 0 ? "var(--color-amber)" : "var(--text)" },
-                { l: "Reviewed", v: data.news.reviewed, c: "var(--color-green)" },
-              ].map((s) => (
-                <div key={s.l} className="rounded-lg bg-[var(--surface-raised)] py-2">
-                  <p className="text-lg font-bold tabular-nums" style={{ color: s.c }}>
-                    {s.v}
-                  </p>
-                  <p className="text-[10px] uppercase tracking-wider text-[var(--text-faint)]">{s.l}</p>
-                </div>
-              ))}
-            </div>
-            {data.news.urgent.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-[10px] uppercase tracking-wider text-[var(--text-faint)]">Closing window</p>
-                {data.news.urgent.map((e) => (
-                  <Link key={e.id} href={`/news/events/${e.id}`} className="flex items-center justify-between gap-2 text-xs hover:text-[var(--color-purple)]">
+
+            {n.urgent.length > 0 && (
+              <div>
+                <SubLabel>Closing window</SubLabel>
+                {n.urgent.map((e) => (
+                  <Link key={e.id} href={`/news/events/${e.id}`} className="flex items-center justify-between gap-2 text-xs py-1 hover:text-[var(--color-purple)]">
                     <span className="truncate text-[var(--text)]">{e.title}</span>
                     <span className="text-[var(--color-amber)] flex-shrink-0">{e.hours != null ? `${Math.round(e.hours)}h` : ""}</span>
                   </Link>
                 ))}
               </div>
             )}
-          </div>
 
-          <div className="card p-4">
-            <h3 className="text-sm font-semibold text-[var(--text)] mb-2">Quick links</h3>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              {[
-                ["/pipeline/new", "Add video"],
-                ["/pipeline/videos", "All videos"],
-                ["/news/events", "Review news"],
-                ["/schedule?view=calendar", "Calendar"],
-              ].map(([href, label]) => (
-                <Link key={href} href={href} className="rounded-lg border border-[var(--border)] px-3 py-2 text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]">
-                  {label}
-                </Link>
-              ))}
-            </div>
+            {n.recentlyReviewed.length > 0 && (
+              <div>
+                <SubLabel>Recently reviewed</SubLabel>
+                {n.recentlyReviewed.map((e) => (
+                  <Link key={e.id} href={`/news/events/${e.id}`} className="flex items-center justify-between gap-2 text-xs py-1 hover:text-[var(--color-purple)]">
+                    <span className="truncate text-[var(--text)]">{e.title}</span>
+                    <span className="text-[var(--text-faint)] flex-shrink-0">{e.toVideo ? "Video" : formatTimeAgo(e.created_at)}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         </aside>
       </div>

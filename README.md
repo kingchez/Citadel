@@ -10,9 +10,11 @@ or n8n directly. Built so more projects can slot into the same shell later
 
 - **Auth**: single shared password, no email/username, long-lived cookie
   session (`middleware.ts` guards every route except `/login`).
-- **Dashboard** (`/pipeline/dashboard`): live stat cards, VPS busy/idle,
-  average turnaround, recent activity — all computed from real Supabase
-  data, nothing fabricated.
+- **Dashboard** (`/`): the single dashboard for everything — alerts, My day
+  (schedule + to-dos), and a panel each for Video Pipeline (counts, VPS
+  service busy/idle, average turnaround, recent activity) and News Pipeline
+  (counts, closing windows, recently reviewed). All computed from real
+  Supabase data via `/api/workspace`, nothing fabricated.
 - **Video Pipeline** (`/pipeline/videos`): every video, filterable by
   errors / in-progress / needs-review / done, search by title/channel/status.
 - **Video detail**: every script segment with its own real status/error,

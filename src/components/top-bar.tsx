@@ -10,23 +10,22 @@ import { useEffect, useState } from "react";
 import { NotificationBell } from "./notification-bell";
 
 const breadcrumbMap: Record<string, string> = {
-  "/pipeline/dashboard": "Dashboard",
   "/pipeline/videos": "Video Pipeline",
   "/pipeline/new": "Add Video",
   "/pipeline/repurpose": "Repurpose Queue",
-  "/news/dashboard": "Dashboard",
   "/news/events": "News Pipeline",
   "/notifications": "Notifications",
   "/schedule": "Schedule",
-  "/": "Home",
+  "/": "Dashboard",
 };
 
 /** Only emits crumbs for routes that actually exist. The literal "/pipeline"
  * and "/news" segments aren't pages on their own - each project's real
- * routes live at /<project>/dashboard and /<project>/videos|events - so
- * they're deliberately skipped rather than shown as a dead link. */
+ * routes live at /<project>/videos|events - so they're deliberately skipped
+ * rather than shown as a dead link. */
 function getBreadcrumbs(pathname: string) {
   const breadcrumbs: { label: string; href: string }[] = [{ label: "Workspace", href: "/" }];
+  if (pathname === "/") return [{ label: "Dashboard", href: "/" }];
 
   if (pathname.startsWith("/pipeline/videos")) {
     breadcrumbs.push({ label: "Video Pipeline", href: "/pipeline/videos" });
@@ -34,18 +33,12 @@ function getBreadcrumbs(pathname: string) {
     if (idMatch) {
       breadcrumbs.push({ label: idMatch[1], href: pathname });
     }
-  } else if (pathname.startsWith("/pipeline/dashboard")) {
-    breadcrumbs.push({ label: "Video Pipeline", href: "/pipeline/videos" });
-    breadcrumbs.push({ label: "Dashboard", href: "/pipeline/dashboard" });
   } else if (pathname.startsWith("/news/events")) {
     breadcrumbs.push({ label: "News Pipeline", href: "/news/events" });
     const idMatch = pathname.match(/^\/news\/events\/([^/]+)/);
     if (idMatch) {
       breadcrumbs.push({ label: `Event #${idMatch[1]}`, href: pathname });
     }
-  } else if (pathname.startsWith("/news/dashboard")) {
-    breadcrumbs.push({ label: "News Pipeline", href: "/news/events" });
-    breadcrumbs.push({ label: "Dashboard", href: "/news/dashboard" });
   } else if (breadcrumbMap[pathname]) {
     breadcrumbs.push({ label: breadcrumbMap[pathname], href: pathname });
   }
