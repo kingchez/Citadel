@@ -26,14 +26,14 @@ function validMedia(value: unknown): value is MediaItem[] {
     Array.isArray(value) &&
     value.every((m) => {
       if (!m || typeof m !== "object" || typeof m.url !== "string" || m.url === "") return false;
+      if (m.description !== undefined && typeof m.description !== "string") return false;
       if (m.type === "image") return true;
       return (
         m.type === "clip" &&
         typeof m.start === "number" &&
         typeof m.end === "number" &&
         m.start >= 0 &&
-        m.end > m.start &&
-        (m.note === undefined || typeof m.note === "string")
+        m.end > m.start
       );
     })
   );
@@ -110,6 +110,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
       if (format === "video" && media.length === 0) {
         return NextResponse.json({ error: "Add at least one clip or image to a video post." }, { status: 400 });
+      }
+      const voiceover = (update.voiceover ?? current.voiceover) as boolean;
+      if (format === "video" && !voiceover && media.some((m) => !m.description || !m.description.trim())) {
+        return NextResponse.json(
+          { error: "Describe what each image or clip shows, so the captions can match it." },
+          { status: 400 }
+        );
       }
       if (format === "static") {
         // Static posts have no video content and no voice-over.

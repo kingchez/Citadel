@@ -39,7 +39,7 @@ interface DraftItem {
   url: string;
   start: string;
   end: string;
-  note: string;
+  description: string;
 }
 
 interface Draft {
@@ -58,7 +58,7 @@ const newItem = (type: DraftItem["type"], url: string): DraftItem => ({
   url,
   start: "",
   end: "",
-  note: "",
+  description: "",
 });
 
 /** Builds the starting draft from whatever was already saved on the trend. */
@@ -72,8 +72,8 @@ function initialDraft(trend: TrendReview): Draft {
       : [];
   const media = saved.map((m) =>
     m.type === "image"
-      ? newItem("image", m.url)
-      : { ...newItem("clip", m.url), start: formatTimecode(m.start), end: formatTimecode(m.end), note: m.note || "" }
+      ? { ...newItem("image", m.url), description: m.description || "" }
+      : { ...newItem("clip", m.url), start: formatTimecode(m.start), end: formatTimecode(m.end), description: m.description || "" }
   );
   const extra = Array.from(new Set(saved.filter((m) => m.type === "clip" && !extracted.has(m.url)).map((m) => m.url)));
   return { thumbs, format: trend.post_format || null, voiceover: !!trend.voiceover, media, extra };
@@ -224,7 +224,7 @@ export default function TrendReviewPage() {
     const out: MediaItem[] = [];
     for (const m of draft.media) {
       if (m.type === "image") {
-        out.push({ type: "image", url: m.url });
+        out.push({ type: "image", url: m.url, ...(m.description.trim() ? { description: m.description.trim() } : {}) });
         continue;
       }
       const start = parseTimecode(m.start);
@@ -232,7 +232,7 @@ export default function TrendReviewPage() {
       if (start === null || end === null || end <= start) {
         return "Every clip needs a start time before its end time (like 0:12 and 0:25).";
       }
-      out.push({ type: "clip", url: m.url, start, end, ...(m.note.trim() ? { note: m.note.trim() } : {}) });
+      out.push({ type: "clip", url: m.url, start, end, ...(m.description.trim() ? { description: m.description.trim() } : {}) });
     }
     return out;
   };
@@ -248,6 +248,9 @@ export default function TrendReviewPage() {
         const media = buildMedia();
         if (typeof media === "string") return showFeedback(media, 5000);
         if (media.length === 0) return showFeedback("Add at least one clip or image to the video.");
+        if (!draft.voiceover && draft.media.some((m) => !m.description.trim())) {
+          return showFeedback("Describe what each image or clip shows, so the captions can match it.", 5000);
+        }
         body.selected_media = media;
         body.voiceover = draft.voiceover;
       }
@@ -477,7 +480,7 @@ export default function TrendReviewPage() {
               <h3 className="text-sm font-semibold text-[var(--text)]">Your video, in order</h3>
               <span className="text-xs text-[var(--text-faint)]">
                 {draft.media.length} items · about {total === null ? "—" : formatTimecode(total)}
-                {" "}(images count {IMAGE_SECONDS}s each)
+                {" "}(images count {IMAGE_SECONDS}s each; Canva scene lengths are set by the templates)
               </span>
             </div>
 
@@ -494,8 +497,13 @@ export default function TrendReviewPage() {
                   {m.type === "image" ? (
                     <div className="flex items-center gap-3">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={m.url} alt="Image in the video" className="h-14 w-20 object-cover rounded-lg" />
-                      <span className="text-sm text-[var(--text)]">Image · {IMAGE_SECONDS}s</span>
+                      <img src={m.url} alt="Image in the video" className="h-14 w-20 object-cover rounded-lg flex-shrink-0" />
+                      <input
+                        value={m.description}
+                        onChange={(e) => editItem(m.id, { description: e.target.value })}
+                        placeholder="What does this image show?"
+                        className="input-field text-sm py-2 flex-1"
+                      />
                     </div>
                   ) : (
                     <>
@@ -514,9 +522,9 @@ export default function TrendReviewPage() {
                           className="input-field text-sm py-2"
                         />
                         <input
-                          value={m.note}
-                          onChange={(e) => editItem(m.id, { note: e.target.value })}
-                          placeholder="Note — what happens in this part (optional)"
+                          value={m.description}
+                          onChange={(e) => editItem(m.id, { description: e.target.value })}
+                          placeholder="What happens in this part?"
                           className="input-field text-sm py-2 col-span-2"
                         />
                       </div>

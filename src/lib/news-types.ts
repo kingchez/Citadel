@@ -89,12 +89,13 @@ export const EVENT_STATUS_COLORS: Record<EventStatus, "purple" | "cyan" | "green
 // Trend review (first human review, before a trend becomes an event)
 // ---------------------------------------------------------------------------
 
-/** One piece of a video post, in the order it will be merged: a still image,
+/** One piece of a video post, in the order it will be used: a still image,
  * or a window (seconds) cut out of a source video. The same source video can
- * appear several times with different windows. */
+ * appear several times with different windows. `description` is what the reviewer
+ * says the image shows or what happens in the clip; captions are written from it. */
 export type MediaItem =
-  | { type: "image"; url: string }
-  | { type: "clip"; url: string; start: number; end: number; note?: string };
+  | { type: "image"; url: string; description?: string }
+  | { type: "clip"; url: string; start: number; end: number; description?: string };
 
 /** How long a still image stays on screen when merged into a video. */
 export const IMAGE_SECONDS = 3;
@@ -189,32 +190,87 @@ export function formatTimecode(seconds: number): string {
 
 export type NewsShortStatus =
   | "queued"
+  | "planning"
+  | "plan_ready"
+  | "approved"
   | "downloading"
+  | "cutting"
   | "assembling"
   | "media_ready"
   | "designing"
+  | "stitching"
   | "done"
   | "error";
 
 export const NEWS_SHORT_STATUS_LABELS: Record<NewsShortStatus, string> = {
   queued: "Queued",
+  planning: "Planning scenes",
+  plan_ready: "Plan ready",
+  approved: "Approved",
   downloading: "Downloading",
+  cutting: "Cutting",
   assembling: "Merging",
   media_ready: "Ready for Canva",
   designing: "In Canva",
+  stitching: "Joining scenes",
   done: "Done",
   error: "Failed",
 };
 
 export const NEWS_SHORT_STATUS_COLORS: Record<NewsShortStatus, "purple" | "cyan" | "green" | "amber" | "red"> = {
   queued: "purple",
+  planning: "amber",
+  plan_ready: "cyan",
+  approved: "purple",
   downloading: "amber",
+  cutting: "amber",
   assembling: "amber",
   media_ready: "cyan",
   designing: "amber",
+  stitching: "amber",
   done: "green",
   error: "red",
 };
+
+export type SceneKind = "image" | "clip" | "intro" | "outro";
+
+/** The source of one scene: an image, or a window cut from a video. */
+export interface SceneAsset {
+  type: "image" | "clip";
+  url: string;
+  start?: number;
+  /** Where this scene's cut ends (start + the template's length). */
+  end?: number;
+  /** Where the reviewer's chosen window ends: how far this clip could be cut. */
+  window_end?: number;
+  /** What the reviewer said this shows. */
+  description?: string;
+}
+
+/** One scene of a Canva short: a template, its on-screen text and its asset. */
+export interface Scene {
+  n: number;
+  template: string;
+  kind: SceneKind;
+  duration: number;
+  caption: string;
+  assets: SceneAsset[];
+  /** Filled after download and cutting: the file Canva will receive. */
+  media_urls?: string[];
+}
+
+export interface CanvaTemplate {
+  key: string;
+  label: string;
+  kind: SceneKind;
+  duration_seconds: number;
+  brand_template_id: string;
+  caption_max: number;
+  media_width: number;
+  media_height: number;
+  active: boolean;
+  notes?: string | null;
+}
 
 export interface NewsShort {
   id: string;
@@ -223,6 +279,7 @@ export interface NewsShort {
   headline?: string | null;
   summary?: string | null;
   media?: MediaItem[] | null;
+  scenes?: Scene[] | null;
   media_url?: string | null;
   canva_design_id?: string | null;
   export_url?: string | null;
