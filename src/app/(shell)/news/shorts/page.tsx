@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { CanvaTemplate, NewsShort, Scene } from "@/lib/news-types";
 import { NEWS_SHORT_STATUS_COLORS, NEWS_SHORT_STATUS_LABELS, formatTimecode } from "@/lib/news-types";
+import { clipWindow, templateAccepts } from "@/lib/news-scenes";
 import { formatTimeAgo } from "@/lib/utils";
 import { ArrowDown, ArrowUp, CheckCircle2, Film, Loader2, RotateCcw, Save, Trash2 } from "lucide-react";
 
@@ -19,18 +20,18 @@ function summarize(short: NewsShort): string {
   return parts.join(", ");
 }
 
-/** Templates a scene may switch to: same kind of media, and long enough for a clip's chosen part. */
+/** Templates a scene may switch to: same number of items, kinds the template accepts, clips long enough for their slots. */
 function optionsFor(scene: Scene, templates: CanvaTemplate[]): CanvaTemplate[] {
-  const asset = scene.assets[0];
   return templates.filter((t) => {
     if (!t.active || !t.brand_template_id) return false;
-    if (!asset) return t.kind === "intro" || t.kind === "outro";
-    if (t.kind !== asset.type) return false;
-    if (asset.type === "clip") {
-      const window = (asset.window_end ?? asset.end ?? 0) - (asset.start ?? 0);
-      return Number(t.duration_seconds) <= window + 0.25;
-    }
-    return true;
+    if (scene.assets.length === 0) return t.kind === "intro" || t.kind === "outro";
+    if (t.kind === "intro" || t.kind === "outro") return false;
+    const slots = t.slots || [];
+    if (slots.length !== scene.assets.length) return false;
+    return scene.assets.every((a, k) => {
+      if (!templateAccepts(t, a.type)) return false;
+      return a.type !== "clip" || Number(slots[k].seconds) <= clipWindow(a) + 0.25;
+    });
   });
 }
 
@@ -75,11 +76,11 @@ export default function NewsShortsPage() {
     const t = templates.find((x) => x.key === key);
     if (!t) return;
     const sc = scenesOf(s)[i];
-    const asset = sc.assets[0];
-    const assets =
-      asset && asset.type === "clip"
-        ? [{ ...asset, window_end: asset.window_end ?? asset.end, end: Math.round(((asset.start ?? 0) + Number(t.duration_seconds)) * 100) / 100 }]
-        : sc.assets;
+    const assets = sc.assets.map((asset, k) =>
+      asset.type === "clip" && t.slots?.[k]
+        ? { ...asset, window_end: asset.window_end ?? asset.end, end: Math.round(((asset.start ?? 0) + Number(t.slots[k].seconds)) * 100) / 100 }
+        : asset
+    );
     editScene(s, i, { template: t.key, kind: t.kind, duration: Number(t.duration_seconds), assets });
   };
 
@@ -176,7 +177,6 @@ export default function NewsShortsPage() {
                   </p>
                 )}
                 {scenes.map((sc, i) => {
-                  const asset = sc.assets[0];
                   const tpl = templates.find((t) => t.key === sc.template);
                   const max = tpl?.caption_max ?? 70;
                   const options = optionsFor(sc, templates);
@@ -216,8 +216,8 @@ export default function NewsShortsPage() {
                         </button>
                       </div>
 
-                      {asset && (
-                        <div className="flex items-center gap-3">
+                      {sc.assets.map((asset, k) => (
+                        <div key={`${s.id}-${i}-a${k}`} className="flex items-center gap-3">
                           {asset.type === "image" ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={asset.url} alt="Scene image" className="h-14 w-20 object-cover rounded-lg flex-shrink-0" />
@@ -228,7 +228,7 @@ export default function NewsShortsPage() {
                           )}
                           {asset.description && <span className="text-xs text-[var(--text-muted)]">{asset.description}</span>}
                         </div>
-                      )}
+                      ))}
 
                       <div>
                         <textarea

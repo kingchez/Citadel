@@ -232,7 +232,7 @@ export const NEWS_SHORT_STATUS_COLORS: Record<NewsShortStatus, "purple" | "cyan"
   error: "red",
 };
 
-export type SceneKind = "image" | "clip" | "intro" | "outro";
+export type SceneKind = "image" | "clip" | "mixed" | "intro" | "outro";
 
 /** The source of one scene: an image, or a window cut from a video. */
 export interface SceneAsset {
@@ -247,7 +247,7 @@ export interface SceneAsset {
   description?: string;
 }
 
-/** One scene of a Canva short: a template, its on-screen text and its asset. */
+/** One scene of a Canva short: a template, one caption, and the assets filling its slots in order. */
 export interface Scene {
   n: number;
   template: string;
@@ -259,11 +259,21 @@ export interface Scene {
   media_urls?: string[];
 }
 
+/** One media slot of a Canva template: the data field it fills and how long it shows its asset. */
+export interface TemplateSlot {
+  field: string;
+  seconds: number;
+}
+
 export interface CanvaTemplate {
   key: string;
   label: string;
   kind: SceneKind;
+  /** Always the sum of the slot seconds. */
   duration_seconds: number;
+  /** One slot per image or clip the template holds; empty for intro and outro. */
+  slots: TemplateSlot[];
+  fixed_caption?: string | null;
   brand_template_id: string;
   caption_max: number;
   media_width: number;
