@@ -232,14 +232,19 @@ export const NEWS_SHORT_STATUS_COLORS: Record<NewsShortStatus, "purple" | "cyan"
   error: "red",
 };
 
-export type SceneKind = "image" | "clip" | "mixed" | "intro" | "outro";
+export type TemplatePurpose = "video" | "social";
+/** scene/intro/outro are video templates; post is a social (static) template. */
+export type TemplateRole = "scene" | "intro" | "outro" | "post";
 
-/** The source of one scene: an image, or a window cut from a video. */
+/** Text label levels offered in the template form (any name can be used; these tell the types of text apart). */
+export const LABEL_LEVELS = ["h1", "h2", "h3", "h4", "h5", "h6", "text"] as const;
+
+/** The source of one scene asset: an image, or a window cut from a video. */
 export interface SceneAsset {
   type: "image" | "clip";
   url: string;
   start?: number;
-  /** Where this scene's cut ends (start + the template's length). */
+  /** Where this asset's cut ends (start + its slot's seconds). */
   end?: number;
   /** Where the reviewer's chosen window ends: how far this clip could be cut. */
   window_end?: number;
@@ -247,39 +252,66 @@ export interface SceneAsset {
   description?: string;
 }
 
-/** One scene of a Canva short: a template, one caption, and the assets filling its slots in order. */
+/** One piece of on-screen text in a scene, matching one text label of its template. */
+export interface SceneText {
+  /** The Canva data field it fills. */
+  field: string;
+  /** The label's name (text_1, text_2, ... unless renamed). */
+  name: string;
+  level: string;
+  text: string;
+}
+
+/** One scene of a Canva short: a template, its texts, and the assets filling its slots in order. */
 export interface Scene {
   n: number;
   template: string;
-  kind: SceneKind;
+  role: "scene" | "intro" | "outro";
   duration: number;
-  caption: string;
+  texts: SceneText[];
   assets: SceneAsset[];
-  /** Filled after download and cutting: the file Canva will receive. */
+  /** Filled after download and cutting: the file Canva will receive for each asset. */
   media_urls?: string[];
 }
 
-/** One media slot of a Canva template: the data field it fills and how long it shows its asset. */
+/** One media slot of a template: the Canva field it fills, what it takes, and (video) how long it shows it. */
 export interface TemplateSlot {
   field: string;
-  seconds: number;
+  kind: "image" | "video";
+  seconds?: number;
+}
+
+/** One text label of a template: a name, the Canva field, its level (h1, h2 ...) and an allowed length range. */
+export interface TemplateLabel {
+  field: string;
+  name: string;
+  level: string;
+  min_chars: number;
+  max_chars: number;
+  /** When set, this text is always used as-is (like a fixed intro line). */
+  fixed_text?: string | null;
 }
 
 export interface CanvaTemplate {
   key: string;
   label: string;
-  kind: SceneKind;
-  /** Always the sum of the slot seconds. */
-  duration_seconds: number;
-  /** One slot per image or clip the template holds; empty for intro and outro. */
-  slots: TemplateSlot[];
-  fixed_caption?: string | null;
+  purpose: TemplatePurpose;
+  role: TemplateRole;
+  /** "All" or one category. */
+  category: string;
   brand_template_id: string;
-  caption_max: number;
+  slots: TemplateSlot[];
+  labels: TemplateLabel[];
+  /** For video templates: the sum of the slot seconds (or set by hand for intro/outro). */
+  duration_seconds: number | null;
   media_width: number;
   media_height: number;
   active: boolean;
   notes?: string | null;
+  usage_count: number;
+  last_used_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface NewsShort {

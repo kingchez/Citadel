@@ -1,13 +1,13 @@
-import type { CanvaTemplate, Scene, SceneAsset } from "@/lib/news-types";
+import type { CanvaTemplate, Scene, SceneAsset, SceneText, TemplateSlot } from "@/lib/news-types";
 
 /** A clip may be this many seconds shorter than its slot before it is rejected. */
 const CLIP_SLACK = 0.25;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** Whether a template's slots take this kind of asset. */
-export function templateAccepts(t: CanvaTemplate, assetType: "image" | "clip"): boolean {
-  return t.kind === "mixed" || t.kind === assetType;
+/** Whether a slot takes this kind of asset (a video slot takes a clip). */
+export function slotAccepts(slot: TemplateSlot, assetType: "image" | "clip"): boolean {
+  return slot.kind === "image" ? assetType === "image" : assetType === "clip";
 }
 
 /** The longest a clip can be cut for its scene, i.e. the reviewer's chosen window. */
@@ -15,10 +15,20 @@ export function clipWindow(a: SceneAsset): number {
   return (a.window_end ?? a.end ?? 0) - (a.start ?? 0);
 }
 
+/** Builds the scene texts for a template, keeping what was typed at the same position where it fits. */
+export function textsForTemplate(t: CanvaTemplate, previous: SceneText[] = []): SceneText[] {
+  return (t.labels || []).map((l, i) => ({
+    field: l.field,
+    name: l.name,
+    level: l.level,
+    text: l.fixed_text ? l.fixed_text : previous[i]?.text ?? "",
+  }));
+}
+
 /**
- * Checks a scene plan against the template registry. Returns a cleaned copy
- * (lengths taken from the template slots, clips cut to their slot length,
- * numbering fixed) or a message saying what is wrong.
+ * Checks a scene plan against the template table. Returns a cleaned copy (texts
+ * taken from the template labels, lengths from the slots, clips cut to their slot
+ * length, numbering fixed) or a message saying what is wrong.
  */
 export function validateScenes(input: unknown, templates: CanvaTemplate[]): Scene[] | string {
   if (!Array.isArray(input) || input.length === 0) return "A plan needs at least one scene.";
@@ -34,19 +44,30 @@ export function validateScenes(input: unknown, templates: CanvaTemplate[]): Scen
 
     const t = typeof s.template === "string" ? byKey.get(s.template) : undefined;
     if (!t) return `${label}: unknown template.`;
+    if (t.purpose !== "video" || t.role === "post") return `${label}: "${t.label}" is not a video template.`;
     if (!t.active || !t.brand_template_id) return `${label}: the "${t.label}" template is not set up in Canva yet.`;
 
-    const caption = typeof s.caption === "string" ? s.caption.trim() : "";
-    if (caption.length > t.caption_max) {
-      return `${label}: the caption is ${caption.length} characters; "${t.label}" allows ${t.caption_max}.`;
+    // texts: one per label, in order
+    const incoming = Array.isArray(s.texts) ? (s.texts as SceneText[]) : [];
+    const texts: SceneText[] = [];
+    for (let k = 0; k < (t.labels || []).length; k++) {
+      const l = t.labels[k];
+      const raw = l.fixed_text ? l.fixed_text : typeof incoming[k]?.text === "string" ? incoming[k].text : "";
+      const text = raw.trim();
+      if (text.length > l.max_chars) {
+        return `${label}: "${l.name}" is ${text.length} characters; "${t.label}" allows ${l.min_chars}–${l.max_chars}.`;
+      }
+      if (text.length < l.min_chars) {
+        return `${label}: "${l.name}" is ${text.length} characters; "${t.label}" needs ${l.min_chars}–${l.max_chars}.`;
+      }
+      texts.push({ field: l.field, name: l.name, level: l.level, text });
     }
 
     const assets = Array.isArray(s.assets) ? (s.assets as SceneAsset[]) : [];
-    const duration = Number(t.duration_seconds);
     const cleaned: SceneAsset[] = [];
 
-    if (t.kind === "intro" || t.kind === "outro") {
-      if (assets.length > 0) return `${label}: an ${t.kind} scene has no media.`;
+    if (t.role === "intro" || t.role === "outro") {
+      if (assets.length > 0) return `${label}: an ${t.role} scene has no media.`;
     } else {
       const slots = Array.isArray(t.slots) ? t.slots : [];
       if (slots.length === 0) return `${label}: the "${t.label}" template has no media slots.`;
@@ -55,13 +76,15 @@ export function validateScenes(input: unknown, templates: CanvaTemplate[]): Scen
       }
       for (let k = 0; k < slots.length; k++) {
         const a = assets[k];
-        const seconds = Number(slots[k].seconds);
+        const slot = slots[k];
         if (!a || typeof a.url !== "string" || !a.url) return `${label}: item ${k + 1} is missing its link.`;
         if (a.type !== "image" && a.type !== "clip") return `${label}: item ${k + 1} is not an image or a clip.`;
-        if (!templateAccepts(t, a.type)) {
-          return `${label}: "${t.label}" takes ${t.kind}s, but item ${k + 1} is a ${a.type}.`;
+        if (!slotAccepts(slot, a.type)) {
+          return `${label}: slot ${k + 1} of "${t.label}" takes ${slot.kind === "video" ? "a clip" : "an image"}, but item ${k + 1} is ${a.type === "clip" ? "a clip" : "an image"}.`;
         }
         if (a.type === "clip") {
+          const seconds = Number(slot.seconds);
+          if (!(seconds > 0)) return `${label}: slot ${k + 1} of "${t.label}" has no length in seconds.`;
           if (typeof a.start !== "number" || typeof a.end !== "number" || a.start < 0 || a.end <= a.start) {
             return `${label}: clip ${k + 1} needs a start time before its end time.`;
           }
@@ -76,7 +99,7 @@ export function validateScenes(input: unknown, templates: CanvaTemplate[]): Scen
       }
     }
 
-    out.push({ n: i + 1, template: t.key, kind: t.kind, duration, caption, assets: cleaned });
+    out.push({ n: i + 1, template: t.key, role: t.role, duration: Number(t.duration_seconds || 0), texts, assets: cleaned });
   }
   return out;
 }

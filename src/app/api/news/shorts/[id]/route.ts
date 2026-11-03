@@ -40,7 +40,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
       const mediaReady =
         scenes.length > 0 &&
-        scenes.every((s) => s.kind === "intro" || s.kind === "outro" || (s.media_urls && s.media_urls.length > 0));
+        scenes.every((s) => s.role === "intro" || s.role === "outro" || (s.media_urls && s.media_urls.length > 0));
       update.status = mediaReady ? "media_ready" : scenes.length > 0 ? "approved" : "queued";
       update.error = null;
     } else if (action === "replan") {

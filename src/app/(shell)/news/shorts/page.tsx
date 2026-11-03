@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { CanvaTemplate, NewsShort, Scene } from "@/lib/news-types";
 import { NEWS_SHORT_STATUS_COLORS, NEWS_SHORT_STATUS_LABELS, formatTimecode } from "@/lib/news-types";
-import { clipWindow, templateAccepts } from "@/lib/news-scenes";
+import { clipWindow, slotAccepts, textsForTemplate } from "@/lib/news-scenes";
 import { formatTimeAgo } from "@/lib/utils";
 import { ArrowDown, ArrowUp, CheckCircle2, Film, Loader2, RotateCcw, Save, Trash2 } from "lucide-react";
 
@@ -20,18 +20,15 @@ function summarize(short: NewsShort): string {
   return parts.join(", ");
 }
 
-/** Templates a scene may switch to: same number of items, kinds the template accepts, clips long enough for their slots. */
+/** Templates a scene may switch to: same role, same number of slots, slots that take its assets, clips long enough. */
 function optionsFor(scene: Scene, templates: CanvaTemplate[]): CanvaTemplate[] {
   return templates.filter((t) => {
-    if (!t.active || !t.brand_template_id) return false;
-    if (scene.assets.length === 0) return t.kind === "intro" || t.kind === "outro";
-    if (t.kind === "intro" || t.kind === "outro") return false;
+    if (t.purpose !== "video" || !t.active || !t.brand_template_id) return false;
+    if (scene.assets.length === 0) return t.role === scene.role && t.role !== "scene";
+    if (t.role !== "scene") return false;
     const slots = t.slots || [];
     if (slots.length !== scene.assets.length) return false;
-    return scene.assets.every((a, k) => {
-      if (!templateAccepts(t, a.type)) return false;
-      return a.type !== "clip" || Number(slots[k].seconds) <= clipWindow(a) + 0.25;
-    });
+    return scene.assets.every((a, k) => slotAccepts(slots[k], a.type) && (a.type !== "clip" || Number(slots[k].seconds) <= clipWindow(a) + 0.25));
   });
 }
 
@@ -78,10 +75,15 @@ export default function NewsShortsPage() {
     const sc = scenesOf(s)[i];
     const assets = sc.assets.map((asset, k) =>
       asset.type === "clip" && t.slots?.[k]
-        ? { ...asset, window_end: asset.window_end ?? asset.end, end: Math.round(((asset.start ?? 0) + Number(t.slots[k].seconds)) * 100) / 100 }
+        ? { ...asset, window_end: asset.window_end ?? asset.end, end: Math.round(((asset.start ?? 0) + Number(t.slots[k].seconds || 0)) * 100) / 100 }
         : asset
     );
-    editScene(s, i, { template: t.key, kind: t.kind, duration: Number(t.duration_seconds), assets });
+    editScene(s, i, { template: t.key, role: t.role as Scene["role"], duration: Number(t.duration_seconds || 0), assets, texts: textsForTemplate(t, sc.texts) });
+  };
+
+  const editText = (s: NewsShort, i: number, k: number, text: string) => {
+    const sc = scenesOf(s)[i];
+    editScene(s, i, { texts: sc.texts.map((t, j) => (j === k ? { ...t, text } : t)) });
   };
 
   const move = (s: NewsShort, i: number, dir: -1 | 1) => {
@@ -173,12 +175,11 @@ export default function NewsShortsPage() {
                 <p className="text-sm font-semibold text-[var(--text)]">Scene plan — check the captions, then approve</p>
                 {templates.filter((t) => t.active && t.brand_template_id).length === 0 && (
                   <p className="text-sm text-[var(--text-muted)]">
-                    No Canva templates are active yet. Add each template&apos;s Canva ID and turn it on in the canva_templates table.
+                    No Canva templates are active yet. Add them on the Templates page.
                   </p>
                 )}
                 {scenes.map((sc, i) => {
                   const tpl = templates.find((t) => t.key === sc.template);
-                  const max = tpl?.caption_max ?? 70;
                   const options = optionsFor(sc, templates);
                   return (
                     <div key={`${s.id}-${i}`} className="rounded-xl border border-[var(--border)] p-3 space-y-2">
@@ -230,18 +231,33 @@ export default function NewsShortsPage() {
                         </div>
                       ))}
 
-                      <div>
-                        <textarea
-                          value={sc.caption}
-                          onChange={(e) => editScene(s, i, { caption: e.target.value })}
-                          rows={2}
-                          className="input-field text-sm w-full"
-                          placeholder="On-screen text for this scene"
-                        />
-                        <p className={`text-[11px] text-right ${sc.caption.length > max ? "text-[var(--color-red)]" : "text-[var(--text-faint)]"}`}>
-                          {sc.caption.length}/{max}
-                        </p>
-                      </div>
+                      {sc.texts.map((tx, k) => {
+                        const label = tpl?.labels?.[k];
+                        const min = label?.min_chars ?? 0;
+                        const max = label?.max_chars ?? 200;
+                        const len = tx.text.length;
+                        const fixed = !!label?.fixed_text;
+                        return (
+                          <div key={`${s.id}-${i}-t${k}`}>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-[11px] font-medium text-[var(--text-muted)]">{tx.name}</span>
+                              <span className="text-[10px] uppercase text-[var(--text-faint)]">{tx.level}</span>
+                              {fixed && <span className="text-[10px] text-[var(--text-faint)]">fixed text</span>}
+                            </div>
+                            <textarea
+                              value={tx.text}
+                              onChange={(e) => editText(s, i, k, e.target.value)}
+                              rows={tx.level === "h1" || tx.level === "h2" ? 2 : 1}
+                              disabled={fixed}
+                              className="input-field text-sm w-full disabled:opacity-60"
+                              placeholder="On-screen text"
+                            />
+                            <p className={`text-[11px] text-right ${len > max || len < min ? "text-[var(--color-red)]" : "text-[var(--text-faint)]"}`}>
+                              {len} / {min}–{max}
+                            </p>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
@@ -284,7 +300,7 @@ export default function NewsShortsPage() {
                     <span className="text-[var(--text-faint)]">
                       {i + 1}. {sc.template}
                     </span>{" "}
-                    {sc.caption}
+                    {sc.texts.map((tx) => tx.text).filter(Boolean).join(" · ")}
                   </li>
                 ))}
               </ol>

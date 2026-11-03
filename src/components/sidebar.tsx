@@ -22,6 +22,7 @@ import {
   Inbox,
   ListChecks,
   Film,
+  LayoutTemplate,
   Plus,
   Repeat,
   CalendarClock,
@@ -67,6 +68,7 @@ const PROJECTS: ProjectDef[] = [
       { label: "Needs Review", href: "/news/events?view=needs_review", icon: Inbox, countKey: "news.needsReview" },
       { label: "Reviewed", href: "/news/events?view=reviewed", icon: CheckCircle, countKey: "news.reviewed" },
       { label: "Shorts", href: "/news/shorts", icon: Film, countKey: "news.shorts" },
+      { label: "Templates", href: "/news/templates", icon: LayoutTemplate },
     ],
   },
 ];
