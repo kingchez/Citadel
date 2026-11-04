@@ -26,6 +26,12 @@ interface EventDetailProps {
   params: Promise<{ id: string }>;
 }
 
+function formatBadgeText(event: NewsEvent): string {
+  if (event.post_format !== "video") return "Static post";
+  if (event.voiceover) return "Video post · voice-over";
+  return event.render_mode === "render" ? "Video post · Render short" : "Video post · Canva short";
+}
+
 const CHANNELS = [
   "Pure Pulse", "Capital Code", "Insight Within", "Reel Talk", "The Daily Signal", "Curious Atlas",
   "Taste the World", "Wild & Whiskered", "Game Point", "Full Throttle", "Viral Shop", "Flow Nation",
@@ -224,12 +230,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
               <span className="badge badge-cyan">{EVENT_STATUS_LABELS[event.status]}</span>
               {event.post_format && (
                 <span className="badge badge-purple">
-                  {event.post_format === "video"
-                    ? event.voiceover
-                    : event.render_mode === "render"
-                      ? "Video post · Render short"
-                      : "Video post · Canva short"
-                    : "Static post"}
+                  {formatBadgeText(event)}
                 </span>
               )}
               {event.golden_window_hours != null && (
