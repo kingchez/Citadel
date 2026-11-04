@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
 import { Choice, Field, OptionalProducts, PriorityField, ScriptAndDirectionFields } from "@/components/add-video-ui";
+import { MediaClipsBuilder } from "@/components/media-clips-builder";
+import type { MediaItem } from "@/lib/news-types";
 import type { DirectionChoice, ScriptChoice } from "@/lib/video-options";
 import { parseTimeToSeconds, formatSeconds } from "@/lib/repurpose-utils";
 import { classifyVideoUrl } from "@/lib/video-source";
@@ -22,6 +24,9 @@ export function AddByLink() {
   const [channel, setChannel] = useState("");
   const [mode, setMode] = useState<Mode>("repurpose");
   const [title, setTitle] = useState("");
+  const [voiceover, setVoiceover] = useState(true);
+  const [renderMode, setRenderMode] = useState<"canva" | "render">("canva");
+  const [selectedMedia, setSelectedMedia] = useState<MediaItem[]>([]);
   const [videoKind, setVideoKind] = useState<VideoKind>("single");
   const [sourceUrls, setSourceUrls] = useState<string[]>([""]);
   const [introMode, setIntroMode] = useState<IntroMode>("keep_original");
@@ -57,7 +62,6 @@ export function AddByLink() {
     return kind === "direct" ? null : `${kind === "youtube" ? "YouTube" : "TikTok"} link - it will be downloaded automatically before splitting.`;
   };
 
-  // Single video = one link; merge = at least two. The kind switch keeps what was typed.
   const changeKind = (k: VideoKind) => {
     setVideoKind(k);
     setSourceUrls((prev) => (k === "single" ? [prev[0] ?? ""] : prev.length >= 2 ? prev : [...prev, ""]));
@@ -71,7 +75,8 @@ export function AddByLink() {
     (mode === "new" ||
       (activeUrls.length >= 1 &&
         activeUrls.every((u) => !!u.trim()) &&
-        (introMode === "keep_original" || (!!introUrl.trim() && startSeconds !== null))));
+        (introMode === "keep_original" || (!!introUrl.trim() && startSeconds !== null)))) &&
+    (voiceover || renderMode !== "canva" || (selectedMedia.length > 0 && selectedMedia.every((m) => !!m.description?.trim())));
 
   const submit = async () => {
     setSubmitting(true);
@@ -86,6 +91,9 @@ export function AddByLink() {
           title,
           channel,
           video_type: videoType,
+          voiceover,
+          render_mode: voiceover ? "render" : renderMode,
+          selected_media: !voiceover && renderMode === "canva" ? selectedMedia : undefined,
           subtitles,
           change_script: changeScript,
           product_direction: direction,
@@ -107,7 +115,7 @@ export function AddByLink() {
         setFailedLines(data.failed || []);
         return;
       }
-      const href = data.mode === "new" ? `/pipeline/videos/${data.video.id}` : "/pipeline/repurpose";
+      const href = data.mode === "new" || (!voiceover && renderMode === "canva") ? `/pipeline/videos/${data.video.id}` : "/pipeline/repurpose";
       const p = data.products as { error?: string; failed?: string[] } | null;
       const warnings = (data.warnings as string[] | undefined) || [];
       if (warnings.length > 0 && !(p && (p.error || (p.failed && p.failed.length > 0)))) {
@@ -115,7 +123,6 @@ export function AddByLink() {
         return;
       }
       if (p && (p.error || (p.failed && p.failed.length > 0))) {
-        // Created fine, but some/all products need attention - say so before leaving the page.
         setNotice({
           message: p.error
             ? `Video created, but the products couldn't be added: ${p.error} You can add them from the video page.`
@@ -183,6 +190,38 @@ export function AddByLink() {
                 maxLength={200}
               />
             </Field>
+
+            <Field label="Voice-over">
+              <div className="flex gap-2">
+                <Choice value="voiced" current={voiceover ? "voiced" : "voiceless"} onSelect={() => setVoiceover(true)}>
+                  With voice-over
+                </Choice>
+                <Choice value="voiceless" current={voiceover ? "voiced" : "voiceless"} onSelect={() => setVoiceover(false)}>
+                  No voice-over
+                </Choice>
+              </div>
+            </Field>
+
+            {!voiceover && (
+              <Field label="Render with">
+                <div className="flex gap-2">
+                  <Choice value="canva" current={renderMode} onSelect={setRenderMode}>
+                    Canva template
+                  </Choice>
+                  <Choice value="render" current={renderMode} onSelect={setRenderMode}>
+                    Render server
+                  </Choice>
+                </div>
+              </Field>
+            )}
+
+            {!voiceover && renderMode === "canva" && (
+              <MediaClipsBuilder
+                items={selectedMedia}
+                onChange={setSelectedMedia}
+                defaultUrl={activeUrls[0] || ""}
+              />
+            )}
 
             {mode === "repurpose" && (
               <>
@@ -288,15 +327,15 @@ export function AddByLink() {
             <PriorityField priority={priority} onChange={setPriority} />
 
             <OptionalProducts hasValue={productsRaw.trim() !== ""}>
-            <Field label="Affiliate products" hint="Optional. Paste Amazon URLs or ASINs, one per line or comma separated.">
-              <textarea
-                className="input-field text-sm resize-none font-mono"
-                rows={4}
-                value={productsRaw}
-                onChange={(e) => setProductsRaw(e.target.value)}
-                placeholder="https://www.amazon.com/dp/B0XXXXXXXX"
-              />
-            </Field>
+              <Field label="Affiliate products" hint="Optional. Paste Amazon URLs or ASINs, one per line or comma separated.">
+                <textarea
+                  className="input-field text-sm resize-none font-mono"
+                  rows={4}
+                  value={productsRaw}
+                  onChange={(e) => setProductsRaw(e.target.value)}
+                  placeholder="https://www.amazon.com/dp/B0XXXXXXXX"
+                />
+              </Field>
             </OptionalProducts>
 
             <Field
@@ -336,21 +375,25 @@ export function AddByLink() {
               </div>
             </Field>
 
-            <Field label="Subtitles" hint="“Decide later” leaves it for the planning agent to ask.">
-              <div className="flex gap-2 flex-wrap">
-                <Choice value="yes" current={subtitles} onSelect={setSubtitles}>
-                  Yes
-                </Choice>
-                <Choice value="no" current={subtitles} onSelect={setSubtitles}>
-                  No
-                </Choice>
-                <Choice value="later" current={subtitles} onSelect={setSubtitles}>
-                  Decide later
-                </Choice>
-              </div>
-            </Field>
+            {voiceover && (
+              <>
+                <Field label="Subtitles" hint="“Decide later” leaves it for the planning agent to ask.">
+                  <div className="flex gap-2 flex-wrap">
+                    <Choice value="yes" current={subtitles} onSelect={setSubtitles}>
+                      Yes
+                    </Choice>
+                    <Choice value="no" current={subtitles} onSelect={setSubtitles}>
+                      No
+                    </Choice>
+                    <Choice value="later" current={subtitles} onSelect={setSubtitles}>
+                      Decide later
+                    </Choice>
+                  </div>
+                </Field>
 
-            <ScriptAndDirectionFields script={changeScript} onScript={setChangeScript} direction={direction} onDirection={setDirection} />
+                <ScriptAndDirectionFields script={changeScript} onScript={setChangeScript} direction={direction} onDirection={setDirection} />
+              </>
+            )}
           </>
         )}
 

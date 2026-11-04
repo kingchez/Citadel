@@ -50,6 +50,11 @@ function VideoRowItem({ video }: { video: VideoRow }) {
       <div className="flex-1 min-w-[calc(100%-2.25rem)] sm:min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <h3 className="text-sm font-semibold text-[var(--text)] line-clamp-2 sm:truncate">{video.title}</h3>
+          {video.voiceover === false && (
+            <span className="badge badge-purple text-[10px]">
+              {video.render_mode === "canva" ? "Voiceless · Canva" : "Voiceless · Render"}
+            </span>
+          )}
           {hasError && errorCount > 0 && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[var(--color-red-soft)] text-[var(--color-red)] border border-[var(--color-red)]/30 flex-shrink-0">
               <AlertTriangle className="w-3 h-3" />
@@ -166,8 +171,7 @@ function VideosContent() {
               <span
                 className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
                   activeTab === tab.key ? "bg-white/20 text-white" : "bg-[var(--border)] text-[var(--text-faint)]"
-                }`}
-              >
+                }`}>
                 {count}
               </span>
             </button>
