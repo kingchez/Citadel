@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExternalLink, Loader2, Plus, SkipForward, Trash2, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Choice, Field, OptionalProducts, PriorityField, ScriptAndDirectionFields } from "@/components/add-video-ui";
+import { MediaClipsBuilder } from "@/components/media-clips-builder";
+import type { MediaItem } from "@/lib/news-types";
 import type { DirectionChoice, ScriptChoice } from "@/lib/video-options";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ProductSearch, addAsins } from "@/components/product-search";
@@ -129,7 +131,6 @@ function ChannelsPanel({ onChanged }: { onChanged: () => void }) {
   const load = useCallback(() => fetchChannelList().then(apply), [apply]);
 
   useEffect(() => {
-    // While a channel is waiting for n8n to scrape it, keep the list fresh.
     fetchChannelList().then(apply);
     const t = setInterval(() => fetchChannelList().then(apply), 15000);
     return () => clearInterval(t);
@@ -263,8 +264,7 @@ function ChannelsPanel({ onChanged }: { onChanged: () => void }) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// One video under review: player (left on desktop, on top on mobile) + the same fields as the link form (right).
-// Mounted with key={video.id}, so every field starts fresh for each video.
+// One video under review: player (left on desktop, on top on mobile) + form (right).
 // ---------------------------------------------------------------------------------------------------------------
 
 function ReviewCard({
@@ -289,6 +289,9 @@ function ReviewCard({
   const [viewMode, setViewMode] = useState<ViewMode>(video.is_shorts ? "vertical-shorts" : "horizontal-long");
   const [title, setTitle] = useState(video.title || "");
   const [url, setUrl] = useState(video.video_url);
+  const [voiceover, setVoiceover] = useState(true);
+  const [renderMode, setRenderMode] = useState<"canva" | "render">("canva");
+  const [selectedMedia, setSelectedMedia] = useState<MediaItem[]>([]);
   const [introMode, setIntroMode] = useState<IntroMode>("keep_original");
   const [introUrl, setIntroUrl] = useState("");
   const [introStart, setIntroStart] = useState("");
@@ -318,7 +321,10 @@ function ReviewCard({
   const mergeTarget = isMerge ? pastedId.trim() || targetId : "";
   const canSubmit = isMerge
     ? !!url.trim() && !!mergeTarget
-    : !!title.trim() && !!url.trim() && (introMode === "keep_original" || (!!introUrl.trim() && startSeconds !== null));
+    : !!title.trim() &&
+      !!url.trim() &&
+      (introMode === "keep_original" || (!!introUrl.trim() && startSeconds !== null)) &&
+      (voiceover || renderMode !== "canva" || (selectedMedia.length > 0 && selectedMedia.every((m) => !!m.description?.trim())));
   const pickedTarget = targets.find((t) => t.id === targetId);
   const isShort = viewMode === "vertical-shorts";
 
@@ -339,7 +345,6 @@ function ReviewCard({
     }
   };
 
-  // Merge complete: release the held item so the pipeline starts on it.
   const finishMerge = async () => {
     setFinishing(true);
     setError(null);
@@ -404,6 +409,9 @@ function ReviewCard({
           title,
           channel: SUPPORTED_CHANNELS[0],
           video_type: viewMode,
+          voiceover,
+          render_mode: voiceover ? "render" : renderMode,
+          selected_media: !voiceover && renderMode === "canva" ? selectedMedia : undefined,
           subtitles,
           change_script: changeScript,
           product_direction: direction,
@@ -435,7 +443,7 @@ function ReviewCard({
         video,
         messages.length > 0
           ? { tone: "warn", message: `“${title.trim()}” — ${messages.join(" ")}`, lines }
-          : { tone: "ok", message: kind === "start" ? `Added “${title.trim()}” (${1 + extraUrls.filter((u) => u.trim()).length} video${extraUrls.some((u) => u.trim()) ? "s" : ""}) and holding it for a merge. It now shows in the “Merge into” list.` : `Added “${title.trim()}” to the repurpose queue.` }
+          : { tone: "ok", message: kind === "start" ? `Added “${title.trim()}” (${1 + extraUrls.filter((u) => u.trim()).length} video${extraUrls.some((u) => u.trim()) ? "s" : ""}) and holding it for a merge. It now shows in the “Merge into” list.` : `Added “${title.trim()}” to the video pipeline.` }
       );
     } catch {
       setError("Network error - nothing was saved.");
@@ -531,6 +539,38 @@ function ReviewCard({
             <Field label="Title">
               <input className="input-field text-sm" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Working title for this video" maxLength={200} />
             </Field>
+
+            <Field label="Voice-over">
+              <div className="flex gap-2">
+                <Choice value="voiced" current={voiceover ? "voiced" : "voiceless"} onSelect={() => setVoiceover(true)}>
+                  With voice-over
+                </Choice>
+                <Choice value="voiceless" current={voiceover ? "voiced" : "voiceless"} onSelect={() => setVoiceover(false)}>
+                  No voice-over
+                </Choice>
+              </div>
+            </Field>
+
+            {!voiceover && (
+              <Field label="Render with">
+                <div className="flex gap-2">
+                  <Choice value="canva" current={renderMode} onSelect={setRenderMode}>
+                    Canva template
+                  </Choice>
+                  <Choice value="render" current={renderMode} onSelect={setRenderMode}>
+                    Render server
+                  </Choice>
+                </div>
+              </Field>
+            )}
+
+            {!voiceover && renderMode === "canva" && (
+              <MediaClipsBuilder
+                items={selectedMedia}
+                onChange={setSelectedMedia}
+                defaultUrl={url}
+              />
+            )}
           </>
         )}
 
@@ -603,46 +643,45 @@ function ReviewCard({
           </div>
         )}
 
-        {!isMerge && (
+        {!isMerge && (voiceover || renderMode === "render") && (
           <>
-        <Field label="Intro">
-          <div className="flex gap-2 flex-wrap">
-            <Choice value="keep_original" current={introMode} onSelect={setIntroMode}>
-              Keep original intro
-            </Choice>
-            <Choice value="replace" current={introMode} onSelect={setIntroMode}>
-              Use another intro
-            </Choice>
-          </div>
-        </Field>
-
-        {introMode === "replace" && (
-          <div className="space-y-4 pl-4 border-l border-[var(--border)]">
-            <Field label="New intro video link">
-              <input className="input-field text-sm font-mono" value={introUrl} onChange={(e) => setIntroUrl(e.target.value)} placeholder="https://…/intro.mp4  or  https://drive.google.com/file/d/…" />
+            <Field label="Intro">
+              <div className="flex gap-2 flex-wrap">
+                <Choice value="keep_original" current={introMode} onSelect={setIntroMode}>
+                  Keep original intro
+                </Choice>
+                <Choice value="replace" current={introMode} onSelect={setIntroMode}>
+                  Use another intro
+                </Choice>
+              </div>
             </Field>
-            <Field
-              label="Start cutting from"
-              hint={startSeconds !== null ? `Starts at ${formatSeconds(startSeconds)} in the new intro. The planning agent trims as much as the original intro is long.` : "Format like 0:13 or 1:05."}
-            >
-              <input className="input-field text-sm font-mono w-40" value={introStart} onChange={(e) => setIntroStart(e.target.value)} placeholder="0:00" />
-              {introStart.trim() && startSeconds === null && <p className="text-xs text-[var(--color-red)]">Not a valid time.</p>}
-            </Field>
-          </div>
-        )}
 
+            {introMode === "replace" && (
+              <div className="space-y-4 pl-4 border-l border-[var(--border)]">
+                <Field label="New intro video link">
+                  <input className="input-field text-sm font-mono" value={introUrl} onChange={(e) => setIntroUrl(e.target.value)} placeholder="https://…/intro.mp4  or  https://drive.google.com/file/d/…" />
+                </Field>
+                <Field
+                  label="Start cutting from"
+                  hint={startSeconds !== null ? `Starts at ${formatSeconds(startSeconds)} in the new intro. The planning agent trims as much as the original intro is long.` : "Format like 0:13 or 1:05."}
+                >
+                  <input className="input-field text-sm font-mono w-40" value={introStart} onChange={(e) => setIntroStart(e.target.value)} placeholder="0:00" />
+                  {introStart.trim() && startSeconds === null && <p className="text-xs text-[var(--color-red)]">Not a valid time.</p>}
+                </Field>
+              </div>
+            )}
           </>
         )}
 
         <PriorityField priority={priority} onChange={setPriority} />
 
         <OptionalProducts hasValue={productsRaw.trim() !== ""}>
-        <Field label="Affiliate products" hint={isMerge ? "Optional. Added to the item you merge into." : "Optional. Paste Amazon URLs or ASINs, one per line or comma separated - or use the search above."}>
-          <div className="space-y-2">
-            <ProductSearch channelId={video.source_channel_id} onAsins={(asins) => setProductsRaw((prev) => addAsins(prev, asins))} />
-            <textarea className="input-field text-sm resize-none font-mono" rows={4} value={productsRaw} onChange={(e) => setProductsRaw(e.target.value)} placeholder="https://www.amazon.com/dp/B0XXXXXXXX" />
-          </div>
-        </Field>
+          <Field label="Affiliate products" hint={isMerge ? "Optional. Added to the item you merge into." : "Optional. Paste Amazon URLs or ASINs, one per line or comma separated - or use the search above."}>
+            <div className="space-y-2">
+              <ProductSearch channelId={video.source_channel_id} onAsins={(asins) => setProductsRaw((prev) => addAsins(prev, asins))} />
+              <textarea className="input-field text-sm resize-none font-mono" rows={4} value={productsRaw} onChange={(e) => setProductsRaw(e.target.value)} placeholder="https://www.amazon.com/dp/B0XXXXXXXX" />
+            </div>
+          </Field>
         </OptionalProducts>
 
         <Field label="Notes for the agent" hint={isMerge ? "Optional. Added to the notes the item you merge into already has." : "Optional. Anything the agent must know or do for this video - one instruction per box."}>
@@ -670,24 +709,23 @@ function ReviewCard({
           </div>
         </Field>
 
-        {!isMerge && (
+        {!isMerge && voiceover && (
           <>
-        <Field label="Subtitles" hint="“Decide later” leaves it for the planning agent to ask.">
-          <div className="flex gap-2 flex-wrap">
-            <Choice value="yes" current={subtitles} onSelect={setSubtitles}>
-              Yes
-            </Choice>
-            <Choice value="no" current={subtitles} onSelect={setSubtitles}>
-              No
-            </Choice>
-            <Choice value="later" current={subtitles} onSelect={setSubtitles}>
-              Decide later
-            </Choice>
-          </div>
-        </Field>
+            <Field label="Subtitles" hint="“Decide later” leaves it for the planning agent to ask.">
+              <div className="flex gap-2 flex-wrap">
+                <Choice value="yes" current={subtitles} onSelect={setSubtitles}>
+                  Yes
+                </Choice>
+                <Choice value="no" current={subtitles} onSelect={setSubtitles}>
+                  No
+                </Choice>
+                <Choice value="later" current={subtitles} onSelect={setSubtitles}>
+                  Decide later
+                </Choice>
+              </div>
+            </Field>
 
             <ScriptAndDirectionFields script={changeScript} onScript={setChangeScript} direction={direction} onDirection={setDirection} />
-
           </>
         )}
 
@@ -704,7 +742,7 @@ function ReviewCard({
           </div>
           <button type="button" className="btn-primary flex items-center justify-center gap-2" disabled={!canSubmit || submitting} onClick={submit}>
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            {isMerge ? "Merge into item" : kind === "start" ? "Add and hold for merge" : "Add to repurpose queue"}
+            {isMerge ? "Merge into item" : kind === "start" ? "Add and hold for merge" : "Add to video pipeline"}
           </button>
         </div>
       </div>
@@ -750,8 +788,6 @@ export function AddByChannel() {
     fetchVideoBatch().then(apply);
   }, [apply]);
 
-  // After a video leaves the pool (added or removed): drop it locally, and fetch a fresh random batch when the
-  // local one runs out but the pool still has more.
   const afterLeave = (video: ScrapedVideo) => {
     const rest = videos.filter((v) => v.id !== video.id);
     const newTotal = Math.max(0, total - 1);

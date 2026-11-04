@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import type { ScriptSegment, VideoRow } from "@/lib/types";
+import { CanvaScenesPanel } from "@/components/canva-scenes-panel";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { SegmentRow, AudioPlayerBar } from "@/components/segment-row";
@@ -40,7 +41,7 @@ interface VideoDetailProps {
 const APPROVABLE_STATUSES = new Set(["media_review", "production_review", "done"]);
 
 export default function VideoDetailPage({ params }: VideoDetailProps) {
-  const { id } = use(params);
+  const { id } = use(params as Promise<{ id: string }>);
   const [video, setVideo] = useState<VideoRow | null>(null);
   const [confirmAction, setConfirmAction] = useState<
     { kind: "retry"; index: number } | { kind: "redo"; all: boolean } | { kind: "render" } | { kind: "media"; code: string } | null
@@ -52,7 +53,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [showOutputModal, setShowOutputModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"segments" | "media" | "products" | "notes">("segments");
+  const [activeTab, setActiveTab] = useState<"scenes" | "segments" | "media" | "products" | "notes">("segments");
   const [audioBlobUrls, setAudioBlobUrls] = useState<Record<string, string>>({});
 
   const loadVideo = () => {
@@ -65,7 +66,12 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
         return r.json();
       })
       .then((data: { video?: VideoRow } | null) => {
-        if (data?.video) setVideo(data.video);
+        if (data?.video) {
+          setVideo(data.video);
+          if (data.video.render_mode === "canva") {
+            setActiveTab("scenes");
+          }
+        }
       })
       .finally(() => setLoading(false));
   };
@@ -75,10 +81,6 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Prefetch every segment's audio as soon as the video (and its file ids)
-  // are known, so clicking play is instant instead of downloading on
-  // demand. Blob URLs are revoked whenever the file id set changes and on
-  // unmount (navigating away), so nothing lingers in memory.
   useEffect(() => {
     const fileIds = Array.from(
       new Set((video?.script_segments || []).map((s) => s.voiceover_drive_file_id).filter((v): v is string => !!v))
@@ -118,9 +120,6 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
       cancelled = true;
       objectUrls.forEach((u) => URL.revokeObjectURL(u));
     };
-    // Re-run only when the actual set of file ids changes, not on every
-    // video refetch (redo/retry swaps ids in place, which this still
-    // catches since the join below changes).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [(video?.script_segments || []).map((s) => s.voiceover_drive_file_id).join(",")]);
 
@@ -169,7 +168,6 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
     });
   };
 
-  // Both buttons ask for confirmation first - a retry rewinds the whole video, so it should never be one stray click.
   const requestRetryOne = (index: number) => setConfirmAction({ kind: "retry", index });
   const requestRedo = (all: boolean) => setConfirmAction({ kind: "redo", all });
 
@@ -332,6 +330,14 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
                 <Film className="w-4 h-4" />
                 {video.video_type === "vertical-shorts" ? "Vertical" : "Horizontal"}
               </span>
+              {video.voiceover === false && (
+                <>
+                  <span className="text-[var(--border-strong)]">·</span>
+                  <span className="badge badge-purple text-xs">
+                    {video.render_mode === "canva" ? "Voiceless · Canva" : "Voiceless · Render"}
+                  </span>
+                </>
+              )}
               {video.with_product && (
                 <>
                   <span className="text-[var(--border-strong)]">·</span>
@@ -378,7 +384,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
           </div>
         </div>
 
-        {video.status === "render_error" && video.error_details && (
+        {video.render_mode !== "canva" && video.status === "render_error" && video.error_details && (
           <div className="flex items-start gap-3 p-4 rounded-xl bg-[var(--color-red-soft)] border border-[var(--color-red)]/40">
             <AlertTriangle className="w-5 h-5 text-[var(--color-red)] flex-shrink-0 mt-0.5" />
             <div>
@@ -471,25 +477,44 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
         </div>
       )}
 
+      {video.render_mode === "canva" && video.status === "scenes_planned" && (
+        <CanvaScenesPanel video={video as any} onChanged={loadVideo} />
+      )}
+
       <div className="flex items-center gap-1 p-1.5 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-fit max-w-full scroll-x">
-        <button onClick={() => setActiveTab("segments")} className={`tab flex items-center gap-2 ${activeTab === "segments" ? "tab-active" : ""}`}>
-          <Layers className="w-4 h-4" />
-          Voiceover Segments
-          {segments.length > 0 && (
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeTab === "segments" ? "bg-white/20 text-white" : "bg-[var(--border)] text-[var(--text-faint)]"}`}>
-              {segments.length}
-            </span>
-          )}
-        </button>
-        <button onClick={() => setActiveTab("media")} className={`tab flex items-center gap-2 ${activeTab === "media" ? "tab-active" : ""}`}>
-          <ImageIcon className="w-4 h-4" />
-          Media Assets
-          {mediaEntries.length > 0 && (
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeTab === "media" ? "bg-white/20 text-white" : "bg-[var(--border)] text-[var(--text-faint)]"}`}>
-              {mediaEntries.length}
-            </span>
-          )}
-        </button>
+        {video.render_mode === "canva" && (
+          <button onClick={() => setActiveTab("scenes")} className={`tab flex items-center gap-2 ${activeTab === "scenes" ? "tab-active" : ""}`}>
+            <Film className="w-4 h-4" />
+            Canva Scenes
+            {Array.isArray(video.scenes) && video.scenes.length > 0 && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeTab === "scenes" ? "bg-white/20 text-white" : "bg-[var(--border)] text-[var(--text-faint)]"}`}>
+                {video.scenes.length}
+              </span>
+            )}
+          </button>
+        )}
+        {video.render_mode !== "canva" && (
+          <button onClick={() => setActiveTab("segments")} className={`tab flex items-center gap-2 ${activeTab === "segments" ? "tab-active" : ""}`}>
+            <Layers className="w-4 h-4" />
+            Voiceover Segments
+            {segments.length > 0 && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeTab === "segments" ? "bg-white/20 text-white" : "bg-[var(--border)] text-[var(--text-faint)]"}`}>
+                {segments.length}
+              </span>
+            )}
+          </button>
+        )}
+        {video.render_mode !== "canva" && (
+          <button onClick={() => setActiveTab("media")} className={`tab flex items-center gap-2 ${activeTab === "media" ? "tab-active" : ""}`}>
+            <ImageIcon className="w-4 h-4" />
+            Media Assets
+            {mediaEntries.length > 0 && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeTab === "media" ? "bg-white/20 text-white" : "bg-[var(--border)] text-[var(--text-faint)]"}`}>
+                {mediaEntries.length}
+              </span>
+            )}
+          </button>
+        )}
         <button onClick={() => setActiveTab("products")} className={`tab flex items-center gap-2 ${activeTab === "products" ? "tab-active" : ""}`}>
           <ShoppingCart className="w-4 h-4" />
           Affiliate Products
@@ -509,6 +534,10 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
           )}
         </button>
       </div>
+
+      {activeTab === "scenes" && video.render_mode === "canva" && video.status !== "scenes_planned" && (
+        <CanvaScenesPanel video={video as any} onChanged={loadVideo} />
+      )}
 
       {activeTab === "segments" && segments.length > 0 && (
         <div className="card overflow-hidden">
@@ -634,7 +663,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
 
       {activeTab === "notes" && <VideoNotesTab videoId={video.id} notes={video.notes} onUpdated={loadVideo} />}
 
-      {segments.length === 0 && mediaEntries.length === 0 && products.length === 0 && activeTab !== "products" && activeTab !== "notes" && (
+      {segments.length === 0 && mediaEntries.length === 0 && products.length === 0 && activeTab !== "products" && activeTab !== "notes" && activeTab !== "scenes" && (
         <div className="card p-10 text-center">
           <Clock className="w-12 h-12 mx-auto mb-3 text-[var(--border-strong)]" />
           <p className="text-[var(--text-muted)] font-medium">Nothing here yet</p>
