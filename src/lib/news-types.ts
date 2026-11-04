@@ -41,6 +41,7 @@ export interface NewsEvent {
   selected_media?: MediaItem[] | null;
   selected_thumbnails?: string[] | null;
   voiceover?: boolean;
+  render_mode?: "render" | "canva" | null;
 }
 
 /** Pulls a flat array of candidate thumbnail URLs out of usablethumbnails,
@@ -142,6 +143,7 @@ export interface TrendReview {
   selected_thumbnails?: string[] | null;
   selected_media?: MediaItem[] | null;
   voiceover?: boolean;
+  render_mode?: "render" | "canva" | null;
   reviewed_at?: string | null;
 }
 

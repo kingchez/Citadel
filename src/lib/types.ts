@@ -27,6 +27,7 @@ export type VideoStatus =
   | "autobrowse_delivery_stuck";
 
 export type VideoType = "vertical-shorts" | "horizontal-long";
+export type RenderMode = "render" | "canva";
 
 export interface ScriptSegment {
   index: number;
@@ -121,6 +122,9 @@ export interface VideoRow {
   video_type: VideoType;
   notes?: unknown;
   priority?: boolean;
+  voiceover?: boolean;
+  render_mode?: RenderMode;
+  selected_media?: unknown;
   source_event_id?: number | null;
   with_product?: boolean;
   product_ids?: ProductEntry[];
