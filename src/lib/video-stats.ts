@@ -1,5 +1,6 @@
 import type { VideoRow } from "./types";
 import { ERROR_STATUSES, IN_PROGRESS_STATUSES, REVIEW_STATUSES, DONE_STATUSES } from "./types";
+import type { VideoMode } from "./video-mode";
 
 export interface VpsServiceInfo {
   label: string;
@@ -11,6 +12,8 @@ const VPS_SERVICE_MAP: Record<string, VpsServiceInfo> = {
   whisperx: { label: "WhisperX (timing)", color: "var(--color-cyan)" },
   render: { label: "Render Server", color: "var(--color-amber)" },
   autobrowse: { label: "AutoBrowse (media)", color: "var(--color-green)" },
+  short_cut: { label: "Render Server (media cut)", color: "var(--color-amber)" },
+  canva_shorts: { label: "Canva + Stitch", color: "var(--color-purple)" },
 };
 
 /**
@@ -35,7 +38,7 @@ export interface VideoCounts {
   done: number;
 }
 
-type CountableVideo = Pick<VideoRow, "status" | "script_segments" | "voice_timing" | "media_assets">;
+type CountableVideo = Pick<VideoRow, "status" | "script_segments" | "voice_timing" | "media_assets"> & VideoMode;
 
 /**
  * Single source of truth for "is this video in an error state," used
@@ -57,13 +60,18 @@ export function hasAnyError(video: CountableVideo): boolean {
   return false;
 }
 
-export function isInProgress(video: Pick<VideoRow, "status">): boolean {
+/** Canva (voiceless) videos wait on automation in these statuses; for voiced videos the same statuses mean something else. */
+const CANVA_IN_PROGRESS = ["planning", "awaiting_media", "media_ready"];
+
+export function isInProgress(video: Pick<VideoRow, "status"> & VideoMode): boolean {
+  if (video.render_mode === "canva" && CANVA_IN_PROGRESS.includes(video.status)) return true;
   return IN_PROGRESS_STATUSES.includes(video.status);
 }
 
-/** Needs a person's attention: sitting at a review checkpoint, or has an
- * open (pending) revision request. */
-export function needsReview(video: Pick<VideoRow, "status" | "revision_history">): boolean {
+/** Needs a person's attention: sitting at a review checkpoint, a Canva scene plan waiting for approval,
+ * or has an open (pending) revision request. */
+export function needsReview(video: Pick<VideoRow, "status" | "revision_history"> & VideoMode): boolean {
+  if (video.render_mode === "canva" && video.status === "scenes_planned") return true;
   if (REVIEW_STATUSES.includes(video.status) || video.status === "revision_requested") return true;
   return (video.revision_history || []).some((r) => r.status === "pending");
 }
