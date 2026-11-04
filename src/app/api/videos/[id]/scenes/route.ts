@@ -71,6 +71,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (action === "approve") {
         update.status = "awaiting_media";
         update.error_details = null;
+
+        const usedKeys = Array.from(
+          new Set(
+            (checked as { template: string }[])
+              .map((s) => s.template)
+              .filter(Boolean)
+          )
+        );
+        if (usedKeys.length > 0) {
+          await supabase.rpc("bump_template_usage", { p_keys: usedKeys });
+        }
       }
     }
 
