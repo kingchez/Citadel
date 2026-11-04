@@ -8,10 +8,8 @@ import { getSupabaseAdmin } from "@/lib/supabase";
  * queued (not yet dispatched) - it does not interrupt a job already in
  * flight, since only one job can ever hold the VPS lock regardless.
  *
- * The video starts at `planning` - Citadel doesn't write the script
- * itself, it just hands the article content over (stashed in `notes`) for
- * whatever writes the script next to pick up, tagged with where it came
- * from.
+ * Voiceless Canva videos jump straight to `planning` with `render_mode: 'canva'`,
+ * while voiced or render server videos run through the main pipeline.
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -31,6 +29,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const title = event.social_headline || event.article?.title || event.event_title || `News event #${event.id}`;
+    const voiceover = typeof body?.voiceover === "boolean" ? body.voiceover : (event.voiceover ?? true);
+    const renderMode = body?.render_mode || event.render_mode || (voiceover ? "render" : "canva");
 
     const { data: video, error: insertError } = await supabase
       .from("videos")
@@ -40,6 +40,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         status: "planning",
         video_type: videoType,
         priority: true,
+        voiceover,
+        render_mode: renderMode,
+        selected_media: event.selected_media || null,
         source_event_id: event.id,
         notes: {
           source: "news_pipeline",

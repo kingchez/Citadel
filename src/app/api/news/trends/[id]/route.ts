@@ -54,7 +54,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const { data: current, error: readError } = await supabase
       .from("Trend_Processing")
-      .select("status, post_format, selected_thumbnails, selected_media, voiceover")
+      .select("status, post_format, selected_thumbnails, selected_media, voiceover, render_mode")
       .eq("id", id)
       .single();
 
@@ -96,6 +96,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
       update.voiceover = body.voiceover;
     }
+    if ("render_mode" in body) {
+      if (body.render_mode !== "canva" && body.render_mode !== "render" && body.render_mode !== null) {
+        return NextResponse.json({ error: "render_mode must be 'canva' or 'render'." }, { status: 400 });
+      }
+      update.render_mode = body.render_mode;
+    }
 
     if (body.status === "approved") {
       const format = (update.post_format ?? current.post_format) as string | null;
@@ -112,6 +118,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         return NextResponse.json({ error: "Add at least one clip or image to a video post." }, { status: 400 });
       }
       const voiceover = (update.voiceover ?? current.voiceover) as boolean;
+      const renderMode = (update.render_mode ?? current.render_mode ?? (voiceover ? "render" : "canva")) as string;
       if (format === "video" && !voiceover && media.some((m) => !m.description || !m.description.trim())) {
         return NextResponse.json(
           { error: "Describe what each image or clip shows, so the captions can match it." },
@@ -122,6 +129,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         // Static posts have no video content and no voice-over.
         update.selected_media = [];
         update.voiceover = false;
+        update.render_mode = null;
+      } else {
+        update.render_mode = voiceover ? "render" : renderMode;
       }
       update.status = "approved";
       update.reviewed_at = new Date().toISOString();

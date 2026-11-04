@@ -6,12 +6,31 @@ import { parseTimeToSeconds } from "@/lib/repurpose-utils";
 import { MAX_SOURCES, newSourceItem } from "@/lib/repurpose-sources";
 import { SUPPORTED_CHANNELS, type SubtitleChoice } from "@/lib/repurpose-types";
 import { DIRECTION_VALUES, type DirectionChoice, type ScriptChoice } from "@/lib/video-options";
+import type { MediaItem } from "@/lib/news-types";
 
 const VIDEO_TYPES = ["vertical-shorts", "horizontal-long"];
 const SUBTITLE_CHOICES: SubtitleChoice[] = ["yes", "no", "later"];
 
 function bad(message: string, extra?: Record<string, unknown>) {
   return NextResponse.json({ error: message, ...extra }, { status: 400 });
+}
+
+function validMedia(value: unknown): value is MediaItem[] {
+  return (
+    Array.isArray(value) &&
+    value.every((m) => {
+      if (!m || typeof m !== "object" || typeof m.url !== "string" || m.url === "") return false;
+      if (m.description !== undefined && typeof m.description !== "string") return false;
+      if (m.type === "image") return true;
+      return (
+        m.type === "clip" &&
+        typeof m.start === "number" &&
+        typeof m.end === "number" &&
+        m.start >= 0 &&
+        m.end > m.start
+      );
+    })
+  );
 }
 
 /**
@@ -22,15 +41,10 @@ function bad(message: string, extra?: Record<string, unknown>) {
  *                        plus a linked row in `videos` at `planning`, created
  *                        together in one transaction. The videos row is the
  *                        one that later carries the VPS lock.
- * Products are never written here directly: after the video row exists they
- * are added with the same handler the videos page uses (lib/add-products-to-video).
- * Priority: `priority: true` flags the linked `videos` row (same boolean the news "convert to video" flow sets).
- * Channel scout: `scraped_video_id` is the review-pool row this video came from. It must still exist (so a video can't
- * be queued twice) and is deleted once the video is safely queued.
- * Hold for merge: `hold_for_merge: true` (repurpose mode) puts the new item in waiting_merge so the pipeline leaves it alone
- * until the merge is finished.
- * Notes (King's instructions for the agent, one item each) go to the LINKED `videos` row only. Subtitles answer follows the manual: yes/no is written to notes, "later"
- * writes nothing so the planning agent still asks before scene planning.
+ * Voiceless Canva videos:
+ *  - When voiceover === false and render_mode === "canva", selected_media is required.
+ *    For mode "new" (or single source), it is inserted directly into `videos` with
+ *    status `planning`, voiceover = false, render_mode = "canva", selected_media.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -47,6 +61,10 @@ export async function POST(request: NextRequest) {
     const changeScript: ScriptChoice = body?.change_script === "yes" || body?.change_script === "no" ? body.change_script : "later";
     const direction: DirectionChoice = (DIRECTION_VALUES as readonly string[]).includes(body?.product_direction) ? body.product_direction : "later";
 
+    const voiceover = body?.voiceover !== false;
+    const renderMode: "render" | "canva" = body?.render_mode === "canva" ? "canva" : (body?.render_mode === "render" ? "render" : (voiceover ? "render" : "canva"));
+    const selectedMedia: MediaItem[] = Array.isArray(body?.selected_media) ? body.selected_media : [];
+
     if (mode !== "new" && mode !== "repurpose") return bad("mode must be 'new' or 'repurpose'.");
     if (!title) return bad("Title is required.");
     if (title.length > 200) return bad("Title is too long (200 characters max).");
@@ -54,6 +72,18 @@ export async function POST(request: NextRequest) {
       return bad("Only Viral Shop is supported on this page for now.");
     }
     if (!VIDEO_TYPES.includes(videoType)) return bad("video_type must be 'vertical-shorts' or 'horizontal-long'.");
+
+    if (!voiceover && renderMode === "canva") {
+      if (selectedMedia.length === 0) {
+        return bad("Add at least one clip or image for a Canva short.");
+      }
+      if (!validMedia(selectedMedia)) {
+        return bad("Each clip needs a start time before its end time, and every item needs a valid URL.");
+      }
+      if (selectedMedia.some((m) => !m.description || !m.description.trim())) {
+        return bad("Describe what each image or clip shows so the captions can match it.");
+      }
+    }
 
     // Notes = ONLY what King typed. Each instruction is its own item (note_1, note_2, ...), plus the subtitles
     // choice if he made one. Nothing is added automatically; no notes at all = the field stays empty (null).
@@ -67,20 +97,23 @@ export async function POST(request: NextRequest) {
       n += 1;
       notes[`note_${n}`] = text;
     }
-    if (subtitles === "yes") {
-      notes.subtitles = "yes";
-      notes.subtitle_style = "capcut-style word-highlight (default)";
-    } else if (subtitles === "no") {
-      notes.subtitles = "no";
+    if (voiceover) {
+      if (subtitles === "yes") {
+        notes.subtitles = "yes";
+        notes.subtitle_style = "capcut-style word-highlight (default)";
+      } else if (subtitles === "no") {
+        notes.subtitles = "no";
+      }
+      if (changeScript !== "later") notes.change_product_video_script = changeScript;
+      if (direction !== "later") notes.product_listing_direction = direction;
     }
-    // Same rule as subtitles: yes/no (or a direction) is written, "later" writes nothing so the agent asks.
-    if (changeScript !== "later") notes.change_product_video_script = changeScript;
-    if (direction !== "later") notes.product_listing_direction = direction;
     const notesOrNull = Object.keys(notes).length > 0 ? notes : null;
 
     const supabase = getSupabaseAdmin();
 
-    if (mode === "new") {
+    // Voiceless Canva shorts do not need audio extraction/transcription in repurpose_videos;
+    // they insert directly into `videos` with status 'planning'.
+    if (mode === "new" || (!voiceover && renderMode === "canva")) {
       const { data, error } = await supabase
         .from("videos")
         .insert({
@@ -88,6 +121,9 @@ export async function POST(request: NextRequest) {
           channel,
           status: "planning",
           video_type: videoType,
+          voiceover,
+          render_mode: renderMode,
+          selected_media: selectedMedia.length > 0 ? selectedMedia : null,
           notes: notesOrNull,
           ...(priority ? { priority: true } : {}),
         })
@@ -95,8 +131,14 @@ export async function POST(request: NextRequest) {
         .single();
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+      const warnings: string[] = [];
+      if (scrapedVideoId) {
+        const { error: delError } = await supabase.from("repurpose_scraped_videos").delete().eq("id", scrapedVideoId);
+        if (delError) warnings.push(`It was added, but couldn't be removed from the review pool: ${delError.message}`);
+      }
+
       const products = await addProductsToVideo(data.id, body?.products_raw);
-      return NextResponse.json({ mode, video: data, products });
+      return NextResponse.json({ mode, video: data, products, warnings });
     }
 
     if (scrapedVideoId) {
@@ -135,9 +177,15 @@ export async function POST(request: NextRequest) {
       newIntroStart = start;
     }
 
-    // One database transaction creates BOTH the repurpose row and its linked
-    // `videos` row (status planning, everything else empty) - so neither can
-    // exist without the other. See create_repurpose_with_video() in Supabase.
+    // Pass _voiceover, _render_mode, and optional _selected_media inside p_notes;
+    // create_repurpose_with_video sets them on `videos` and strips them from `notes`.
+    const rpcNotes = {
+      ...(notesOrNull || {}),
+      _voiceover: voiceover,
+      _render_mode: renderMode,
+      ...(selectedMedia.length > 0 ? { _selected_media: selectedMedia } : {}),
+    };
+
     const { data, error } = await supabase.rpc("create_repurpose_with_video", {
       p_title: title,
       p_channel: channel,
@@ -146,13 +194,11 @@ export async function POST(request: NextRequest) {
       p_intro_mode: introMode,
       p_new_intro_url: newIntroUrl,
       p_new_intro_start_seconds: newIntroStart,
-      p_notes: notesOrNull,
+      p_notes: rpcNotes,
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     const created = Array.isArray(data) ? data[0] : data;
-    // The video is created at this point; anything below that fails is reported as a warning, not an error,
-    // so the page never claims nothing was saved.
     const warnings: string[] = [];
     if (holdForMerge) {
       const { data: held, error: holdError } = await supabase
@@ -169,7 +215,6 @@ export async function POST(request: NextRequest) {
       if (prioError) warnings.push(`It was added, but couldn't be marked priority: ${prioError.message}`);
     }
     if (scrapedVideoId) {
-      // Remember which source channel this came from (its product site(s) are read when the products are searched).
       const { data: pooledRow } = await supabase.from("repurpose_scraped_videos").select("source_channel_id").eq("id", scrapedVideoId).maybeSingle();
       if (pooledRow?.source_channel_id) {
         const { error: chError } = await supabase.from("repurpose_videos").update({ source_channel_id: pooledRow.source_channel_id }).eq("id", created?.repurpose_id);
@@ -178,11 +223,7 @@ export async function POST(request: NextRequest) {
       const { error: delError } = await supabase.from("repurpose_scraped_videos").delete().eq("id", scrapedVideoId);
       if (delError) warnings.push(`It was added, but couldn't be removed from the review pool: ${delError.message}`);
     }
-    // Products go straight onto the linked videos row, through the exact
-    // same logic the videos page uses.
     const products = await addProductsToVideo(created?.video_id, body?.products_raw);
-    // Every item starts at pending_download. The n8n download cron picks it up: YouTube/TikTok links are
-    // downloaded into the bucket, direct links pass straight through, then the item becomes pending_split.
     return NextResponse.json({
       mode,
       item: { id: created?.repurpose_id, status: "pending_download" },
