@@ -140,7 +140,7 @@ export default function TemplatesPage() {
   const [feedback, setFeedback] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    fetch("/api/news/templates")
+    fetch("/api/templates")
       .then((r) => r.json())
       .then((data: { templates?: CanvaTemplate[]; categories?: string[] }) => {
         setTemplates(data.templates || []);
@@ -169,7 +169,7 @@ export default function TemplatesPage() {
     if (!form) return;
     setBusy("save");
     try {
-      const res = await fetch(form.key ? `/api/news/templates/${form.key}` : "/api/news/templates", {
+      const res = await fetch(form.key ? `/api/templates/${form.key}` : "/api/templates", {
         method: form.key ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(toPayload(form)),
@@ -191,7 +191,7 @@ export default function TemplatesPage() {
     if (!window.confirm(`Delete "${form.label}"? This can't be undone.`)) return;
     setBusy("delete");
     try {
-      const res = await fetch(`/api/news/templates/${form.key}`, { method: "DELETE" });
+      const res = await fetch(`/api/templates/${form.key}`, { method: "DELETE" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not delete.");
       showFeedback("Template deleted.");
@@ -208,7 +208,7 @@ export default function TemplatesPage() {
     if (!form?.key) return;
     setBusy("reset");
     try {
-      const res = await fetch(`/api/news/templates/${form.key}`, {
+      const res = await fetch(`/api/templates/${form.key}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "reset_usage" }),

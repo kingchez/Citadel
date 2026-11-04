@@ -68,7 +68,6 @@ const PROJECTS: ProjectDef[] = [
       { label: "Needs Review", href: "/news/events?view=needs_review", icon: Inbox, countKey: "news.needsReview" },
       { label: "Reviewed", href: "/news/events?view=reviewed", icon: CheckCircle, countKey: "news.reviewed" },
       { label: "Shorts", href: "/news/shorts", icon: Film, countKey: "news.shorts" },
-      { label: "Templates", href: "/news/templates", icon: LayoutTemplate },
     ],
   },
 ];
@@ -224,6 +223,20 @@ export function Sidebar() {
         >
           <CalendarClock className="w-4.5 h-4.5 text-[var(--color-purple)] flex-shrink-0" />
           <span className="flex-1 truncate">Schedule</span>
+        </Link>
+
+        <Link
+          href="/templates"
+          className={cn(
+            "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-150 sidebar-item",
+            pathname.startsWith("/templates")
+              ? "bg-[var(--surface-raised)] text-[var(--text)] border-l-2 border-[var(--color-purple)]"
+              : "text-[var(--text)] hover:bg-[var(--surface-raised)]"
+          )}
+          aria-current={pathname.startsWith("/templates") ? "page" : undefined}
+        >
+          <LayoutTemplate className="w-4.5 h-4.5 text-[var(--color-purple)] flex-shrink-0" />
+          <span className="flex-1 truncate">Templates</span>
         </Link>
 
         <div className="pl-1 space-y-1">

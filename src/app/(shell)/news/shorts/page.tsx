@@ -50,7 +50,7 @@ export default function NewsShortsPage() {
 
   useEffect(() => {
     load();
-    fetch("/api/news/templates")
+    fetch("/api/templates")
       .then((r) => r.json())
       .then((data: { templates?: CanvaTemplate[] }) => setTemplates(data.templates || []))
       .catch(() => {});
