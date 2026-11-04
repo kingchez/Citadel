@@ -49,6 +49,8 @@ export default function EventDetailPage({ params }: EventDetailProps) {
   const [showConvert, setShowConvert] = useState(false);
   const [convertChannel, setConvertChannel] = useState("The Daily Signal");
   const [convertType, setConvertType] = useState<"vertical-shorts" | "horizontal-long">("vertical-shorts");
+  const [convertVoiceover, setConvertVoiceover] = useState(true);
+  const [convertRenderMode, setConvertRenderMode] = useState<"canva" | "render">("canva");
   const [converting, setConverting] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
@@ -62,7 +64,11 @@ export default function EventDetailPage({ params }: EventDetailProps) {
         return r.json();
       })
       .then((data: { event?: NewsEvent } | null) => {
-        if (data?.event) setEvent(data.event);
+        if (data?.event) {
+          setEvent(data.event);
+          setConvertVoiceover(data.event.voiceover ?? true);
+          setConvertRenderMode(data.event.render_mode || "canva");
+        }
       })
       .finally(() => setLoading(false));
   }, [id]);
@@ -70,10 +76,6 @@ export default function EventDetailPage({ params }: EventDetailProps) {
   useEffect(() => {
     loadEvent();
 
-    // Prev/next reads the queue order cached by the events list page - no
-    // need to re-fetch and re-sort all 25+ events (with full article
-    // bodies) just to find neighbors. Falls back to a one-time full fetch
-    // only if the cache is empty (e.g. a bookmarked/direct link).
     const cached = loadQueue();
     if (cached.length > 0) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- reading a synchronous browser API (sessionStorage) on mount, not derived from props/state
@@ -114,8 +116,6 @@ export default function EventDetailPage({ params }: EventDetailProps) {
   const handleSelectThumbnail = async (url: string) => {
     if (!event) return;
     const previous = event.thumbnail;
-    // Optimistic update - the border/preview reflects the click instantly
-    // instead of waiting on a round trip.
     setEvent({ ...event, thumbnail: url });
     setSavingThumbnail(true);
     const ok = await patch({ thumbnail: url });
@@ -144,7 +144,12 @@ export default function EventDetailPage({ params }: EventDetailProps) {
       const res = await fetch(`/api/news/events/${event.id}/convert-to-video`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel: convertChannel, video_type: convertType }),
+        body: JSON.stringify({
+          channel: convertChannel,
+          video_type: convertType,
+          voiceover: convertVoiceover,
+          render_mode: convertVoiceover ? "render" : convertRenderMode,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not create video.");
@@ -218,7 +223,14 @@ export default function EventDetailPage({ params }: EventDetailProps) {
             <div className="flex items-center gap-2 flex-wrap mb-2">
               <span className="badge badge-cyan">{EVENT_STATUS_LABELS[event.status]}</span>
               {event.post_format && (
-                <span className="badge badge-purple">{event.post_format === "video" ? (event.voiceover ? "Video post · voice-over" : "Video post · Canva short") : "Static post"}</span>
+                <span className="badge badge-purple">
+                  {event.post_format === "video"
+                    ? event.voiceover
+                    : event.render_mode === "render"
+                      ? "Video post · Render short"
+                      : "Video post · Canva short"
+                    : "Static post"}
+                </span>
               )}
               {event.golden_window_hours != null && (
                 <span className="inline-flex items-center gap-1 text-xs text-[var(--color-amber)] font-medium">
@@ -467,6 +479,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
                 {(["vertical-shorts", "horizontal-long"] as const).map((t) => (
                   <button
                     key={t}
+                    type="button"
                     onClick={() => setConvertType(t)}
                     className={`tab flex-1 ${convertType === t ? "tab-active" : ""}`}
                   >
@@ -475,11 +488,52 @@ export default function EventDetailPage({ params }: EventDetailProps) {
                 ))}
               </div>
             </div>
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Voice-over</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConvertVoiceover(true)}
+                  className={`tab flex-1 ${convertVoiceover ? "tab-active" : ""}`}
+                >
+                  With voice-over
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConvertVoiceover(false)}
+                  className={`tab flex-1 ${!convertVoiceover ? "tab-active" : ""}`}
+                >
+                  No voice-over
+                </button>
+              </div>
+            </div>
+            {!convertVoiceover && (
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Render with</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConvertRenderMode("canva")}
+                    className={`tab flex-1 ${convertRenderMode === "canva" ? "tab-active" : ""}`}
+                  >
+                    Canva template
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConvertRenderMode("render")}
+                    className={`tab flex-1 ${convertRenderMode === "render" ? "tab-active" : ""}`}
+                  >
+                    Render server
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowConvert(false)} className="btn-secondary py-2 px-4 text-sm">
+              <button type="button" onClick={() => setShowConvert(false)} className="btn-secondary py-2 px-4 text-sm">
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleConvert}
                 disabled={converting}
                 className="btn-primary flex items-center gap-2 py-2 px-4 text-sm disabled:opacity-50"

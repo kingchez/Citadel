@@ -46,6 +46,7 @@ interface Draft {
   thumbs: string[];
   format: PostFormat | null;
   voiceover: boolean;
+  render_mode: "canva" | "render";
   media: DraftItem[];
   /** Video links added by hand, on top of the ones found in the articles. */
   extra: string[];
@@ -76,7 +77,14 @@ function initialDraft(trend: TrendReview): Draft {
       : { ...newItem("clip", m.url), start: formatTimecode(m.start), end: formatTimecode(m.end), description: m.description || "" }
   );
   const extra = Array.from(new Set(saved.filter((m) => m.type === "clip" && !extracted.has(m.url)).map((m) => m.url)));
-  return { thumbs, format: trend.post_format || null, voiceover: !!trend.voiceover, media, extra };
+  return {
+    thumbs,
+    format: trend.post_format || null,
+    voiceover: !!trend.voiceover,
+    render_mode: (trend.render_mode as "canva" | "render") || (trend.voiceover ? "render" : "canva"),
+    media,
+    extra,
+  };
 }
 
 /** How to show a video link: an embed player, a plain file player, or just a link. */
@@ -248,11 +256,12 @@ export default function TrendReviewPage() {
         const media = buildMedia();
         if (typeof media === "string") return showFeedback(media, 5000);
         if (media.length === 0) return showFeedback("Add at least one clip or image to the video.");
-        if (!draft.voiceover && draft.media.some((m) => !m.description.trim())) {
+        if (!draft.voiceover && draft.render_mode === "canva" && draft.media.some((m) => !m.description.trim())) {
           return showFeedback("Describe what each image or clip shows, so the captions can match it.", 5000);
         }
         body.selected_media = media;
         body.voiceover = draft.voiceover;
+        body.render_mode = draft.voiceover ? "render" : draft.render_mode;
       }
     }
 
@@ -455,7 +464,7 @@ export default function TrendReviewPage() {
             <div className="grid grid-cols-2 gap-3">
               {(
                 [
-                  { value: false, label: "No voice-over", hint: "Canva short with music" },
+                  { value: false, label: "No voice-over", hint: "Voiceless video with music" },
                   { value: true, label: "With voice-over", hint: "Full video production pipeline" },
                 ] as const
               ).map((opt) => (
@@ -474,6 +483,33 @@ export default function TrendReviewPage() {
               ))}
             </div>
           </div>
+
+          {!draft.voiceover && (
+            <div className="card p-4 sm:p-5 space-y-3">
+              <h3 className="text-sm font-semibold text-[var(--text)]">Render with</h3>
+              <div className="grid grid-cols-2 gap-3">
+                {(
+                  [
+                    { value: "canva" as const, label: "Canva template", hint: "Scene templates & text captions" },
+                    { value: "render" as const, label: "Render server", hint: "Remotion video assembly" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => update((d) => ({ ...d, render_mode: opt.value }))}
+                    className={`rounded-xl border-2 p-3 text-left transition-colors ${
+                      draft.render_mode === opt.value
+                        ? "border-[var(--color-purple)] bg-[var(--color-purple-soft)]"
+                        : "border-[var(--border)] hover:border-[var(--border-strong)]"
+                    }`}
+                  >
+                    <span className="block text-sm font-semibold text-[var(--text)]">{opt.label}</span>
+                    <span className="block text-xs text-[var(--text-faint)]">{opt.hint}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="card p-4 sm:p-5 space-y-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
