@@ -1,5 +1,6 @@
 "use client";
 
+import type { VideoWithMode } from "@/lib/video-mode";
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import type { ScriptSegment, VideoRow } from "@/lib/types";
@@ -478,7 +479,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
       )}
 
       {video.render_mode === "canva" && video.status === "scenes_planned" && (
-        <CanvaScenesPanel video={video as any} onChanged={loadVideo} />
+        <CanvaScenesPanel video={video as unknown as VideoWithMode} onChanged={loadVideo} />
       )}
 
       <div className="flex items-center gap-1 p-1.5 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-fit max-w-full scroll-x">
@@ -536,7 +537,7 @@ export default function VideoDetailPage({ params }: VideoDetailProps) {
       </div>
 
       {activeTab === "scenes" && video.render_mode === "canva" && video.status !== "scenes_planned" && (
-        <CanvaScenesPanel video={video as any} onChanged={loadVideo} />
+        <CanvaScenesPanel video={video as unknown as VideoWithMode} onChanged={loadVideo} />
       )}
 
       {activeTab === "segments" && segments.length > 0 && (

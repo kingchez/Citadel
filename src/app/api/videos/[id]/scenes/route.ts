@@ -72,16 +72,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         update.status = "awaiting_media";
         update.error_details = null;
 
-        const usedKeys = Array.from(
-          new Set(
-            (checked as { template: string }[])
-              .map((s) => s.template)
-              .filter(Boolean)
-          )
-        );
-        if (usedKeys.length > 0) {
-          await supabase.rpc("bump_template_usage", { p_keys: usedKeys });
-        }
       }
     }
 
@@ -96,6 +86,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (error) {
       return NextResponse.json({ error: error.message }, { status: error.code === "PGRST116" ? 409 : 500 });
     }
+    // Count template use only once the approval is saved (so a lost race doesn't inflate it)
+    if (action === "approve" && Array.isArray(update.scenes)) {
+      const usedKeys = Array.from(new Set((update.scenes as { template: string }[]).map((sc) => sc.template).filter(Boolean)));
+      if (usedKeys.length > 0) {
+        const { error: bumpError } = await supabase.rpc("bump_template_usage", { p_keys: usedKeys });
+        if (bumpError) console.error("bump_template_usage failed:", bumpError.message);
+      }
+    }
+
     return NextResponse.json({ video: data });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });

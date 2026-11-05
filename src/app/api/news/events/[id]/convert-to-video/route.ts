@@ -51,6 +51,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           snapshot_summary: event.snapshot_summary,
           article: event.article,
           thumbnail: event.thumbnail,
+          thumbnails: event.selected_thumbnails ?? null,
+          selected_media: event.selected_media ?? null,
+          voiceover,
+          render_mode: renderMode,
           golden_window_hours: event.golden_window_hours,
         },
       })
