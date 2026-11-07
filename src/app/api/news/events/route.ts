@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
-/** Every reviewable event, most time-sensitive first (soonest-expiring
+/** Every reviewable event (excluding skeleton "pending" events still waiting
+ * in Trend Review), most time-sensitive first (soonest-expiring
  * golden_window_hours), then most relevant. Filtering by status happens
  * client-side (same pattern as /api/videos) since the whole list is small. */
 export async function GET() {
@@ -12,6 +13,7 @@ export async function GET() {
       .select(
         "id, event_title, snapshot_summary, global_relevance_score, confidence, created_at, article, usablethumbnails, usablevideos, social_headline, alt_thumbnail, thumbnail, status, category_reference, wordpress_posted, is_reviewed, golden_window_hours, video_id, post_format, selected_media, selected_thumbnails, voiceover"
       )
+      .neq("status", "pending")
       .order("golden_window_hours", { ascending: true, nullsFirst: false })
       .order("global_relevance_score", { ascending: false });
 

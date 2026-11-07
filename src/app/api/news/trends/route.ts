@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
-/** Trends waiting for the first review (articles, images and videos are
- * already extracted by n8n). Biggest traffic first isn't reliable because
- * traffic is text like "200+", so newest first. */
+/** Trends waiting for human review after passing AI Event Normalizer and
+ * duplicate check in n8n. Includes the linked event record (event_title,
+ * fingerprint, snapshot_summary, global_relevance_score, confidence). */
 export async function GET() {
   try {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from("Trend_Processing")
-      .select("*")
+      .select("*, events:events_id(id, event_title, fingerprint, snapshot_summary, global_relevance_score, confidence)")
       .eq("status", "needs_review")
       .order("created_at", { ascending: false });
 

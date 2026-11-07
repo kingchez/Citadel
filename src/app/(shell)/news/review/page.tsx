@@ -14,6 +14,7 @@ import {
 } from "@/lib/news-types";
 import { formatTimeAgo } from "@/lib/utils";
 import { ThumbnailLightbox } from "@/components/thumbnail-lightbox";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   ArrowDown,
   ArrowUp,
@@ -21,12 +22,16 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  Fingerprint,
+  Globe,
   Image as ImageIcon,
   Loader2,
   Maximize2,
   Mic,
   Newspaper,
   Plus,
+  ShieldCheck,
+  Sparkles,
   Trash2,
   Video,
   XCircle,
@@ -43,6 +48,9 @@ interface DraftItem {
 }
 
 interface Draft {
+  event_title: string;
+  snapshot_summary: string;
+  fingerprint: string;
   thumbs: string[];
   format: PostFormat | null;
   voiceover: boolean;
@@ -62,7 +70,7 @@ const newItem = (type: DraftItem["type"], url: string): DraftItem => ({
   description: "",
 });
 
-/** Builds the starting draft from whatever was already saved on the trend. */
+/** Builds the starting draft from whatever was already saved on the trend & linked event. */
 function initialDraft(trend: TrendReview): Draft {
   const extracted = new Set(extractTrendVideos(trend.usableVideos).map((v) => v.url));
   const saved = trend.selected_media || [];
@@ -78,6 +86,9 @@ function initialDraft(trend: TrendReview): Draft {
   );
   const extra = Array.from(new Set(saved.filter((m) => m.type === "clip" && !extracted.has(m.url)).map((m) => m.url)));
   return {
+    event_title: trend.events?.event_title || "",
+    snapshot_summary: trend.events?.snapshot_summary || "",
+    fingerprint: trend.events?.fingerprint || "",
     thumbs,
     format: trend.post_format || null,
     voiceover: !!trend.voiceover,
@@ -149,6 +160,7 @@ export default function TrendReviewPage() {
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<"approved" | "rejected" | null>(null);
+  const [confirmRejectOpen, setConfirmRejectOpen] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [customThumbUrl, setCustomThumbUrl] = useState("");
   const [linkInput, setLinkInput] = useState("");
@@ -252,6 +264,9 @@ export default function TrendReviewPage() {
       if (!draft.format) return showFeedback("Choose Video or Static first.");
       body.post_format = draft.format;
       body.selected_thumbnails = draft.thumbs;
+      if (draft.event_title.trim()) body.event_title = draft.event_title.trim();
+      if (draft.snapshot_summary.trim()) body.snapshot_summary = draft.snapshot_summary.trim();
+      if (draft.fingerprint.trim()) body.fingerprint = draft.fingerprint.trim();
       if (draft.format === "video") {
         const media = buildMedia();
         if (typeof media === "string") return showFeedback(media, 5000);
@@ -274,9 +289,14 @@ export default function TrendReviewPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save.");
+      setConfirmRejectOpen(false);
       setTrends((prev) => prev.filter((t) => t.id !== trend.id));
       setIndex((i) => Math.max(0, Math.min(i, trends.length - 2)));
-      showFeedback(status === "approved" ? "Approved — it will move on to become an event." : "Rejected.");
+      showFeedback(
+        status === "approved"
+          ? "Approved — sent to article & headline generation."
+          : "Rejected — trend and linked event deleted immediately."
+      );
     } catch (err) {
       showFeedback(err instanceof Error ? err.message : "Could not save.");
     } finally {
@@ -336,28 +356,92 @@ export default function TrendReviewPage() {
       )}
 
       <div className="card p-4 sm:p-6 space-y-4">
-        <div>
-          <p className="text-[10px] font-mono text-[var(--text-faint)] mb-1">
-            Trend #{trend.id} · {formatTimeAgo(trend.created_at)}
-            {trend.traffic ? ` · ${trend.traffic} searches` : ""}
-          </p>
-          <h2 className="text-xl font-semibold text-[var(--text)]">{trend.trending_keyword}</h2>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <p className="text-[10px] font-mono text-[var(--text-faint)] mb-1">
+              Trend #{trend.id}
+              {trend.events_id ? ` · Event #${trend.events_id}` : ""} · {formatTimeAgo(trend.created_at)}
+              {trend.traffic ? ` · ${trend.traffic} searches` : ""}
+            </p>
+            <h2 className="text-xl font-semibold text-[var(--text)]">{trend.trending_keyword}</h2>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {trend.events?.global_relevance_score != null && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--color-cyan-soft)] text-[var(--color-cyan)] border border-[var(--color-cyan)]/30">
+                <Globe className="w-3.5 h-3.5" />
+                Relevance: {trend.events.global_relevance_score}
+              </span>
+            )}
+            {trend.events?.confidence != null && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--color-green-soft)] text-[var(--color-green)] border border-[var(--color-green)]/30">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Confidence: {Math.round(trend.events.confidence * 100)}%
+              </span>
+            )}
+          </div>
         </div>
+
+        {(trend.events || draft.event_title || draft.fingerprint || draft.snapshot_summary) && (
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)]/50 p-3.5 sm:p-4 space-y-3">
+            <div className="flex items-center gap-2 text-xs font-semibold text-[var(--color-purple)]">
+              <Sparkles className="w-4 h-4" />
+              <span>Normalized Event (Deduplicated)</span>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-[var(--text-faint)]">Event Title</label>
+              <input
+                value={draft.event_title}
+                onChange={(e) => update((d) => ({ ...d, event_title: e.target.value }))}
+                placeholder="Normalized event title..."
+                className="input-field text-sm font-medium py-2 w-full"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-[var(--text-faint)]">Snapshot Summary</label>
+              <textarea
+                value={draft.snapshot_summary}
+                onChange={(e) => update((d) => ({ ...d, snapshot_summary: e.target.value }))}
+                rows={3}
+                placeholder="Event snapshot summary..."
+                className="input-field text-sm py-2 w-full resize-y"
+              />
+            </div>
+
+            {draft.fingerprint && (
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-[var(--text-faint)] inline-flex items-center gap-1">
+                  <Fingerprint className="w-3.5 h-3.5" />
+                  Event Fingerprint
+                </label>
+                <p className="text-xs font-mono text-[var(--text-muted)] bg-[var(--surface)] border border-[var(--border)] rounded-lg px-3 py-2">
+                  {draft.fingerprint}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         {newsItems.length > 0 && (
-          <ul className="space-y-1.5">
-            {newsItems.map((n, i) => (
-              <li key={`${n.url}-${i}`} className="text-sm">
-                {n.url ? (
-                  <a href={n.url} target="_blank" rel="noreferrer" className="text-[var(--text)] hover:text-[var(--color-purple)]">
-                    {n.title || n.url}
-                  </a>
-                ) : (
-                  <span className="text-[var(--text)]">{n.title}</span>
-                )}
-                {n.source && <span className="text-[var(--text-faint)]"> · {n.source}</span>}
-              </li>
-            ))}
-          </ul>
+          <div className="space-y-1.5 pt-1">
+            <p className="text-xs font-semibold text-[var(--text-faint)]">Source Articles</p>
+            <ul className="space-y-1.5">
+              {newsItems.map((n, i) => (
+                <li key={`${n.url}-${i}`} className="text-sm">
+                  {n.url ? (
+                    <a href={n.url} target="_blank" rel="noreferrer" className="text-[var(--text)] hover:text-[var(--color-purple)]">
+                      {n.title || n.url}
+                    </a>
+                  ) : (
+                    <span className="text-[var(--text)]">{n.title}</span>
+                  )}
+                  {n.source && <span className="text-[var(--text-faint)]"> · {n.source}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
 
@@ -667,7 +751,7 @@ export default function TrendReviewPage() {
 
       <div className="flex flex-wrap items-center justify-end gap-3 [&>*]:flex-1 sm:[&>*]:flex-none [&>*]:justify-center">
         <button
-          onClick={() => finish("rejected")}
+          onClick={() => setConfirmRejectOpen(true)}
           disabled={busy !== null}
           className="inline-flex items-center gap-2 py-2.5 px-5 rounded-xl bg-[var(--surface-raised)] border border-[var(--border)] text-sm font-semibold text-[var(--color-red)] hover:opacity-80 transition-opacity disabled:opacity-50"
         >
@@ -683,6 +767,19 @@ export default function TrendReviewPage() {
           Approve
         </button>
       </div>
+
+      <ConfirmDialog
+        open={confirmRejectOpen}
+        title="Reject and delete immediately?"
+        message="Rejected reviews are deleted immediately. Confirming will permanently delete both this Trend_Processing record and its linked Event row from the database."
+        confirmLabel={busy === "rejected" ? "Deleting..." : "Delete trend & event"}
+        danger
+        busy={busy === "rejected"}
+        onConfirm={() => finish("rejected")}
+        onCancel={() => {
+          if (busy !== "rejected") setConfirmRejectOpen(false);
+        }}
+      />
 
       {lightboxIndex !== null && (
         <ThumbnailLightbox

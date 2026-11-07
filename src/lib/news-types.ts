@@ -87,7 +87,7 @@ export const EVENT_STATUS_COLORS: Record<EventStatus, "purple" | "cyan" | "green
 };
 
 // ---------------------------------------------------------------------------
-// Trend review (first human review, before a trend becomes an event)
+// Trend review (human review after AI Event Normalizer & Duplicate Check)
 // ---------------------------------------------------------------------------
 
 /** One piece of a video post, in the order it will be used: a still image,
@@ -126,6 +126,15 @@ export interface TrendNewsItem {
   picture?: string;
 }
 
+export interface TrendEventSummary {
+  id: number;
+  event_title?: string | null;
+  fingerprint?: string | null;
+  snapshot_summary?: string | null;
+  global_relevance_score?: number | null;
+  confidence?: number | null;
+}
+
 export interface TrendReview {
   id: number;
   trending_keyword: string;
@@ -137,6 +146,8 @@ export interface TrendReview {
   usableVideos?: unknown;
   status: string;
   created_at: string;
+  events_id?: number | null;
+  events?: TrendEventSummary | null;
   post_format?: PostFormat | null;
   /** Main thumbnail (the first of selected_thumbnails). */
   selected_thumbnail?: string | null;

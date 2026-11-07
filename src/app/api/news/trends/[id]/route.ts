@@ -6,7 +6,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const { id } = await params;
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase.from("Trend_Processing").select("*").eq("id", id).single();
+    const { data, error } = await supabase
+      .from("Trend_Processing")
+      .select("*, events:events_id(id, event_title, fingerprint, snapshot_summary, global_relevance_score, confidence)")
+      .eq("id", id)
+      .single();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: error.code === "PGRST116" ? 404 : 500 });
@@ -43,9 +47,13 @@ function validThumbnails(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((u) => typeof u === "string" && u !== "");
 }
 
-/** Saves the reviewer's choices. status "approved" releases the trend to the
- * event builder in n8n, "rejected" keeps the row (so the same trend isn't
- * fetched again) but nothing else happens to it. */
+/** Saves the reviewer's choices.
+ * - status "approved": updates Trend_Processing to "processed" (releasing it to
+ *   the n8n Signal Analysis & Article Generation lane) and syncs post_format,
+ *   thumbnails, selected_media, voiceover, render_mode, and any edited event
+ *   fields onto the linked `events` row.
+ * - status "rejected": immediately deletes BOTH the Trend_Processing row and
+ *   its linked `events` row. */
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -54,7 +62,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const { data: current, error: readError } = await supabase
       .from("Trend_Processing")
-      .select("status, post_format, selected_thumbnails, selected_media, voiceover, render_mode")
+      .select("status, events_id, post_format, selected_thumbnail, selected_thumbnails, selected_media, voiceover, render_mode")
       .eq("id", id)
       .single();
 
@@ -63,6 +71,31 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
     if (current.status !== "needs_review") {
       return NextResponse.json({ error: "This trend is no longer waiting for review." }, { status: 409 });
+    }
+
+    if (body.status === "rejected") {
+      const eventId = current.events_id;
+      const { error: delTrendErr } = await supabase
+        .from("Trend_Processing")
+        .delete()
+        .eq("id", id);
+
+      if (delTrendErr) {
+        return NextResponse.json({ error: delTrendErr.message }, { status: 500 });
+      }
+
+      if (eventId != null) {
+        const { error: delEventErr } = await supabase
+          .from("events")
+          .delete()
+          .eq("id", eventId);
+
+        if (delEventErr) {
+          return NextResponse.json({ error: delEventErr.message }, { status: 500 });
+        }
+      }
+
+      return NextResponse.json({ deleted: true, id: Number(id), events_id: eventId ?? null });
     }
 
     const update: Record<string, unknown> = {};
@@ -103,6 +136,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       update.render_mode = body.render_mode;
     }
 
+    const eventUpdate: Record<string, unknown> = {};
+    if (typeof body.event_title === "string" && body.event_title.trim()) {
+      eventUpdate.event_title = body.event_title.trim();
+    }
+    if (typeof body.snapshot_summary === "string" && body.snapshot_summary.trim()) {
+      eventUpdate.snapshot_summary = body.snapshot_summary.trim();
+    }
+    if (typeof body.fingerprint === "string" && body.fingerprint.trim()) {
+      eventUpdate.fingerprint = body.fingerprint.trim();
+    }
+
     if (body.status === "approved") {
       const format = (update.post_format ?? current.post_format) as string | null;
       const thumbnails = (update.selected_thumbnails ?? current.selected_thumbnails ?? []) as string[];
@@ -133,17 +177,33 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       } else {
         update.render_mode = voiceover ? "render" : renderMode;
       }
-      update.status = "approved";
+      // "processed" releases the trend to the n8n Signal Analysis & Article Generation lane ("Get processed Trend")
+      update.status = "processed";
       update.reviewed_at = new Date().toISOString();
-    } else if (body.status === "rejected") {
-      update.status = "rejected";
-      update.reviewed_at = new Date().toISOString();
+
+      eventUpdate.post_format = format;
+      eventUpdate.thumbnail = thumbnails[0] ?? null;
+      eventUpdate.selected_thumbnails = thumbnails;
+      eventUpdate.selected_media = format === "static" ? [] : media;
+      eventUpdate.voiceover = format === "static" ? false : voiceover;
+      eventUpdate.render_mode = format === "static" ? null : (voiceover ? "render" : renderMode);
     } else if ("status" in body) {
       return NextResponse.json({ error: "status must be 'approved' or 'rejected'." }, { status: 400 });
     }
 
-    if (Object.keys(update).length === 0) {
+    if (Object.keys(update).length === 0 && Object.keys(eventUpdate).length === 0) {
       return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
+    }
+
+    if (current.events_id != null && Object.keys(eventUpdate).length > 0) {
+      const { error: eventErr } = await supabase
+        .from("events")
+        .update(eventUpdate)
+        .eq("id", current.events_id);
+
+      if (eventErr) {
+        return NextResponse.json({ error: eventErr.message }, { status: 500 });
+      }
     }
 
     const { data, error } = await supabase
@@ -151,7 +211,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       .update(update)
       .eq("id", id)
       .eq("status", "needs_review")
-      .select()
+      .select("*, events:events_id(id, event_title, fingerprint, snapshot_summary, global_relevance_score, confidence)")
       .single();
 
     if (error) {
