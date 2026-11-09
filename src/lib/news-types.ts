@@ -42,6 +42,7 @@ export interface NewsEvent {
   selected_thumbnails?: string[] | null;
   voiceover?: boolean;
   render_mode?: "render" | "canva" | null;
+  batch_id?: string | null;
 }
 
 /** Pulls a flat array of candidate thumbnail URLs out of usablethumbnails,
@@ -156,6 +157,8 @@ export interface TrendReview {
   voiceover?: boolean;
   render_mode?: "render" | "canva" | null;
   reviewed_at?: string | null;
+  batch_id?: string | null;
+  country?: string | null;
 }
 
 /** n8n writes lists as either a raw array or {items: [...]}. */
