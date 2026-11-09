@@ -69,6 +69,14 @@ function EventRow({ event }: { event: NewsEvent }) {
               </span>
             </>
           )}
+          {event.batch_id && (
+            <>
+              <span>·</span>
+              <span className="font-mono text-[10px] text-[var(--text-faint)] bg-[var(--surface-raised)] px-1.5 py-0.5 rounded border border-[var(--border)]">
+                {event.batch_id}
+              </span>
+            </>
+          )}
         </p>
       </div>
 
