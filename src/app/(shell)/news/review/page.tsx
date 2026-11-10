@@ -85,7 +85,8 @@ function initialDraft(trend: TrendReview): Draft {
       : { ...newItem("clip", m.url), start: formatTimecode(m.start), end: formatTimecode(m.end), description: m.description || "" }
   );
   const extra = Array.from(new Set(saved.filter((m) => m.type === "clip" && !extracted.has(m.url)).map((m) => m.url)));
-  return {\n    event_title: trend.events?.event_title || "",
+  return {
+    event_title: trend.events?.event_title || "",
     snapshot_summary: trend.events?.snapshot_summary || "",
     fingerprint: trend.events?.fingerprint || "",
     thumbs,
@@ -437,7 +438,8 @@ export default function TrendReviewPage() {
           <div className="space-y-1.5 pt-1">
             <p className="text-xs font-semibold text-[var(--text-faint)]">Source Articles</p>
             <ul className="space-y-1.5">
-              {newsItems.map((n, i) => (\n                <li key={`${n.url}-${i}`} className="text-sm">
+              {newsItems.map((n, i) => (
+                <li key={`${n.url}-${i}`} className="text-sm">
                   {n.url ? (
                     <a href={n.url} target="_blank" rel="noreferrer" className="text-[var(--text)] hover:text-[var(--color-purple)]">
                       {n.title || n.url}
@@ -478,7 +480,8 @@ export default function TrendReviewPage() {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={url} alt="Thumbnail candidate" className="w-full h-24 object-cover" />
                   </button>
-                  {order >= 0 && (\n                    <span className="absolute top-1.5 left-1.5 min-w-5 h-5 px-1 rounded-full bg-[var(--color-purple)] text-white text-[11px] font-semibold flex items-center justify-center">
+                  {order >= 0 && (
+                    <span className="absolute top-1.5 left-1.5 min-w-5 h-5 px-1 rounded-full bg-[var(--color-purple)] text-white text-[11px] font-semibold flex items-center justify-center">
                       {order + 1}
                     </span>
                   )}
@@ -533,8 +536,8 @@ export default function TrendReviewPage() {
                 draft.format === opt.key
                   ? "border-[var(--color-purple)] bg-[var(--color-purple-soft)]"
                   : "border-[var(--border)] hover:border-[var(--border-strong)]"
-              }`}
-            >
+              }`
+            }>
               <opt.icon className="w-5 h-5 text-[var(--color-purple)]" />
               <span>
                 <span className="block text-sm font-semibold text-[var(--text)]">{opt.label}</span>
@@ -694,7 +697,8 @@ export default function TrendReviewPage() {
                   return (
                     <button
                       key={url}
-                      onClick={() => (added ? update((d) => ({ ...d, media: d.media.filter((m) => !(m.type === "image" && m.url === url)) })) : addImage(url))}\n                      className={`relative rounded-lg overflow-hidden border-2 transition-colors block ${
+                      onClick={() => (added ? update((d) => ({ ...d, media: d.media.filter((m) => !(m.type === "image" && m.url === url)) })) : addImage(url))}
+                      className={`relative rounded-lg overflow-hidden border-2 transition-colors block ${
                         added ? "border-[var(--color-purple)]" : "border-[var(--border)] hover:border-[var(--border-strong)]"
                       }`}
                     >
