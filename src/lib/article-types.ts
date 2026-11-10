@@ -15,6 +15,7 @@ export interface ArticleProduct {
   extracted_price?: number | null;
   rating?: number | null;
   review_count?: number | null;
+  thumbnail?: string | null;
   url?: string | null;
   sponsored?: boolean;
   bought_last_month?: string | null;
