@@ -19,6 +19,8 @@ import {
   Eye,
   Check,
   AlertTriangle,
+  Maximize2,
+  X,
 } from "lucide-react";
 import { cn, formatTimeAgo } from "@/lib/utils";
 import type { ArticleRow, ArticleStatus } from "@/lib/article-types";
@@ -41,6 +43,7 @@ export default function ArticleDetailPage({ params }: ArticleDetailPageProps) {
   const [showRevisionModal, setShowRevisionModal] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [showFullThumbnail, setShowFullThumbnail] = useState(false);
 
   const loadArticle = useCallback(async () => {
     try {
@@ -280,7 +283,30 @@ export default function ArticleDetailPage({ params }: ArticleDetailPageProps) {
 
       {/* Tab: Article Content */}
       {activeTab === "article" && (
-        <div className="card p-6 space-y-4">
+        <div className="card p-6 space-y-5">
+          {article.thumbnail_drive_file_id && !showRawHtml && (
+            <div className="relative rounded-xl overflow-hidden border border-[var(--border)] aspect-[1200/500] max-h-80 bg-[var(--surface-raised)] group">
+              <img
+                src={`https://lh3.googleusercontent.com/d/${article.thumbnail_drive_file_id}=w1200`}
+                alt={article.title}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = `https://drive.google.com/thumbnail?id=${article.thumbnail_drive_file_id}&sz=w1200`;
+                }}
+              />
+              <div className="absolute bottom-3 right-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowFullThumbnail(true)}
+                  className="px-3 py-1.5 rounded-lg bg-black/70 hover:bg-black text-white text-xs font-semibold flex items-center gap-1.5 backdrop-blur-sm transition-all shadow-lg"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  View Full Thumbnail
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
             <h2 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
               <Eye className="w-4 h-4 text-[var(--color-purple)]" />
@@ -374,12 +400,35 @@ export default function ArticleDetailPage({ params }: ArticleDetailPageProps) {
 
             {article.thumbnail_drive_file_id ? (
               <div className="space-y-3">
-                <div className="aspect-[1200/630] rounded-xl overflow-hidden bg-[var(--surface-raised)] border border-[var(--border)] flex items-center justify-center relative">
-                  <iframe
-                    src={`https://drive.google.com/file/d/${article.thumbnail_drive_file_id}/preview`}
-                    className="w-full h-full border-0"
-                    title="Thumbnail Preview"
+                <div className="aspect-[1200/630] rounded-xl overflow-hidden bg-[var(--surface-raised)] border border-[var(--border)] flex items-center justify-center relative group">
+                  <img
+                    src={`https://lh3.googleusercontent.com/d/${article.thumbnail_drive_file_id}=w1200`}
+                    alt={article.title}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Fallback to drive thumbnail
+                      (e.target as HTMLImageElement).src = `https://drive.google.com/thumbnail?id=${article.thumbnail_drive_file_id}&sz=w1200`;
+                    }}
                   />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowFullThumbnail(true)}
+                      className="px-3 py-1.5 rounded-lg bg-black/70 hover:bg-black text-white text-xs font-medium flex items-center gap-1.5 backdrop-blur-sm transition-all"
+                    >
+                      <Maximize2 className="w-3.5 h-3.5" />
+                      Full Screen View
+                    </button>
+                    <a
+                      href={article.thumbnail_drive_url || `https://drive.google.com/file/d/${article.thumbnail_drive_file_id}/view`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 rounded-lg bg-[var(--color-purple)] text-white text-xs font-medium flex items-center gap-1.5 shadow-md hover:opacity-90 transition-all"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Drive Link
+                    </a>
+                  </div>
                 </div>
                 <div className="space-y-1 text-xs text-[var(--text-faint)]">
                   <p>
@@ -591,6 +640,56 @@ export default function ArticleDetailPage({ params }: ArticleDetailPageProps) {
                 ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Full Thumbnail Modal Lightbox */}
+      {showFullThumbnail && article.thumbnail_drive_file_id && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4"
+          onClick={() => setShowFullThumbnail(false)}
+        >
+          <div 
+            className="relative max-w-5xl w-full bg-[var(--surface)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-2xl animate-scale-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-[var(--border)] bg-[var(--surface-raised)]">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-[var(--color-purple)]" />
+                <span className="text-xs font-bold text-[var(--text)]">Full Resolution Featured Thumbnail</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[var(--surface)] text-[var(--text-faint)] border border-[var(--border)]">
+                  {article.id}.png
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={article.thumbnail_drive_url || `https://drive.google.com/file/d/${article.thumbnail_drive_file_id}/view`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Open in Google Drive
+                </a>
+                <button
+                  onClick={() => setShowFullThumbnail(false)}
+                  className="p-1.5 rounded-lg hover:bg-[var(--surface)] text-[var(--text-faint)] hover:text-[var(--text)] transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="p-4 bg-black/40 flex items-center justify-center">
+              <img
+                src={`https://lh3.googleusercontent.com/d/${article.thumbnail_drive_file_id}=w1600`}
+                alt={article.title}
+                className="max-h-[75vh] w-auto max-w-full rounded-lg object-contain shadow-2xl"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = `https://drive.google.com/thumbnail?id=${article.thumbnail_drive_file_id}&sz=w1600`;
+                }}
+              />
+            </div>
+          </div>
         </div>
       )}
 
