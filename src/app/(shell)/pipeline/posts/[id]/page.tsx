@@ -346,35 +346,50 @@ export default function ArticleDetailPage({ params }: ArticleDetailPageProps) {
               {products.map((prod, idx) => (
                 <div
                   key={prod.asin || idx}
-                  className="card p-4 space-y-2.5 border border-[var(--border)]"
+                  className="card p-4 space-y-3 border border-[var(--border)] flex flex-col justify-between"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="font-mono text-xs font-bold text-[var(--color-purple)] px-2 py-0.5 rounded bg-[var(--color-purple-soft)]">
-                      ASIN: {prod.asin}
-                    </span>
-                    {prod.price && (
-                      <span className="text-xs font-bold text-[var(--color-green)]">
-                        {prod.price}
+                  <div className="space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-mono text-xs font-bold text-[var(--color-purple)] px-2 py-0.5 rounded bg-[var(--color-purple-soft)]">
+                        ASIN: {prod.asin}
                       </span>
-                    )}
-                  </div>
+                      {prod.price && (
+                        <span className="text-xs font-bold text-[var(--color-green)]">
+                          {prod.price}
+                        </span>
+                      )}
+                    </div>
 
-                  <h3 className="text-sm font-semibold text-[var(--text)] line-clamp-2">
-                    {prod.title}
-                  </h3>
-
-                  <div className="flex items-center gap-3 text-xs text-[var(--text-faint)]">
-                    {prod.rating && <span>⭐ {prod.rating} / 5</span>}
-                    {prod.review_count && <span>({prod.review_count.toLocaleString()} reviews)</span>}
+                    <div className="flex items-start gap-3">
+                      {prod.thumbnail && (
+                        <div className="w-16 h-16 rounded-lg bg-white p-1 flex-shrink-0 border border-[var(--border)] overflow-hidden flex items-center justify-center">
+                          <img
+                            src={prod.thumbnail}
+                            alt={prod.title}
+                            className="max-w-full max-h-full object-contain"
+                            loading="lazy"
+                          />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-semibold text-[var(--text)] line-clamp-2">
+                          {prod.title}
+                        </h3>
+                        <div className="flex items-center gap-3 text-xs text-[var(--text-faint)] mt-1.5">
+                          {prod.rating && <span>⭐ {prod.rating} / 5</span>}
+                          {prod.review_count && <span>({prod.review_count.toLocaleString()} reviews)</span>}
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {prod.url && (
-                    <div className="pt-2 border-t border-[var(--border)]">
+                    <div className="pt-2 border-t border-[var(--border)] flex items-center justify-between">
                       <a
                         href={prod.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs text-[var(--color-purple)] hover:underline"
+                        className="inline-flex items-center gap-1.5 text-xs text-[var(--color-purple)] hover:underline font-medium"
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                         View on Amazon
