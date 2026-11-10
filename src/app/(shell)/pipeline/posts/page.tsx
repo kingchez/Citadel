@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -41,7 +41,7 @@ const CHANNELS = [
   "Flow Nation",
 ];
 
-export default function ArticlesPage() {
+function ArticlesContent() {
   const searchParams = useSearchParams();
   const initialView = searchParams.get("view");
   const [tab, setTab] = useState<Tab>(
@@ -231,5 +231,13 @@ export default function ArticlesPage() {
         })}
       </div>
     </div>
+  );
+}
+
+export default function ArticlesPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-xs text-[var(--text-faint)]">Loading articles...</div>}>
+      <ArticlesContent />
+    </Suspense>
   );
 }
