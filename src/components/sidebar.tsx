@@ -26,12 +26,15 @@ import {
   Repeat,
   CalendarClock,
   PackageCheck,
+  FileText,
+  Sparkles,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { useNav } from "@/components/nav-context";
 import type { VideoRow } from "@/lib/types";
 import type { NewsEvent } from "@/lib/news-types";
+import type { ArticleRow } from "@/lib/article-types";
 import { computeVideoCounts } from "@/lib/video-stats";
 
 interface ProjectDef {
@@ -58,6 +61,18 @@ const PROJECTS: ProjectDef[] = [
     ],
   },
   {
+    key: "articles-pipeline",
+    label: "Articles & Posts",
+    icon: FileText,
+    items: [
+      { label: "All Articles", href: "/pipeline/posts", icon: Grid },
+      { label: "Needs Review", href: "/pipeline/posts?view=review", icon: ClipboardCheck, countKey: "article.review" },
+      { label: "Revisions", href: "/pipeline/posts?view=revisions", icon: AlertTriangle, countKey: "article.revisions" },
+      { label: "Published", href: "/pipeline/posts?view=published", icon: CheckCircle, countKey: "article.published" },
+      { label: "Weekly Topics", href: "/pipeline/posts/topics", icon: Sparkles },
+    ],
+  },
+  {
     key: "news-pipeline",
     label: "News Pipeline",
     icon: Newspaper,
@@ -77,7 +92,11 @@ export function Sidebar() {
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const [expandedProjects, setExpandedProjects] = useState<string[]>(["video-pipeline", "news-pipeline"]);
+  const [expandedProjects, setExpandedProjects] = useState<string[]>([
+    "video-pipeline",
+    "articles-pipeline",
+    "news-pipeline",
+  ]);
   const [counts, setCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -94,6 +113,19 @@ export function Sidebar() {
           "video.progress": videoCounts.progress,
           "video.review": videoCounts.review,
           "video.done": videoCounts.done,
+        }));
+      })
+      .catch(() => {});
+
+    fetch("/api/articles")
+      .then((r) => r.json())
+      .then((data: { articles?: ArticleRow[] }) => {
+        const arts = data.articles || [];
+        setCounts((prev) => ({
+          ...prev,
+          "article.review": arts.filter((a) => a.status === "review_ready").length,
+          "article.revisions": arts.filter((a) => a.status === "revision_requested").length,
+          "article.published": arts.filter((a) => a.status === "published").length,
         }));
       })
       .catch(() => {});
