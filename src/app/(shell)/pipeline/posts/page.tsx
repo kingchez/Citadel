@@ -12,6 +12,7 @@ import {
   MessageSquareWarning,
   Sparkles,
   Layers,
+  Image as ImageIcon,
 } from "lucide-react";
 import { cn, formatTimeAgo } from "@/lib/utils";
 import type { ArticleRow, ArticleStatus } from "@/lib/article-types";
@@ -64,6 +65,20 @@ function ArticleRowItem({ article }: { article: ArticleRow }) {
       href={`/pipeline/posts/${article.id}`}
       className="group flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-2 px-4 sm:px-5 py-3.5 sm:py-4 rounded-xl bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-raised)] transition-all duration-150"
     >
+      {/* Thumbnail Preview */}
+      <div className="w-16 h-10 sm:w-20 sm:h-12 rounded-lg overflow-hidden bg-[var(--surface-raised)] border border-[var(--border)] flex-shrink-0 flex items-center justify-center relative">
+        {article.thumbnail_drive_file_id ? (
+          <img
+            src={`https://drive.google.com/thumbnail?id=${article.thumbnail_drive_file_id}&sz=w400`}
+            alt={article.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+            loading="lazy"
+          />
+        ) : (
+          <FileText className="w-4 h-4 text-[var(--text-faint)]" />
+        )}
+      </div>
+
       <div className="flex-1 min-w-[calc(100%-2.25rem)] sm:min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <h3 className="text-sm font-semibold text-[var(--text)] line-clamp-2 sm:truncate group-hover:text-[var(--color-purple)] transition-colors">
