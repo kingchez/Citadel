@@ -92,16 +92,19 @@ export function Sidebar() {
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const [expandedProjects, setExpandedProjects] = useState<string[]>([
-    "video-pipeline",
-    "articles-pipeline",
-    "news-pipeline",
-  ]);
+  const [expandedProjects, setExpandedProjects] = useState<string[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- standard hydration-safe mounted check
     setMounted(true);
+
+    try {
+      const saved = localStorage.getItem("citadel_expanded_projects");
+      if (saved) {
+        setExpandedProjects(JSON.parse(saved));
+      }
+    } catch {}
 
     fetch("/api/videos")
       .then((r) => r.json())
@@ -159,7 +162,13 @@ export function Sidebar() {
   }, []);
 
   const toggleProject = (key: string) => {
-    setExpandedProjects((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+    setExpandedProjects((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      try {
+        localStorage.setItem("citadel_expanded_projects", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   };
 
   const isActive = (href: string) => {
