@@ -25,12 +25,13 @@ import {
 import { cn, formatTimeAgo } from "@/lib/utils";
 import type { ArticleRow, ArticleStatus } from "@/lib/article-types";
 import { ArticleStatusBadge } from "@/components/article-status-badge";
+import { ArticleMediaCard } from "@/components/article-media-card";
 
 interface ArticleDetailPageProps {
   params: Promise<{ id: string }>;
 }
 
-type Tab = "article" | "products" | "thumbnail_seo" | "social" | "revisions";
+type Tab = "article" | "media" | "products" | "thumbnail_seo" | "social" | "revisions";
 
 export default function ArticleDetailPage({ params }: ArticleDetailPageProps) {
   const { id } = use(params);
@@ -115,8 +116,7 @@ export default function ArticleDetailPage({ params }: ArticleDetailPageProps) {
   };
 
   if (loading) {
-    return (
-      <div className="max-w-6xl mx-auto p-12 text-center text-xs text-[var(--text-faint)] flex items-center justify-center gap-2">
+    return (\n      <div className="max-w-6xl mx-auto p-12 text-center text-xs text-[var(--text-faint)] flex items-center justify-center gap-2">
         <Loader2 className="w-4 h-4 animate-spin text-[var(--color-purple)]" />
         Loading article details...
       </div>
@@ -218,8 +218,7 @@ export default function ArticleDetailPage({ params }: ArticleDetailPageProps) {
               <span>{pendingRevisions.length} Revision Request(s) Pending Cloud Agent Attention</span>
             </div>
             <div className="space-y-1.5 pl-6">
-              {pendingRevisions.map((rev) => (
-                <div key={rev.id} className="text-xs text-[var(--text)]">
+              {pendingRevisions.map((rev) => (\n                <div key={rev.id} className="text-xs text-[var(--text)]">
                   • {rev.note} <span className="text-[10px] text-[var(--text-faint)]">({formatTimeAgo(rev.created_at)})</span>
                 </div>
               ))}
@@ -236,6 +235,19 @@ export default function ArticleDetailPage({ params }: ArticleDetailPageProps) {
         >
           <FileText className="w-4 h-4" />
           Article Content
+        </button>
+
+        <button
+          onClick={() => setActiveTab("media")}
+          className={cn("tab flex items-center gap-2", activeTab === "media" && "tab-active")}
+        >
+          <ImageIcon className="w-4 h-4" />
+          Media Instructions
+          {article.media_instructions && article.media_instructions.length > 0 && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--border)] font-bold">
+              {article.media_instructions.length}
+            </span>
+          )}
         </button>
 
         <button
@@ -334,6 +346,44 @@ export default function ArticleDetailPage({ params }: ArticleDetailPageProps) {
         </div>
       )}
 
+      {/* Tab: Media Instructions */}
+      {activeTab === "media" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-bold text-[var(--text)] flex items-center gap-2">
+                <ImageIcon className="w-5 h-5 text-[var(--color-purple)]" />
+                Media Instructions & Dynamic Assets
+              </h2>
+              <p className="text-xs text-[var(--text-faint)] mt-0.5">
+                Detailed step-by-step screenshot guides, highlight callouts, and AI image prompts. Upload files or provide direct URLs to replace article placeholders before publishing.
+              </p>
+            </div>
+          </div>
+
+          {(!article.media_instructions || article.media_instructions.length === 0) ? (
+            <div className="card p-12 text-center text-xs text-[var(--text-faint)]">
+              <ImageIcon className="w-10 h-10 mx-auto mb-2 opacity-30 text-[var(--color-purple)]" />
+              <p className="font-semibold text-sm text-[var(--text)]">No Media Instructions Found</p>
+              <p className="mt-1">
+                When the Article Agent plans this post, detailed instructions for screenshots, highlighted areas, and AI images will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {article.media_instructions.map((instruction) => (
+                <ArticleMediaCard
+                  key={instruction.placeholder_id || instruction.index}
+                  articleId={article.id}
+                  instruction={instruction}
+                  onUpdated={loadArticle}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Tab: Affiliate Products */}
       {activeTab === "products" && (
         <div className="space-y-4">
@@ -421,7 +471,6 @@ export default function ArticleDetailPage({ params }: ArticleDetailPageProps) {
                     alt={article.title}
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      // Fallback to drive thumbnail
                       (e.target as HTMLImageElement).src = `https://drive.google.com/thumbnail?id=${article.thumbnail_drive_file_id}&sz=w1200`;
                     }}
                   />
