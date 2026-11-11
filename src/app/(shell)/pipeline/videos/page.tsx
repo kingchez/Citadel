@@ -6,7 +6,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import type { VideoRow } from "@/lib/types";
 import { hasAnyError, isInProgress, needsReview, isDone } from "@/lib/video-stats";
 import { StatusBadge, StatusDot } from "@/components/status-badge";
-import { formatTimeAgo } from "@/lib/utils";
+import { formatTimeAgo, cn } from "@/lib/utils";
 import { Search, ChevronRight, AlertTriangle, Tag, Film } from "lucide-react";
 
 const TABS = [
@@ -39,6 +39,11 @@ function getErrorCount(video: VideoRow): number {
 function VideoRowItem({ video }: { video: VideoRow }) {
   const errorCount = getErrorCount(video);
   const hasError = video.status === "render_error" || errorCount > 0;
+  const mediaEntries = Object.values(video.media_assets || {});
+  const totalMedia = mediaEntries.length;
+  const submittedMedia = mediaEntries.filter(
+    (m) => m && (m.provided || m.driveFileId || m.driveUrl || m.direct_url)
+  ).length;
 
   return (
     <Link
@@ -59,6 +64,20 @@ function VideoRowItem({ video }: { video: VideoRow }) {
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[var(--color-red-soft)] text-[var(--color-red)] border border-[var(--color-red)]/30 flex-shrink-0">
               <AlertTriangle className="w-3 h-3" />
               {errorCount} error{errorCount > 1 ? "s" : ""}
+            </span>
+          )}
+          {totalMedia > 0 && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border flex-shrink-0",
+                submittedMedia >= totalMedia
+                  ? "bg-[var(--color-green-soft)] text-[var(--color-green)] border-[var(--color-green)]/30"
+                  : "bg-[var(--color-amber-soft)] text-[var(--color-amber)] border-[var(--color-amber)]/30"
+              )}
+              title={`${submittedMedia} of ${totalMedia} media assets submitted`}
+            >
+              <Film className="w-3 h-3" />
+              {submittedMedia}/{totalMedia} Media
             </span>
           )}
         </div>

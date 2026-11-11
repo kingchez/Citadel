@@ -59,6 +59,11 @@ function ArticleRowItem({ article }: { article: ArticleRow }) {
   const pendingNotes = (article.revision_history || []).filter(
     (r) => r.status === "pending"
   ).length;
+  const mediaList = article.media_instructions || [];
+  const totalMedia = mediaList.length;
+  const submittedMedia = mediaList.filter(
+    (m) => Boolean(m.uploaded) || Boolean(m.drive_file_id) || Boolean(m.direct_url)
+  ).length;
 
   return (
     <Link
@@ -88,6 +93,20 @@ function ArticleRowItem({ article }: { article: ArticleRow }) {
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[var(--color-red-soft)] text-[var(--color-red)] border border-[var(--color-red)]/30 flex-shrink-0">
               <MessageSquareWarning className="w-3 h-3" />
               {pendingNotes} revision note{pendingNotes > 1 ? "s" : ""}
+            </span>
+          )}
+          {totalMedia > 0 && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border flex-shrink-0",
+                submittedMedia >= totalMedia
+                  ? "bg-[var(--color-green-soft)] text-[var(--color-green)] border-[var(--color-green)]/30"
+                  : "bg-[var(--color-amber-soft)] text-[var(--color-amber)] border-[var(--color-amber)]/30"
+              )}
+              title={`${submittedMedia} of ${totalMedia} media assets submitted`}
+            >
+              <ImageIcon className="w-3 h-3" />
+              {submittedMedia}/{totalMedia} Media
             </span>
           )}
         </div>
