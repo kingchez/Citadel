@@ -4,46 +4,78 @@ import { getN8nBaseUrl } from "@/lib/n8n";
 import type { MediaAssetEntry } from "@/lib/types";
 
 /**
- * Manually replaces one media asset. Citadel has no Google Drive
- * credentials of its own, so the actual upload is delegated to a tiny n8n
- * webhook that does only that one external action and hands back a
- * driveFileId - Citadel then writes the resulting media_assets entry
- * itself, shaped identically to what the automated pipeline would have
- * produced (driveFileId/status/source) plus a marker that it was a manual
- * swap, so nothing downstream needs to know the difference.
+ * Manually replaces one media asset for a video.
+ * Supports both binary file uploads to Google Drive and direct hosted URLs.
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const body = await request.json().catch(() => ({}));
     const mediaKey: string | undefined = body?.media_key;
+    const isDirectUrl: boolean = Boolean(body?.is_direct_url);
+    const directUrl: string | undefined = body?.direct_url;
     const filename: string | undefined = body?.filename;
     const mimeType: string | undefined = body?.mime_type;
     const fileBase64: string | undefined = body?.file_base64;
 
-    if (!mediaKey || !filename || !fileBase64) {
-      return NextResponse.json({ error: "media_key, filename, and file_base64 are required." }, { status: 400 });
+    if (!mediaKey) {
+      return NextResponse.json({ error: "media_key is required." }, { status: 400 });
     }
 
-    let n8nBaseUrl: string;
-    try {
-      n8nBaseUrl = getN8nBaseUrl();
-    } catch (err) {
-      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    if (!isDirectUrl && (!filename || !fileBase64)) {
+      return NextResponse.json({ error: "filename and file_base64 are required." }, { status: 400 });
     }
 
-    const uploadRes = await fetch(`${n8nBaseUrl}/webhook/citadel-upload-media`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ video_id: id, media_key: mediaKey, filename, mime_type: mimeType, file_base64: fileBase64 }),
-    });
-
-    if (!uploadRes.ok) {
-      const text = await uploadRes.text();
-      return NextResponse.json({ error: `Drive upload failed: ${text}` }, { status: 502 });
+    if (isDirectUrl && !directUrl) {
+      return NextResponse.json({ error: "direct_url is required." }, { status: 400 });
     }
 
-    const { driveFileId } = (await uploadRes.json()) as { driveFileId: string };
+    let driveFileId: string | undefined;
+    let driveUrl: string | undefined;
+
+    if (!isDirectUrl) {
+      let n8nBaseUrl: string;
+      try {
+        n8nBaseUrl = getN8nBaseUrl();
+      } catch (err) {
+        return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+      }
+
+      const uploadRes = await fetch(`${n8nBaseUrl}/webhook/citadel-upload-article-media`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entity_type: "video",
+          entity_id: id,
+          media_code: mediaKey,
+          filename,
+          mime_type: mimeType,
+          file_base64: fileBase64,
+        }),
+      });
+
+      if (uploadRes.status === 401) {
+        return NextResponse.json(
+          { error: "DRIVE_AUTH_ERROR", message: "Google Drive OAuth token expired or invalid." },
+          { status: 401 }
+        );
+      }
+
+      if (!uploadRes.ok) {
+        const text = await uploadRes.text();
+        if (text.includes("DRIVE_AUTH_ERROR")) {
+          return NextResponse.json(
+            { error: "DRIVE_AUTH_ERROR", message: "Google Drive OAuth token expired or invalid." },
+            { status: 401 }
+          );
+        }
+        return NextResponse.json({ error: `Drive upload failed: ${text}` }, { status: 502 });
+      }
+
+      const resData = (await uploadRes.json()) as { driveFileId?: string; driveUrl?: string };
+      driveFileId = resData.driveFileId;
+      driveUrl = resData.driveUrl;
+    }
 
     const supabase = getSupabaseAdmin();
     const { data: video, error: fetchError } = await supabase
@@ -60,7 +92,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const previous = mediaAssets[mediaKey] || { provided: false };
 
     // The file being swapped out is no longer needed: register it so Main deletes it after 3 days.
-    if (previous.driveFileId && previous.driveFileId !== driveFileId) {
+    if (driveFileId && previous.driveFileId && previous.driveFileId !== driveFileId) {
       const { error: registerError } = await supabase.rpc("register_media_for_deletion", {
         p_video_id: id,
         p_ref: previous.driveFileId,
@@ -72,16 +104,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     mediaAssets[mediaKey] = {
       ...previous,
       provided: true,
-      source: "manual",
+      source: isDirectUrl ? "manual" : "manual",
       status: "provided",
-      driveFileId,
+      driveFileId: driveFileId || previous.driveFileId,
+      driveUrl: driveUrl || previous.driveUrl,
+      direct_url: isDirectUrl ? directUrl : previous.direct_url,
       error: undefined,
       replaced_via_citadel_at: new Date().toISOString(),
     };
 
     const { data, error } = await supabase
       .from("videos")
-      .update({ media_assets: mediaAssets })
+      .update({ media_assets: mediaAssets, updated_at: new Date().toISOString() })
       .eq("id", id)
       .select()
       .single();
