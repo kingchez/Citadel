@@ -31,6 +31,26 @@ export interface ArticleRevisionEntry {
   resolved_at?: string | null;
 }
 
+export interface ArticleMediaInstruction {
+  index: number;
+  placeholder_id: string; // e.g. "media_index_1"
+  type?: "screenshot" | "image" | "diagram" | "ai_prompt" | string;
+  title: string;
+  target_url?: string;
+  navigation_steps?: string;
+  capture_area?: string;
+  highlight_notes?: string;
+  caption?: string;
+  ai_prompt?: string;
+  uploaded?: boolean;
+  drive_file_id?: string | null;
+  drive_url?: string | null;
+  direct_url?: string | null;
+  wordpress_media_id?: number | null;
+  uploaded_at?: string | null;
+  notes?: string | null;
+}
+
 export interface ArticleSeoMetadata {
   focus_keyword?: string;
   secondary_keywords?: string[];
@@ -61,6 +81,8 @@ export interface ArticleRow {
   slug: string;
   body_html: string;
   product_ids: ArticleProduct[];
+  media_instructions?: ArticleMediaInstruction[];
+  wordpress_media_ids?: number[];
   thumbnail_drive_file_id?: string | null;
   thumbnail_drive_url?: string | null;
   wordpress_media_id?: number | null;

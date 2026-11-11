@@ -64,10 +64,16 @@ export interface MediaAssetEntry {
   source?: "stock" | "screen_recording" | "ai_generated" | "manual";
   status?: "pending" | "provided" | "partial" | "error";
   driveFileId?: string;
+  driveUrl?: string;
+  direct_url?: string;
   error?: string;
   failedAtIndex?: number;
   asset_query?: string;
   recording_instructions?: string;
+  navigation_steps?: string;
+  capture_area?: string;
+  highlight_notes?: string;
+  step_by_step_instructions?: string;
   autobrowse_actions?: unknown[];
   video_generation_prompt?: string;
   image_prompt?: string;
