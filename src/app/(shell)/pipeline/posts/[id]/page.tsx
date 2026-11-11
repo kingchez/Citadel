@@ -116,7 +116,8 @@ export default function ArticleDetailPage({ params }: ArticleDetailPageProps) {
   };
 
   if (loading) {
-    return (\n      <div className="max-w-6xl mx-auto p-12 text-center text-xs text-[var(--text-faint)] flex items-center justify-center gap-2">
+    return (
+      <div className="max-w-6xl mx-auto p-12 text-center text-xs text-[var(--text-faint)] flex items-center justify-center gap-2">
         <Loader2 className="w-4 h-4 animate-spin text-[var(--color-purple)]" />
         Loading article details...
       </div>
@@ -218,7 +219,8 @@ export default function ArticleDetailPage({ params }: ArticleDetailPageProps) {
               <span>{pendingRevisions.length} Revision Request(s) Pending Cloud Agent Attention</span>
             </div>
             <div className="space-y-1.5 pl-6">
-              {pendingRevisions.map((rev) => (\n                <div key={rev.id} className="text-xs text-[var(--text)]">
+              {pendingRevisions.map((rev) => (
+                <div key={rev.id} className="text-xs text-[var(--text)]">
                   • {rev.note} <span className="text-[10px] text-[var(--text-faint)]">({formatTimeAgo(rev.created_at)})</span>
                 </div>
               ))}
