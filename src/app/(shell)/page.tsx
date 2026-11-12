@@ -29,7 +29,7 @@ import {
 import { cn, formatTimeAgo } from "@/lib/utils";
 import { KIND_LABEL, type ScheduleItem } from "@/lib/schedule-types";
 import { safeLink, type AlertSeverity, type WorkspaceAlert, type WorkspaceSummary } from "@/lib/workspace-types";
-import { startOfDay, addDays } from "@/lib/schedule-occurrences";
+import { startOfDay, addDays, occurrencesInRange } from "@/lib/schedule-occurrences";
 import { PushToggle } from "@/components/push-toggle";
 import { StatusBadge } from "@/components/status-badge";
 import { DONE_STATUSES, type VideoStatus } from "@/lib/types";
@@ -51,6 +51,18 @@ function countdown(ms: number, now: number): string {
   return diff >= 0 ? `in ${t}` : `${t} ago`;
 }
 
+/** Concatenates multi-line text into a single compact string and truncates it cleanly. */
+function concatShort(text: string | null | undefined, maxLen = 72): string {
+  if (!text) return "";
+  const singleLine = text
+    .replace(/\r?\n+/g, " · ")
+    .replace(/[•\-]\s*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (singleLine.length <= maxLen) return singleLine;
+  return `${singleLine.slice(0, maxLen - 1).trimEnd()}…`;
+}
+
 const SEVERITY: Record<AlertSeverity, { color: string; label: string }> = {
   error: { color: "var(--color-red)", label: "Error" },
   warning: { color: "var(--color-amber)", label: "Warning" },
@@ -67,7 +79,7 @@ function SeverityIcon({ s }: { s: AlertSeverity }) {
   return <Info className={cls} style={style} />;
 }
 
-/** One row on the Home timeline: a duty, meeting or to-do (all live in the same schedule table). */
+/** One row on the Home timeline: strictly Today's events (plus overdue/anytime to-dos). */
 interface AgendaEntry {
   key: string;
   id: string;
@@ -79,25 +91,12 @@ interface AgendaEntry {
 
 const isTodo = (i: ScheduleItem) => i.kind === "task";
 
-type GroupKey = "overdue" | "today" | "tomorrow" | "week" | "anytime";
+type GroupKey = "overdue" | "today" | "anytime";
 const GROUP_LABEL: Record<GroupKey, string> = {
   overdue: "Overdue",
-  today: "Today",
-  tomorrow: "Tomorrow",
-  week: "Later this week",
-  anytime: "Anytime",
+  today: "Today's Schedule",
+  anytime: "Anytime To-Dos",
 };
-
-function groupOf(e: AgendaEntry, now: number): GroupKey {
-  if (e.at === null) return "anytime";
-  const today = startOfDay(new Date(now));
-  const tomorrow = addDays(today, 1).getTime();
-  const dayAfter = addDays(today, 2).getTime();
-  if (isTodo(e.item) && e.at < now) return "overdue";
-  if (e.at < tomorrow) return "today";
-  if (e.at < dayAfter) return "tomorrow";
-  return "week";
-}
 
 const DONE = new Set<string>(DONE_STATUSES);
 
@@ -123,7 +122,7 @@ const TONE: Record<Tone, string> = {
 /** Compact number tile used in the single stats section. */
 function Kpi({ label, value, sub, href, tone = "neutral" }: { label: string; value: string | number; sub?: string; href?: string; tone?: Tone }) {
   const body = (
-    <div className="rounded-xl bg-[var(--surface-raised)] border border-transparent px-3 py-2.5 h-full transition-colors hover:border-[var(--border-strong)]">
+    <div className="rounded-xl bg-[var(--surface-raised)] border border-transparent px-3 py-2.5 h-full transition-colors hover:border-[var(--border-strong)] overflow-hidden">
       <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] truncate">{label}</p>
       <p className="text-xl sm:text-2xl font-bold tabular-nums leading-tight mt-0.5" style={{ color: TONE[tone] }}>
         {value}
@@ -166,7 +165,7 @@ function KpiGroup({ icon, title, meta, href, children }: { icon: React.ReactNode
 
 function Panel({ title, icon, action, children, className }: { title: string; icon: React.ReactNode; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
-    <section className={cn("card p-4 space-y-3 min-w-0", className)}>
+    <section className={cn("card p-4 space-y-3 min-w-0 overflow-hidden", className)}>
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2 min-w-0">
           {icon}
@@ -299,7 +298,6 @@ export default function Dashboard() {
     if (!title.trim()) return;
     setAdding(true);
     try {
-      // A to-do is just a schedule entry of type "task" - with a time it alerts you like any other entry.
       const res = await fetch("/api/schedule", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -337,31 +335,66 @@ export default function Dashboard() {
     setDue(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
   };
 
-  const entries: AgendaEntry[] = useMemo(() => {
-    if (!data) return [];
-    const list: AgendaEntry[] = [];
-    for (const s of data.schedule) {
-      const at = s.next_at ? new Date(s.next_at).getTime() : null;
-      list.push({
-        key: s.id,
-        id: s.id,
-        title: s.title,
+  /** Build ONLY Today's occurrences (plus overdue one-off tasks and anytime to-dos). */
+  const grouped = useMemo(() => {
+    const g: Record<GroupKey, AgendaEntry[]> = { overdue: [], today: [], anytime: [] };
+    if (!data) return g;
+
+    const todayStart = startOfDay(new Date(now));
+    const tomorrowStart = addDays(todayStart, 1);
+
+    // 1. Expand today's occurrences (handles daily/weekly repeating items accurately for today)
+    const todayOccs = occurrencesInRange(data.schedule, todayStart, tomorrowStart);
+    const seenTodayIds = new Set<string>();
+
+    for (const occ of todayOccs) {
+      seenTodayIds.add(occ.item.id);
+      const at = occ.start.getTime();
+      g.today.push({
+        key: occ.key,
+        id: occ.item.id,
+        title: occ.item.title,
         at,
-        item: s,
-        ringing: at !== null && s.remind_before_minutes !== null && !s.acknowledged_at && now >= at - s.remind_before_minutes * 60000,
+        item: occ.item,
+        ringing:
+          occ.item.remind_before_minutes !== null &&
+          !occ.item.acknowledged_at &&
+          now >= at - occ.item.remind_before_minutes * 60000 &&
+          now <= at + (occ.item.duration_minutes || 60) * 60000,
       });
     }
-    return list;
-  }, [data, now]);
 
-  const grouped = useMemo(() => {
-    const g: Record<GroupKey, AgendaEntry[]> = { overdue: [], today: [], tomorrow: [], week: [], anytime: [] };
-    for (const e of entries) g[groupOf(e, now)].push(e);
+    // 2. Check for anytime to-dos (next_at === null) or overdue non-repeating tasks before today
+    for (const s of data.schedule) {
+      if (s.next_at === null) {
+        g.anytime.push({
+          key: s.id,
+          id: s.id,
+          title: s.title,
+          at: null,
+          item: s,
+          ringing: false,
+        });
+      } else if (!seenTodayIds.has(s.id) && s.repeat === "none") {
+        const at = new Date(s.next_at).getTime();
+        if (at < todayStart.getTime() && isTodo(s)) {
+          g.overdue.push({
+            key: s.id,
+            id: s.id,
+            title: s.title,
+            at,
+            item: s,
+            ringing: false,
+          });
+        }
+      }
+    }
+
     (Object.keys(g) as GroupKey[]).forEach((k) =>
       g[k].sort((a, b) => (a.at ?? Infinity) - (b.at ?? Infinity) || a.item.priority - b.item.priority)
     );
     return g;
-  }, [entries, now]);
+  }, [data, now]);
 
   if (!data) {
     return (
@@ -378,9 +411,9 @@ export default function Dashboard() {
   }
 
   const todayEntries = grouped.today;
-  const nextUp = entries.filter((e) => e.at !== null && e.at >= now - 60000).sort((a, b) => a.at! - b.at!)[0];
+  const nextUp = todayEntries.filter((e) => e.at !== null && e.at >= now - 30 * 60000).sort((a, b) => a.at! - b.at!)[0];
   const overdueCount = grouped.overdue.length;
-  const openTodos = data.schedule.filter(isTodo).length;
+  const todayTodoCount = todayEntries.filter((e) => isTodo(e.item)).length + grouped.anytime.length;
   const alertCount = data.alerts.length;
   const sortedAlerts = [...data.alerts].sort((a, b) => {
     const rank: Record<AlertSeverity, number> = { error: 0, action: 1, warning: 2, info: 3 };
@@ -391,7 +424,7 @@ export default function Dashboard() {
   const n = data.news;
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5 overflow-x-hidden">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
@@ -400,7 +433,7 @@ export default function Dashboard() {
         </div>
         <Link href="/schedule" className="btn-secondary text-sm inline-flex items-center gap-2 flex-shrink-0">
           <CalendarClock className="w-4 h-4" />
-          <span className="hidden sm:inline">Schedule</span>
+          <span className="hidden sm:inline">Full Timetable</span>
         </Link>
       </div>
 
@@ -409,12 +442,12 @@ export default function Dashboard() {
       {error && <p className="text-sm text-[var(--color-red)]">{error}</p>}
 
       {/* All the numbers, one section */}
-      <section className="card p-4 sm:p-5">
+      <section className="card p-4 sm:p-5 overflow-hidden">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-4 xl:gap-6 md:divide-x md:divide-[var(--border)] md:[&>*:not(:first-child)]:pl-4 xl:[&>*:not(:first-child)]:pl-6">
           <KpiGroup icon={<CalendarClock className="w-3.5 h-3.5 text-[var(--color-purple)]" />} title="Workspace">
             <Kpi label="Attention" value={alertCount} sub={alertCount === 0 ? "All clear" : `${data.alerts.filter((a) => a.severity === "error").length} errors`} tone={alertCount === 0 ? "green" : "red"} />
-            <Kpi label="Today" value={todayEntries.length} sub={nextUp ? `${hhmm(nextUp.at!)} ${nextUp.title}` : "Nothing next"} href="/schedule" tone="purple" />
-            <Kpi label="To-dos" value={openTodos} sub={overdueCount > 0 ? `${overdueCount} overdue` : "On track"} tone={overdueCount > 0 ? "amber" : "neutral"} />
+            <Kpi label="Today" value={todayEntries.length} sub={nextUp ? `${hhmm(nextUp.at!)} ${concatShort(nextUp.title, 26)}` : "Done for today"} href="/schedule" tone="purple" />
+            <Kpi label="Today's Tasks" value={todayTodoCount} sub={overdueCount > 0 ? `${overdueCount} overdue` : "On track"} tone={overdueCount > 0 ? "amber" : "neutral"} />
             <Kpi label="Done today" value={data.doneToday} sub="completed" tone="green" />
           </KpiGroup>
 
@@ -460,39 +493,39 @@ export default function Dashboard() {
             ) : (
               <div className="space-y-2">
                 {sortedAlerts.map((a) => (
-                  <AlertRow key={a.id} alert={a} busy={busy === a.id} onResolve={() => resolveAlert(a)} />
+                  <AlertRow key={a.id} alert={a} onResolve={() => resolveAlert(a)} busy={busy === a.id} />
                 ))}
               </div>
             )}
           </section>
 
-          {/* My day */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
-                <ListTodo className="w-4 h-4 text-[var(--color-purple)]" />
-                My day
-                <span className="text-xs font-normal text-[var(--text-faint)]">
-                  {openTodos} to-do{openTodos === 1 ? "" : "s"}
+          {/* My day — Strictly Today's Schedule */}
+          <section className="space-y-3 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2 min-w-0">
+                <ListTodo className="w-4 h-4 text-[var(--color-purple)] flex-shrink-0" />
+                <span className="truncate">Today&apos;s Schedule</span>
+                <span className="text-xs font-normal text-[var(--text-faint)] flex-shrink-0">
+                  {todayEntries.length} block{todayEntries.length === 1 ? "" : "s"} today
                   {overdueCount > 0 && ` · ${overdueCount} overdue`}
-                  {data.doneToday > 0 && ` · ${data.doneToday} done today`}
+                  {data.doneToday > 0 && ` · ${data.doneToday} done`}
                 </span>
               </h2>
-              <Link href="/schedule" className="text-xs text-[var(--color-purple)] inline-flex items-center gap-1 hover:opacity-80">
-                Schedule <ArrowRight className="w-3 h-3" />
+              <Link href="/schedule" className="text-xs text-[var(--color-purple)] inline-flex items-center gap-1 hover:opacity-80 flex-shrink-0">
+                Full Week Timetable <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
 
             <div className="card p-3 space-y-2">
               <div className="flex gap-2">
                 <input
-                  className="input-field flex-1"
-                  placeholder="Add to your day… (press Enter)"
+                  className="input-field flex-1 min-w-0"
+                  placeholder="Add a quick task to your day… (press Enter)"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && addTodo()}
                 />
-                <button onClick={addTodo} disabled={adding || !title.trim()} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-50">
+                <button onClick={addTodo} disabled={adding || !title.trim()} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-50 flex-shrink-0">
                   {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                   Add
                 </button>
@@ -517,6 +550,7 @@ export default function Dashboard() {
                   <select className="input-field !w-auto text-xs" value={remind} onChange={(e) => setRemind(e.target.value)}>
                     <option value="none">No alert</option>
                     <option value="0">Alert at due time</option>
+                    <option value="5">Alert 5 min before</option>
                     <option value="15">Alert 15 min before</option>
                     <option value="30">Alert 30 min before</option>
                     <option value="60">Alert 1 hour before</option>
@@ -527,62 +561,75 @@ export default function Dashboard() {
 
             {(Object.keys(GROUP_LABEL) as GroupKey[]).every((k) => grouped[k].length === 0) ? (
               <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-8 text-center text-sm text-[var(--text-faint)]">
-                Your day is empty. Add a to-do above, or schedule a duty in{" "}
+                Your day is empty. Add a to-do above, or view the{" "}
                 <Link href="/schedule" className="text-[var(--color-purple)]">
                   Schedule
                 </Link>
                 .
               </div>
             ) : (
-              <div className="space-y-5">
+              <div className="space-y-4">
                 {(Object.keys(GROUP_LABEL) as GroupKey[])
                   .filter((k) => grouped[k].length > 0)
                   .map((k) => (
-                    <div key={k} className="space-y-1.5">
+                    <div key={k} className="space-y-1.5 min-w-0">
                       <h3 className={cn("text-[11px] font-semibold uppercase tracking-wider", k === "overdue" ? "text-[var(--color-red)]" : "text-[var(--text-faint)]")}>
                         {GROUP_LABEL[k]} · {grouped[k].length}
                       </h3>
-                      {grouped[k].map((e) => (
-                        <div
-                          key={e.key}
-                          className={cn(
-                            "group flex items-center gap-3 px-3.5 py-2.5 rounded-xl border bg-[var(--surface)]",
-                            e.ringing ? "border-[var(--color-amber)] bg-[var(--color-amber-soft)]" : "border-[var(--border)]"
-                          )}
-                        >
-                          {isTodo(e.item) ? (
-                            <button onClick={() => markDone(e.item)} disabled={busy === e.id} aria-label="Mark done" className="text-[var(--text-faint)] hover:text-[var(--color-green)] flex-shrink-0">
-                              {busy === e.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Circle className="w-5 h-5" />}
-                            </button>
-                          ) : (
-                            <CalendarClock className="w-5 h-5 text-[var(--color-purple)] flex-shrink-0" />
-                          )}
-                          <div className="w-14 flex-shrink-0 text-xs tabular-nums text-[var(--text-muted)]">{e.at !== null ? hhmm(e.at) : "—"}</div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-[var(--text)] truncate flex items-center gap-2">
-                              {e.item.priority === 1 && <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-red)] flex-shrink-0" title="High priority" />}
-                              <span className="truncate">{e.title}</span>
-                              {!isTodo(e.item) && <span className="badge badge-purple flex-shrink-0">{KIND_LABEL[e.item.kind]}</span>}
-                            </p>
-                            {e.at !== null && (
-                              <p className={cn("text-[11px] mt-0.5", e.ringing || k === "overdue" ? "text-[var(--color-amber)] font-semibold" : "text-[var(--text-faint)]")}>
-                                {countdown(e.at, now)}
-                                {k === "week" && ` · ${new Date(e.at).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}`}
+                      <div className="space-y-1.5">
+                        {grouped[k].map((e) => (
+                          <div
+                            key={e.key}
+                            className={cn(
+                              "group flex items-center gap-3 px-3.5 py-2.5 rounded-xl border bg-[var(--surface)] overflow-hidden min-w-0",
+                              e.ringing ? "border-[var(--color-amber)] bg-[var(--color-amber-soft)]" : "border-[var(--border)]"
+                            )}
+                          >
+                            {isTodo(e.item) ? (
+                              <button onClick={() => markDone(e.item)} disabled={busy === e.id} aria-label="Mark done" className="text-[var(--text-faint)] hover:text-[var(--color-green)] flex-shrink-0">
+                                {busy === e.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Circle className="w-4 h-4" />}
+                              </button>
+                            ) : (
+                              <CalendarClock className="w-4 h-4 text-[var(--color-purple)] flex-shrink-0" />
+                            )}
+                            <div className="w-12 flex-shrink-0 text-xs font-semibold tabular-nums text-[var(--text-muted)]">
+                              {e.at !== null ? hhmm(e.at) : "—"}
+                            </div>
+                            <div className="flex-1 min-w-0 overflow-hidden">
+                              <div className="flex items-center gap-2 min-w-0">
+                                {e.item.priority === 1 && <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-red)] flex-shrink-0" title="High priority" />}
+                                <span className="text-sm font-medium text-[var(--text)] truncate" title={e.title}>
+                                  {concatShort(e.title, 58)}
+                                </span>
+                                {!isTodo(e.item) && <span className="badge badge-purple flex-shrink-0 text-[10px]">{KIND_LABEL[e.item.kind]}</span>}
+                              </div>
+                              <p className="text-[11px] text-[var(--text-faint)] truncate mt-0.5">
+                                {e.at !== null && (
+                                  <span className={cn(e.ringing || k === "overdue" ? "text-[var(--color-amber)] font-semibold" : "text-[var(--text-faint)]")}>
+                                    {countdown(e.at, now)}
+                                  </span>
+                                )}
+                                {e.item.notes && (
+                                  <span>
+                                    {e.at !== null ? " · " : ""}
+                                    {concatShort(e.item.notes, 75)}
+                                  </span>
+                                )}
                               </p>
+                            </div>
+                            {!isTodo(e.item) ? (
+                              <button onClick={() => markDone(e.item)} disabled={busy === e.id} className="btn-secondary text-xs py-1 px-2.5 inline-flex items-center gap-1 disabled:opacity-50 flex-shrink-0">
+                                <Check className="w-3.5 h-3.5" />
+                                Done
+                              </button>
+                            ) : (
+                              <button onClick={() => deleteItem(e.item)} disabled={busy === e.id} aria-label="Delete" className="btn-ghost opacity-0 group-hover:opacity-100 focus:opacity-100 hover:!text-[var(--color-red)] flex-shrink-0">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             )}
                           </div>
-                          {!isTodo(e.item) ? (
-                            <button onClick={() => markDone(e.item)} disabled={busy === e.id} className="btn-secondary text-xs py-1.5 px-3 inline-flex items-center gap-1.5 disabled:opacity-50">
-                              <Check className="w-3.5 h-3.5" />
-                              Done
-                            </button>
-                          ) : (
-                            <button onClick={() => deleteItem(e.item)} disabled={busy === e.id} aria-label="Delete" className="btn-ghost opacity-0 group-hover:opacity-100 focus:opacity-100 hover:!text-[var(--color-red)]">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   ))}
               </div>
@@ -638,7 +685,7 @@ export default function Dashboard() {
                 ["/pipeline/new", "Add video"],
                 ["/pipeline/videos", "All videos"],
                 ["/news/events", "Review news"],
-                ["/schedule?view=calendar", "Calendar"],
+                ["/schedule", "Timetable"],
               ].map(([href, label]) => (
                 <Link key={href} href={href} className="rounded-lg border border-[var(--border)] px-3 py-2 text-center text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]">
                   {label}
