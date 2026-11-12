@@ -128,15 +128,21 @@ const TONE: Record<Tone, string> = {
   cyan: "var(--color-cyan)",
 };
 
-/** Compact number tile used in the single stats section. */
+/** Sleek horizontal number tile stretched cleanly across a 4-column row. */
 function Kpi({ label, value, sub, href, tone = "neutral" }: { label: string; value: string | number; sub?: string; href?: string; tone?: Tone }) {
   const body = (
-    <div className="rounded-xl bg-[var(--surface-raised)] border border-transparent px-3 py-2.5 h-full transition-colors hover:border-[var(--border-strong)] overflow-hidden">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] truncate">{label}</p>
-      <p className="text-xl sm:text-2xl font-bold tabular-nums leading-tight mt-0.5" style={{ color: TONE[tone] }}>
+    <div className="rounded-xl bg-[var(--surface-raised)] border border-[var(--border)]/60 px-3.5 py-2 transition-colors hover:border-[var(--border-strong)] overflow-hidden flex items-center justify-between gap-2">
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] truncate">{label}</p>
+        {sub ? (
+          <p className="text-[11px] text-[var(--text-muted)] truncate mt-0.5">{sub}</p>
+        ) : (
+          <p className="text-[11px] text-[var(--text-faint)] truncate mt-0.5">—</p>
+        )}
+      </div>
+      <p className="text-lg sm:text-xl font-bold tabular-nums leading-none flex-shrink-0" style={{ color: TONE[tone] }}>
         {value}
       </p>
-      {sub && <p className="text-[11px] text-[var(--text-faint)] truncate mt-0.5">{sub}</p>}
     </div>
   );
   return href ? (
@@ -159,7 +165,7 @@ function KpiGroup({ icon, title, meta, href, children }: { icon: React.ReactNode
     </div>
   );
   return (
-    <div className="min-w-0">
+    <div className="card p-3.5 min-w-0 overflow-hidden">
       {href ? (
         <Link href={href} className="block hover:opacity-80">
           {head}
@@ -167,7 +173,7 @@ function KpiGroup({ icon, title, meta, href, children }: { icon: React.ReactNode
       ) : (
         head
       )}
-      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-2 2xl:grid-cols-4 gap-2">{children}</div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">{children}</div>
     </div>
   );
 }
@@ -413,7 +419,7 @@ export default function Dashboard() {
     return (
       <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-4">
         <div className="h-9 w-72 rounded-lg bg-[var(--surface)] animate-pulse" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
           {[...Array(4)].map((_, i) => (
             <div key={i} className="h-24 rounded-xl bg-[var(--surface)] border border-[var(--border)] animate-pulse" />
           ))}
@@ -467,38 +473,36 @@ export default function Dashboard() {
 
       {error && <p className="text-sm text-[var(--color-red)]">{error}</p>}
 
-      {/* All the numbers, one section (4 pipelines: Workspace, News, Articles, Videos) */}
-      <section className="card p-4 sm:p-5 overflow-hidden">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 xl:gap-6 xl:divide-x xl:divide-[var(--border)] xl:[&>*:not(:first-child)]:pl-5">
-          <KpiGroup icon={<CalendarClock className="w-3.5 h-3.5 text-[var(--color-purple)]" />} title="Workspace">
-            <Kpi label="Attention" value={alertCount} sub={alertCount === 0 ? "All clear" : `${data.alerts.filter((al) => al.severity === "error").length} errors`} tone={alertCount === 0 ? "green" : "red"} />
-            <Kpi label="Today" value={todayEntries.length} sub={nextUp ? `${hhmm(nextUp.at!)} ${concatShort(nextUp.title, 22)}` : "Done for today"} href="/schedule" tone="purple" />
-            <Kpi label="Tasks" value={todayTodoCount} sub={overdueCount > 0 ? `${overdueCount} overdue` : "On track"} tone={overdueCount > 0 ? "amber" : "neutral"} />
-            <Kpi label="Done today" value={data.doneToday} sub="completed" tone="green" />
-          </KpiGroup>
+      {/* 2x2 Horizontal KPI Grid: Top Row (Workspace + News Pipeline), Bottom Row (Articles Pipeline + Video Pipeline) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+        <KpiGroup icon={<CalendarClock className="w-3.5 h-3.5 text-[var(--color-purple)]" />} title="Workspace">
+          <Kpi label="Attention" value={alertCount} sub={alertCount === 0 ? "All clear" : `${data.alerts.filter((al) => al.severity === "error").length} errors`} tone={alertCount === 0 ? "green" : "red"} />
+          <Kpi label="Today" value={todayEntries.length} sub={nextUp ? `${hhmm(nextUp.at!)} ${concatShort(nextUp.title, 18)}` : "Done for today"} href="/schedule" tone="purple" />
+          <Kpi label="Tasks" value={todayTodoCount} sub={overdueCount > 0 ? `${overdueCount} overdue` : "On track"} tone={overdueCount > 0 ? "amber" : "neutral"} />
+          <Kpi label="Done today" value={data.doneToday} sub="completed" tone="green" />
+        </KpiGroup>
 
-          <KpiGroup icon={<Newspaper className="w-3.5 h-3.5 text-[var(--color-cyan)]" />} title="News Pipeline" href="/news/review">
-            <Kpi label="Trend Gate" value={n.trendReviewCount ?? 0} sub="time-sensitive" href="/news/review" tone={(n.trendReviewCount ?? 0) > 0 ? "amber" : "neutral"} />
-            <Kpi label="Events Review" value={n.needsReview} sub="needs review" href="/news/events?view=needs_review" tone={n.needsReview > 0 ? "cyan" : "neutral"} />
-            <Kpi label="Paused" value={n.paused} href="/news/events?view=paused" tone={n.paused > 0 ? "amber" : "neutral"} />
-            <Kpi label="Reviewed" value={n.reviewed} href="/news/events?view=reviewed" tone="green" />
-          </KpiGroup>
+        <KpiGroup icon={<Newspaper className="w-3.5 h-3.5 text-[var(--color-cyan)]" />} title="News Pipeline" href="/news/review">
+          <Kpi label="Trend Gate" value={n.trendReviewCount ?? 0} sub="time-sensitive" href="/news/review" tone={(n.trendReviewCount ?? 0) > 0 ? "amber" : "neutral"} />
+          <Kpi label="Events Review" value={n.needsReview} sub="needs review" href="/news/events?view=needs_review" tone={n.needsReview > 0 ? "cyan" : "neutral"} />
+          <Kpi label="Paused" value={n.paused} sub="on hold" href="/news/events?view=paused" tone={n.paused > 0 ? "amber" : "neutral"} />
+          <Kpi label="Reviewed" value={n.reviewed} sub="processed" href="/news/events?view=reviewed" tone="green" />
+        </KpiGroup>
 
-          <KpiGroup icon={<FileText className="w-3.5 h-3.5 text-[var(--color-amber)]" />} title="Articles Pipeline" meta={`${a.total} total`} href="/pipeline/posts">
-            <Kpi label="To Review" value={a.reviewReady} sub="ready now" href="/pipeline/posts" tone={a.reviewReady > 0 ? "amber" : "neutral"} />
-            <Kpi label="Revisions" value={a.revisionRequested} sub={a.mediaPendingTotal > 0 ? `${a.mediaPendingTotal} media due` : "requested"} href="/pipeline/posts" tone={a.revisionRequested > 0 ? "red" : "neutral"} />
-            <Kpi label="Drafting" value={a.inProgress} href="/pipeline/posts" tone="cyan" />
-            <Kpi label="Published" value={a.published} href="/pipeline/posts" tone="green" />
-          </KpiGroup>
+        <KpiGroup icon={<FileText className="w-3.5 h-3.5 text-[var(--color-amber)]" />} title="Articles Pipeline" meta={`${a.total} total`} href="/pipeline/posts">
+          <Kpi label="To Review" value={a.reviewReady} sub="ready now" href="/pipeline/posts" tone={a.reviewReady > 0 ? "amber" : "neutral"} />
+          <Kpi label="Revisions" value={a.revisionRequested} sub={a.mediaPendingTotal > 0 ? `${a.mediaPendingTotal} media due` : "requested"} href="/pipeline/posts" tone={a.revisionRequested > 0 ? "red" : "neutral"} />
+          <Kpi label="Drafting" value={a.inProgress} sub="in progress" href="/pipeline/posts" tone="cyan" />
+          <Kpi label="Published" value={a.published} sub="approved" href="/pipeline/posts" tone="green" />
+        </KpiGroup>
 
-          <KpiGroup icon={<Video className="w-3.5 h-3.5 text-[var(--color-purple)]" />} title="Video Pipeline" meta={`${v.total} total`} href="/pipeline/videos">
-            <Kpi label="Review" value={v.review} href="/pipeline/videos?view=review" tone={v.review > 0 ? "amber" : "neutral"} />
-            <Kpi label="Errors" value={v.errors} href="/pipeline/videos?view=errors" tone={v.errors > 0 ? "red" : "neutral"} />
-            <Kpi label="In progress" value={v.progress} href="/pipeline/videos?view=progress" tone="cyan" />
-            <Kpi label="Done" value={v.done} href="/pipeline/videos?view=done" tone="green" />
-          </KpiGroup>
-        </div>
-      </section>
+        <KpiGroup icon={<Video className="w-3.5 h-3.5 text-[var(--color-purple)]" />} title="Video Pipeline" meta={`${v.total} total`} href="/pipeline/videos">
+          <Kpi label="Review" value={v.review} sub="needs review" href="/pipeline/videos?view=review" tone={v.review > 0 ? "amber" : "neutral"} />
+          <Kpi label="Errors" value={v.errors} sub="attention" href="/pipeline/videos?view=errors" tone={v.errors > 0 ? "red" : "neutral"} />
+          <Kpi label="In progress" value={v.progress} sub="rendering" href="/pipeline/videos?view=progress" tone="cyan" />
+          <Kpi label="Done" value={v.done} sub="completed" href="/pipeline/videos?view=done" tone="green" />
+        </KpiGroup>
+      </div>
 
       {/* Balanced 2-Column Layout: Left (Alerts + Today's Schedule + News Review Queue) | Right (Videos Review Queue + Articles Review Queue + Pipeline Health) */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
