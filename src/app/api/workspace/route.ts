@@ -85,13 +85,15 @@ export async function GET() {
       .filter((v) => hasAnyError(v) || v.status === "revision_requested")
       .slice(0, 8)
       .map((v) => {
-        const errObj = v.error_details as Record<string, unknown> | null;
-        const errMsg =
-          typeof errObj?.message === "string"
-            ? errObj.message
-            : typeof errObj?.error === "string"
-              ? errObj.error
-              : null;
+        const rawErr: unknown = v.error_details;
+        let errMsg: string | null = null;
+        if (typeof rawErr === "string" && rawErr.trim()) {
+          errMsg = rawErr.trim();
+        } else if (rawErr && typeof rawErr === "object") {
+          const errObj = rawErr as Record<string, unknown>;
+          if (typeof errObj.message === "string") errMsg = errObj.message;
+          else if (typeof errObj.error === "string") errMsg = errObj.error;
+        }
         return {
           id: v.id,
           title: v.title,
