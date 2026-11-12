@@ -110,7 +110,7 @@ function defaultForm(): FormState {
   const d = new Date();
   d.setMinutes(0, 0, 0);
   d.setHours(d.getHours() + 1);
-  return { title: "", notes: "", kind: "duty", starts: toLocalInput(d), duration: 60, remind: 30, priority: 2, repeat: "none", until: "" };
+  return { title: "", notes: "", kind: "duty", starts: toLocalInput(d), duration: 60, remind: 5, priority: 2, repeat: "none", until: "" };
 }
 
 function ItemModal({ item, onClose, onSaved }: { item: ScheduleItem | null; onClose: () => void; onSaved: () => void }) {
@@ -148,7 +148,6 @@ function ItemModal({ item, onClose, onSaved }: { item: ScheduleItem | null; onCl
         remind_before_minutes: form.starts ? form.remind : null,
         priority: form.priority,
         repeat: form.starts ? form.repeat : "none",
-        // "until" is a date: keep the whole of that day included
         repeat_until: form.repeat !== "none" && form.until ? new Date(`${form.until}T23:59:59`).toISOString() : null,
       };
       const res = await fetch(item ? `/api/schedule/${item.id}` : "/api/schedule", {
@@ -250,7 +249,7 @@ function ItemModal({ item, onClose, onSaved }: { item: ScheduleItem | null; onCl
         )}
 
         <Field label="Notes (optional)">
-          <textarea className="input-field min-h-[80px]" value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+          <textarea className="input-field min-h-[110px]" value={form.notes} onChange={(e) => set("notes", e.target.value)} />
         </Field>
 
         {error && <p className="text-sm text-[var(--color-red)]">{error}</p>}
@@ -295,19 +294,23 @@ function ScheduleRow({
   return (
     <div
       className={cn(
-        "flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-2 px-3 sm:px-4 py-3.5 rounded-xl border bg-[var(--surface)]",
+        "flex flex-wrap sm:flex-nowrap items-start gap-x-4 gap-y-2 px-3 sm:px-4 py-3.5 rounded-xl border bg-[var(--surface)]",
         ringing ? "border-[var(--color-amber)] bg-[var(--color-amber-soft)]" : "border-[var(--border)]",
         !item.active && !history && "opacity-60"
       )}
     >
-      <div className="w-14 sm:w-16 flex-shrink-0 text-center">
+      <div className="w-14 sm:w-16 flex-shrink-0 text-center pt-0.5">
         <p className="text-base sm:text-lg font-bold tabular-nums text-[var(--text)]">{item.next_at ? timeLabel(item.next_at) : "Any time"}</p>
-        {item.duration_minutes > 0 && <p className="text-[10px] text-[var(--text-faint)]">{item.duration_minutes >= 60 ? `${item.duration_minutes / 60}h` : `${item.duration_minutes}m`}</p>}
+        {item.duration_minutes > 0 && (
+          <p className="text-[10px] text-[var(--text-faint)]">
+            {item.duration_minutes >= 60 ? `${(item.duration_minutes / 60).toFixed(item.duration_minutes % 60 === 0 ? 0 : 1)}h` : `${item.duration_minutes}m`}
+          </p>
+        )}
       </div>
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <h3 className="text-sm font-semibold text-[var(--text)] truncate">{item.title}</h3>
+          <h3 className="text-sm font-semibold text-[var(--text)]">{item.title}</h3>
           <span className={cn("badge", KIND_BADGE[item.kind])}>{KIND_LABEL[item.kind]}</span>
           {item.repeat !== "none" && (
             <span className="badge badge-gray inline-flex items-center gap-1">
@@ -333,7 +336,7 @@ function ScheduleRow({
             {item.remind_before_minutes === null ? "No alert" : (REMIND_OPTIONS.find((o) => o.value === item.remind_before_minutes)?.label ?? `${item.remind_before_minutes} min before`)}
           </span>
         </p>
-        {item.notes && <p className="text-xs text-[var(--text-muted)] mt-1 break-words">{item.notes}</p>}
+        {item.notes && <p className="text-xs text-[var(--text-muted)] mt-1.5 whitespace-pre-line break-words leading-relaxed">{item.notes}</p>}
       </div>
 
       <div className="flex items-center gap-1 flex-shrink-0 w-full sm:w-auto justify-end">
@@ -361,7 +364,7 @@ function ScheduleRow({
 
 function SchedulePage() {
   const viewParam = useSearchParams().get("view");
-  const view = viewParam === "history" ? "history" : viewParam === "calendar" ? "calendar" : "upcoming";
+  const view = viewParam === "history" ? "history" : viewParam === "upcoming" ? "upcoming" : "calendar";
   const history = view === "history";
   const calendar = view === "calendar";
 
@@ -445,15 +448,25 @@ function SchedulePage() {
     return Array.from(map.values());
   }, [items]);
 
-  const ringingCount = history ? 0 : items.filter((i) => i.status === "upcoming" && i.active && !i.acknowledged_at && i.next_at !== null && i.remind_before_minutes !== null && now >= new Date(i.next_at).getTime() - i.remind_before_minutes * 60000).length;
+  const ringingCount = history
+    ? 0
+    : items.filter(
+        (i) =>
+          i.status === "upcoming" &&
+          i.active &&
+          !i.acknowledged_at &&
+          i.next_at !== null &&
+          i.remind_before_minutes !== null &&
+          now >= new Date(i.next_at).getTime() - i.remind_before_minutes * 60000
+      ).length;
 
   return (
-    <div className={cn("p-4 sm:p-6 mx-auto space-y-6", calendar ? "max-w-6xl" : "max-w-3xl")}>
+    <div className={cn("p-4 sm:p-6 mx-auto space-y-6", calendar ? "max-w-[1600px]" : "max-w-4xl")}>
       <div className="flex items-start sm:items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-bold text-[var(--text)]">{history ? "Schedule history" : "Schedule & Duties"}</h1>
+          <h1 className="text-xl font-bold text-[var(--text)]">{history ? "Schedule history" : "Master Timetable & Duties"}</h1>
           <p className="text-sm text-[var(--text-faint)] mt-1">
-            {history ? "Finished and missed entries." : "Your timetable. You get one phone alert before each entry."}
+            {history ? "Finished and missed entries." : "Your weekly operating architecture (WAT / Africa/Lagos). Phone alerts fire 5 minutes before each block."}
           </p>
         </div>
         {!history && (
@@ -466,8 +479,8 @@ function SchedulePage() {
 
       <div className="flex gap-2">
         {[
-          { href: "/schedule", label: "Upcoming", active: view === "upcoming" },
-          { href: "/schedule?view=calendar", label: "Calendar", active: calendar },
+          { href: "/schedule", label: "Timetable & Calendar", active: calendar },
+          { href: "/schedule?view=upcoming", label: "Upcoming List", active: view === "upcoming" },
           { href: "/schedule?view=history", label: "History", active: history },
         ].map((t) => (
           <Link
