@@ -12,9 +12,11 @@ import {
   Check,
   CheckCircle2,
   ChevronRight,
-  Clock,
   Circle,
+  Clock,
   ExternalLink,
+  FileText,
+  Flame,
   Info,
   ListTodo,
   Loader2,
@@ -24,7 +26,6 @@ import {
   Trash2,
   TrendingUp,
   Video,
-  Zap,
 } from "lucide-react";
 import { cn, formatTimeAgo } from "@/lib/utils";
 import { KIND_LABEL, type ScheduleItem } from "@/lib/schedule-types";
@@ -32,7 +33,7 @@ import { safeLink, type AlertSeverity, type WorkspaceAlert, type WorkspaceSummar
 import { startOfDay, addDays, occurrencesInRange } from "@/lib/schedule-occurrences";
 import { PushToggle } from "@/components/push-toggle";
 import { StatusBadge } from "@/components/status-badge";
-import { DONE_STATUSES, type VideoStatus } from "@/lib/types";
+import type { VideoStatus } from "@/lib/types";
 
 /* ───────────── helpers ───────────── */
 
@@ -71,7 +72,7 @@ const SEVERITY: Record<AlertSeverity, { color: string; label: string }> = {
 };
 
 function SeverityIcon({ s }: { s: AlertSeverity }) {
-  const cls = "w-5 h-5";
+  const cls = "w-4 h-4";
   const style = { color: SEVERITY[s].color };
   if (s === "error") return <AlertTriangle className={cls} style={style} />;
   if (s === "warning") return <AlertCircle className={cls} style={style} />;
@@ -98,14 +99,22 @@ const GROUP_LABEL: Record<GroupKey, string> = {
   anytime: "Anytime To-Dos",
 };
 
-const DONE = new Set<string>(DONE_STATUSES);
-
 const SERVICES = [
   { key: "chatterbox", label: "Chatterbox (voiceover)" },
   { key: "whisperx", label: "WhisperX (timing)" },
   { key: "render", label: "Render Server" },
   { key: "autobrowse", label: "AutoBrowse (media)" },
 ] as const;
+
+const ARTICLE_STATUS_LABEL: Record<string, { label: string; badge: string }> = {
+  review_ready: { label: "Ready for Review", badge: "badge-amber" },
+  revision_requested: { label: "Revision Requested", badge: "badge-red" },
+  researching: { label: "Drafting", badge: "badge-cyan" },
+  planning: { label: "Planning", badge: "badge-purple" },
+  approved: { label: "Approved", badge: "badge-green" },
+  publishing: { label: "Publishing", badge: "badge-cyan" },
+  published: { label: "Published", badge: "badge-green" },
+};
 
 /* ───────────── small pieces ───────────── */
 
@@ -158,7 +167,7 @@ function KpiGroup({ icon, title, meta, href, children }: { icon: React.ReactNode
       ) : (
         head
       )}
-      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-2 xl:grid-cols-4 gap-2">{children}</div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-2 2xl:grid-cols-4 gap-2">{children}</div>
     </div>
   );
 }
@@ -166,7 +175,7 @@ function KpiGroup({ icon, title, meta, href, children }: { icon: React.ReactNode
 function Panel({ title, icon, action, children, className }: { title: string; icon: React.ReactNode; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
     <section className={cn("card p-4 space-y-3 min-w-0 overflow-hidden", className)}>
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2 min-w-0">
           {icon}
           <span className="truncate">{title}</span>
@@ -178,49 +187,49 @@ function Panel({ title, icon, action, children, className }: { title: string; ic
   );
 }
 
-const SubLabel = ({ children }: { children: React.ReactNode }) => (
-  <p className="text-[10px] uppercase tracking-wider text-[var(--text-faint)] mb-1">{children}</p>
-);
-
 function AlertRow({ alert, onResolve, busy }: { alert: WorkspaceAlert; onResolve: () => void; busy: boolean }) {
   const [open, setOpen] = useState(false);
   const color = SEVERITY[alert.severity].color;
   const link = safeLink(alert.link_url);
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden" style={{ borderLeftWidth: 3, borderLeftColor: color }}>
-      <div className="p-3.5 flex flex-wrap sm:flex-nowrap items-start gap-3">
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden min-w-0" style={{ borderLeftWidth: 3, borderLeftColor: color }}>
+      <div className="p-3 flex items-start gap-2.5 min-w-0">
         <div className="mt-0.5 flex-shrink-0">
           <SeverityIcon s={alert.severity} />
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-sm font-semibold text-[var(--text)]">{alert.title}</h3>
-            <span className="badge badge-gray">{alert.source}</span>
-            {alert.occurrences > 1 && <span className="badge badge-amber">×{alert.occurrences}</span>}
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+            <h3 className="text-xs sm:text-sm font-semibold text-[var(--text)] truncate max-w-full" title={alert.title}>
+              {concatShort(alert.title, 85)}
+            </h3>
+            <span className="badge badge-gray text-[10px] flex-shrink-0">{alert.source}</span>
+            {alert.occurrences > 1 && <span className="badge badge-amber text-[10px] flex-shrink-0">×{alert.occurrences}</span>}
           </div>
           {alert.details && (
-            <button onClick={() => setOpen((o) => !o)} className="text-left w-full">
-              <p className={cn("text-xs text-[var(--text-muted)] mt-1 whitespace-pre-wrap break-words", !open && "line-clamp-2")}>{alert.details}</p>
+            <button onClick={() => setOpen((o) => !o)} className="text-left w-full block min-w-0 overflow-hidden">
+              <p className={cn("text-xs text-[var(--text-muted)] mt-1 break-all sm:break-words", !open ? "line-clamp-1" : "whitespace-pre-wrap")}>
+                {open ? alert.details : concatShort(alert.details, 110)}
+              </p>
             </button>
           )}
-          <p className="text-[11px] text-[var(--text-faint)] mt-1.5">
+          <p className="text-[10px] text-[var(--text-faint)] mt-1 truncate">
             {SEVERITY[alert.severity].label} · last seen {formatTimeAgo(alert.last_seen_at)}
             {alert.occurrences > 1 && ` · first seen ${formatTimeAgo(alert.first_seen_at)}`}
           </p>
         </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0 w-full sm:w-auto justify-end">
+        <div className="flex items-center gap-1 flex-shrink-0">
           {link &&
             (link.external ? (
-              <a href={link.href} target="_blank" rel="noopener noreferrer" className="btn-ghost" aria-label="Open">
-                <ExternalLink className="w-4 h-4" />
+              <a href={link.href} target="_blank" rel="noopener noreferrer" className="btn-ghost p-1.5" aria-label="Open">
+                <ExternalLink className="w-3.5 h-3.5" />
               </a>
             ) : (
-              <Link href={link.href} className="btn-ghost" aria-label="Open">
-                <ExternalLink className="w-4 h-4" />
+              <Link href={link.href} className="btn-ghost p-1.5" aria-label="Open">
+                <ExternalLink className="w-3.5 h-3.5" />
               </Link>
             ))}
-          <button onClick={onResolve} disabled={busy} className="btn-secondary text-xs py-1.5 px-3 inline-flex items-center gap-1.5 disabled:opacity-50">
-            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+          <button onClick={onResolve} disabled={busy} className="btn-secondary text-xs py-1 px-2.5 inline-flex items-center gap-1 disabled:opacity-50">
+            {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
             Resolve
           </button>
         </div>
@@ -236,7 +245,11 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState<string | null>(null);
-  const [newsTab, setNewsTab] = useState<"urgent" | "reviewed">("urgent");
+
+  // Review Card Tabs (strictly items needing attention)
+  const [newsTab, setNewsTab] = useState<"trends" | "events">("trends");
+  const [videoTab, setVideoTab] = useState<"review" | "errors">("review");
+  const [articleTab, setArticleTab] = useState<"review" | "revisions">("review");
 
   // add-todo form
   const [title, setTitle] = useState("");
@@ -422,6 +435,19 @@ export default function Dashboard() {
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
   const v = data.videos;
   const n = data.news;
+  const a = data.articles ?? {
+    total: 0,
+    reviewReady: 0,
+    revisionRequested: 0,
+    inProgress: 0,
+    published: 0,
+    mediaPendingTotal: 0,
+    reviewItems: [],
+    revisionAndDraftItems: [],
+  };
+  const trendReviewItems = n.trendReviewItems ?? [];
+  const eventsNeedsReviewItems = n.eventsNeedsReviewItems ?? [];
+  const videoErrorItems = v.errorItems ?? [];
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5 overflow-x-hidden">
@@ -441,139 +467,146 @@ export default function Dashboard() {
 
       {error && <p className="text-sm text-[var(--color-red)]">{error}</p>}
 
-      {/* All the numbers, one section */}
+      {/* All the numbers, one section (4 pipelines: Workspace, News, Articles, Videos) */}
       <section className="card p-4 sm:p-5 overflow-hidden">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-4 xl:gap-6 md:divide-x md:divide-[var(--border)] md:[&>*:not(:first-child)]:pl-4 xl:[&>*:not(:first-child)]:pl-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 xl:gap-6 xl:divide-x xl:divide-[var(--border)] xl:[&>*:not(:first-child)]:pl-5">
           <KpiGroup icon={<CalendarClock className="w-3.5 h-3.5 text-[var(--color-purple)]" />} title="Workspace">
-            <Kpi label="Attention" value={alertCount} sub={alertCount === 0 ? "All clear" : `${data.alerts.filter((a) => a.severity === "error").length} errors`} tone={alertCount === 0 ? "green" : "red"} />
-            <Kpi label="Today" value={todayEntries.length} sub={nextUp ? `${hhmm(nextUp.at!)} ${concatShort(nextUp.title, 26)}` : "Done for today"} href="/schedule" tone="purple" />
-            <Kpi label="Today's Tasks" value={todayTodoCount} sub={overdueCount > 0 ? `${overdueCount} overdue` : "On track"} tone={overdueCount > 0 ? "amber" : "neutral"} />
+            <Kpi label="Attention" value={alertCount} sub={alertCount === 0 ? "All clear" : `${data.alerts.filter((al) => al.severity === "error").length} errors`} tone={alertCount === 0 ? "green" : "red"} />
+            <Kpi label="Today" value={todayEntries.length} sub={nextUp ? `${hhmm(nextUp.at!)} ${concatShort(nextUp.title, 22)}` : "Done for today"} href="/schedule" tone="purple" />
+            <Kpi label="Tasks" value={todayTodoCount} sub={overdueCount > 0 ? `${overdueCount} overdue` : "On track"} tone={overdueCount > 0 ? "amber" : "neutral"} />
             <Kpi label="Done today" value={data.doneToday} sub="completed" tone="green" />
           </KpiGroup>
 
-          <KpiGroup icon={<Video className="w-3.5 h-3.5 text-[var(--color-cyan)]" />} title="Video Pipeline" meta={`${v.total} total`} href="/pipeline/videos">
-            <Kpi label="Errors" value={v.errors} href="/pipeline/videos?view=errors" tone={v.errors > 0 ? "red" : "neutral"} />
-            <Kpi label="In progress" value={v.progress} href="/pipeline/videos?view=progress" tone="cyan" />
-            <Kpi label="Review" value={v.review} href="/pipeline/videos?view=review" tone="amber" />
-            <Kpi label="Done" value={v.done} href="/pipeline/videos?view=done" tone="green" />
+          <KpiGroup icon={<Newspaper className="w-3.5 h-3.5 text-[var(--color-cyan)]" />} title="News Pipeline" href="/news/review">
+            <Kpi label="Trend Gate" value={n.trendReviewCount ?? 0} sub="time-sensitive" href="/news/review" tone={(n.trendReviewCount ?? 0) > 0 ? "amber" : "neutral"} />
+            <Kpi label="Events Review" value={n.needsReview} sub="needs review" href="/news/events?view=needs_review" tone={n.needsReview > 0 ? "cyan" : "neutral"} />
+            <Kpi label="Paused" value={n.paused} href="/news/events?view=paused" tone={n.paused > 0 ? "amber" : "neutral"} />
+            <Kpi label="Reviewed" value={n.reviewed} href="/news/events?view=reviewed" tone="green" />
           </KpiGroup>
 
-          <KpiGroup icon={<Newspaper className="w-3.5 h-3.5 text-[var(--color-cyan)]" />} title="News Pipeline" href="/news/events">
-            <Kpi label="To review" value={n.needsReview} href="/news/events?view=needs_review" tone={n.needsReview > 0 ? "cyan" : "neutral"} />
-            <Kpi label="Reviewed" value={n.reviewed} href="/news/events?view=reviewed" tone="green" />
-            <Kpi label="Paused" value={n.paused} href="/news/events" tone={n.paused > 0 ? "amber" : "neutral"} />
-            <Kpi label="Videos" value={n.converted} sub="from news" href="/news/events" tone="purple" />
+          <KpiGroup icon={<FileText className="w-3.5 h-3.5 text-[var(--color-amber)]" />} title="Articles Pipeline" meta={`${a.total} total`} href="/pipeline/posts">
+            <Kpi label="To Review" value={a.reviewReady} sub="ready now" href="/pipeline/posts" tone={a.reviewReady > 0 ? "amber" : "neutral"} />
+            <Kpi label="Revisions" value={a.revisionRequested} sub={a.mediaPendingTotal > 0 ? `${a.mediaPendingTotal} media due` : "requested"} href="/pipeline/posts" tone={a.revisionRequested > 0 ? "red" : "neutral"} />
+            <Kpi label="Drafting" value={a.inProgress} href="/pipeline/posts" tone="cyan" />
+            <Kpi label="Published" value={a.published} href="/pipeline/posts" tone="green" />
+          </KpiGroup>
+
+          <KpiGroup icon={<Video className="w-3.5 h-3.5 text-[var(--color-purple)]" />} title="Video Pipeline" meta={`${v.total} total`} href="/pipeline/videos">
+            <Kpi label="Review" value={v.review} href="/pipeline/videos?view=review" tone={v.review > 0 ? "amber" : "neutral"} />
+            <Kpi label="Errors" value={v.errors} href="/pipeline/videos?view=errors" tone={v.errors > 0 ? "red" : "neutral"} />
+            <Kpi label="In progress" value={v.progress} href="/pipeline/videos?view=progress" tone="cyan" />
+            <Kpi label="Done" value={v.done} href="/pipeline/videos?view=done" tone="green" />
           </KpiGroup>
         </div>
       </section>
 
-      {/* Main: my work on the left, pipeline status on the right */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        <div className="xl:col-span-2 space-y-6 min-w-0">
-          {/* Alerts */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-[var(--color-red)]" />
-                Needs your attention
-                {alertCount > 0 && <span className="badge badge-red">{alertCount}</span>}
+      {/* Balanced 2-Column Layout: Left (Alerts + Today's Schedule + News Review Queue) | Right (Videos Review Queue + Articles Review Queue + Pipeline Health) */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
+        {/* LEFT COLUMN (7 cols on XL) */}
+        <div className="xl:col-span-7 space-y-5 min-w-0">
+          {/* 1. Needs your attention (strictly bounded & non-overflowing) */}
+          <section className="card p-4 space-y-3 min-w-0 overflow-hidden">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <h2 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2 min-w-0">
+                <AlertTriangle className="w-4 h-4 text-[var(--color-red)] flex-shrink-0" />
+                <span className="truncate">Needs your attention</span>
+                {alertCount > 0 && <span className="badge badge-red flex-shrink-0">{alertCount}</span>}
               </h2>
               {data.videos.liveIssues > 0 && (
-                <Link href="/notifications" className="text-xs text-[var(--color-purple)] hover:opacity-80 inline-flex items-center gap-1">
+                <Link href="/notifications" className="text-xs text-[var(--color-purple)] hover:opacity-80 inline-flex items-center gap-1 flex-shrink-0">
                   {data.videos.liveIssues} live video issue{data.videos.liveIssues === 1 ? "" : "s"}
                   <ArrowRight className="w-3 h-3" />
                 </Link>
               )}
             </div>
             {sortedAlerts.length === 0 ? (
-              <div className="rounded-xl bg-[var(--surface)] border border-[var(--border)] px-4 py-3 text-sm text-[var(--text-faint)] flex items-center gap-2">
+              <div className="rounded-xl bg-[var(--surface-raised)] border border-[var(--border)] px-3.5 py-2.5 text-xs sm:text-sm text-[var(--text-faint)] flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-[var(--color-green)] flex-shrink-0" />
-                All clear. Alerts from your n8n workflows land here and leave when you resolve them.
+                <span className="truncate">All clear. Workflow alerts land here and disappear as soon as you resolve them.</span>
               </div>
             ) : (
-              <div className="space-y-2">
-                {sortedAlerts.map((a) => (
-                  <AlertRow key={a.id} alert={a} onResolve={() => resolveAlert(a)} busy={busy === a.id} />
+              <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1 min-w-0">
+                {sortedAlerts.map((al) => (
+                  <AlertRow key={al.id} alert={al} onResolve={() => resolveAlert(al)} busy={busy === al.id} />
                 ))}
               </div>
             )}
           </section>
 
-          {/* My day — Strictly Today's Schedule */}
-          <section className="space-y-3 min-w-0">
+          {/* 2. Today's Schedule (Strictly Today's Blocks + Quick Task Input) */}
+          <section className="card p-4 space-y-3 min-w-0 overflow-hidden">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2 min-w-0">
                 <ListTodo className="w-4 h-4 text-[var(--color-purple)] flex-shrink-0" />
                 <span className="truncate">Today&apos;s Schedule</span>
                 <span className="text-xs font-normal text-[var(--text-faint)] flex-shrink-0">
-                  {todayEntries.length} block{todayEntries.length === 1 ? "" : "s"} today
+                  {todayEntries.length} block{todayEntries.length === 1 ? "" : "s"}
                   {overdueCount > 0 && ` · ${overdueCount} overdue`}
                   {data.doneToday > 0 && ` · ${data.doneToday} done`}
                 </span>
               </h2>
               <Link href="/schedule" className="text-xs text-[var(--color-purple)] inline-flex items-center gap-1 hover:opacity-80 flex-shrink-0">
-                Full Week Timetable <ArrowRight className="w-3 h-3" />
+                Full Timetable <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
 
-            <div className="card p-3 space-y-2">
+            <div className="rounded-xl bg-[var(--surface-raised)] border border-[var(--border)] p-2.5 space-y-2">
               <div className="flex gap-2">
                 <input
-                  className="input-field flex-1 min-w-0"
+                  className="input-field flex-1 min-w-0 py-1.5 text-xs sm:text-sm"
                   placeholder="Add a quick task to your day… (press Enter)"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && addTodo()}
                 />
-                <button onClick={addTodo} disabled={adding || !title.trim()} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-50 flex-shrink-0">
-                  {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                <button onClick={addTodo} disabled={adding || !title.trim()} className="btn-primary text-xs sm:text-sm py-1.5 px-3 inline-flex items-center gap-1.5 disabled:opacity-50 flex-shrink-0">
+                  {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                   Add
                 </button>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <input type="datetime-local" className="input-field !w-auto text-xs" value={due} onChange={(e) => setDue(e.target.value)} />
+              <div className="flex flex-wrap items-center gap-1.5">
+                <input type="datetime-local" className="input-field !w-auto text-xs py-1 px-2" value={due} onChange={(e) => setDue(e.target.value)} />
                 {([
-                  ["1h", "In 1 hour"],
+                  ["1h", "In 1h"],
                   ["today6", "Today 6pm"],
                   ["tomorrow9", "Tomorrow 9am"],
                 ] as const).map(([k, label]) => (
-                  <button key={k} onClick={() => quickDue(k)} className="text-xs px-2.5 py-1 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]">
+                  <button key={k} onClick={() => quickDue(k)} className="text-[11px] px-2 py-1 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]">
                     {label}
                   </button>
                 ))}
-                <select className="input-field !w-auto text-xs" value={priority} onChange={(e) => setPriority(Number(e.target.value) as 1 | 2 | 3)}>
+                <select className="input-field !w-auto text-xs py-1 px-2" value={priority} onChange={(e) => setPriority(Number(e.target.value) as 1 | 2 | 3)}>
                   <option value={1}>High priority</option>
                   <option value={2}>Normal</option>
                   <option value={3}>Low</option>
                 </select>
                 {due && (
-                  <select className="input-field !w-auto text-xs" value={remind} onChange={(e) => setRemind(e.target.value)}>
+                  <select className="input-field !w-auto text-xs py-1 px-2" value={remind} onChange={(e) => setRemind(e.target.value)}>
                     <option value="none">No alert</option>
-                    <option value="0">Alert at due time</option>
-                    <option value="5">Alert 5 min before</option>
-                    <option value="15">Alert 15 min before</option>
-                    <option value="30">Alert 30 min before</option>
-                    <option value="60">Alert 1 hour before</option>
+                    <option value="0">At due time</option>
+                    <option value="5">5m before</option>
+                    <option value="15">15m before</option>
+                    <option value="30">30m before</option>
                   </select>
                 )}
               </div>
             </div>
 
             {(Object.keys(GROUP_LABEL) as GroupKey[]).every((k) => grouped[k].length === 0) ? (
-              <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-8 text-center text-sm text-[var(--text-faint)]">
-                Your day is empty. Add a to-do above, or view the{" "}
+              <div className="rounded-xl bg-[var(--surface-raised)] border border-[var(--border)] p-6 text-center text-xs sm:text-sm text-[var(--text-faint)]">
+                Nothing left on today&apos;s schedule. View the{" "}
                 <Link href="/schedule" className="text-[var(--color-purple)]">
-                  Schedule
+                  Weekly Timetable
                 </Link>
                 .
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1 min-w-0">
                 {(Object.keys(GROUP_LABEL) as GroupKey[])
                   .filter((k) => grouped[k].length > 0)
                   .map((k) => (
                     <div key={k} className="space-y-1.5 min-w-0">
-                      <h3 className={cn("text-[11px] font-semibold uppercase tracking-wider", k === "overdue" ? "text-[var(--color-red)]" : "text-[var(--text-faint)]")}>
+                      <h3 className={cn("text-[10px] font-semibold uppercase tracking-wider", k === "overdue" ? "text-[var(--color-red)]" : "text-[var(--text-faint)]")}>
                         {GROUP_LABEL[k]} · {grouped[k].length}
                       </h3>
                       <div className="space-y-1.5">
@@ -581,7 +614,7 @@ export default function Dashboard() {
                           <div
                             key={e.key}
                             className={cn(
-                              "group flex items-center gap-3 px-3.5 py-2.5 rounded-xl border bg-[var(--surface)] overflow-hidden min-w-0",
+                              "group flex items-center gap-2.5 px-3 py-2 rounded-xl border bg-[var(--surface-raised)] overflow-hidden min-w-0",
                               e.ringing ? "border-[var(--color-amber)] bg-[var(--color-amber-soft)]" : "border-[var(--border)]"
                             )}
                           >
@@ -592,14 +625,14 @@ export default function Dashboard() {
                             ) : (
                               <CalendarClock className="w-4 h-4 text-[var(--color-purple)] flex-shrink-0" />
                             )}
-                            <div className="w-12 flex-shrink-0 text-xs font-semibold tabular-nums text-[var(--text-muted)]">
+                            <div className="w-11 flex-shrink-0 text-xs font-semibold tabular-nums text-[var(--text-muted)]">
                               {e.at !== null ? hhmm(e.at) : "—"}
                             </div>
                             <div className="flex-1 min-w-0 overflow-hidden">
-                              <div className="flex items-center gap-2 min-w-0">
+                              <div className="flex items-center gap-1.5 min-w-0">
                                 {e.item.priority === 1 && <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-red)] flex-shrink-0" title="High priority" />}
-                                <span className="text-sm font-medium text-[var(--text)] truncate" title={e.title}>
-                                  {concatShort(e.title, 58)}
+                                <span className="text-xs sm:text-sm font-medium text-[var(--text)] truncate" title={e.title}>
+                                  {concatShort(e.title, 56)}
                                 </span>
                                 {!isTodo(e.item) && <span className="badge badge-purple flex-shrink-0 text-[10px]">{KIND_LABEL[e.item.kind]}</span>}
                               </div>
@@ -612,19 +645,19 @@ export default function Dashboard() {
                                 {e.item.notes && (
                                   <span>
                                     {e.at !== null ? " · " : ""}
-                                    {concatShort(e.item.notes, 75)}
+                                    {concatShort(e.item.notes, 68)}
                                   </span>
                                 )}
                               </p>
                             </div>
                             {!isTodo(e.item) ? (
-                              <button onClick={() => markDone(e.item)} disabled={busy === e.id} className="btn-secondary text-xs py-1 px-2.5 inline-flex items-center gap-1 disabled:opacity-50 flex-shrink-0">
-                                <Check className="w-3.5 h-3.5" />
+                              <button onClick={() => markDone(e.item)} disabled={busy === e.id} className="btn-secondary text-xs py-1 px-2 inline-flex items-center gap-1 disabled:opacity-50 flex-shrink-0">
+                                <Check className="w-3 h-3" />
                                 Done
                               </button>
                             ) : (
                               <button onClick={() => deleteItem(e.item)} disabled={busy === e.id} aria-label="Delete" className="btn-ghost opacity-0 group-hover:opacity-100 focus:opacity-100 hover:!text-[var(--color-red)] flex-shrink-0">
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
                           </div>
@@ -635,13 +668,358 @@ export default function Dashboard() {
               </div>
             )}
           </section>
+
+          {/* 3. News Review Card (Moved to Left Column to fill space & show Trend Review + Unreviewed Events) */}
+          <Panel
+            title="News Review Queue"
+            icon={<Newspaper className="w-4 h-4 text-[var(--color-cyan)] flex-shrink-0" />}
+            action={
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="inline-flex rounded-lg border border-[var(--border)] p-0.5 text-[11px]">
+                  <button
+                    onClick={() => setNewsTab("trends")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1.5",
+                      newsTab === "trends" ? "bg-[var(--surface-raised)] text-[var(--text)] font-semibold" : "text-[var(--text-faint)] hover:text-[var(--text)]"
+                    )}
+                  >
+                    <span>Time-sensitive (Trends)</span>
+                    <span className={cn("px-1.5 py-0.2 rounded-full text-[10px]", trendReviewItems.length > 0 ? "bg-[var(--color-amber-soft)] text-[var(--color-amber)] font-bold" : "text-[var(--text-faint)]")}>
+                      {n.trendReviewCount ?? trendReviewItems.length}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setNewsTab("events")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1.5",
+                      newsTab === "events" ? "bg-[var(--surface-raised)] text-[var(--text)] font-semibold" : "text-[var(--text-faint)] hover:text-[var(--text)]"
+                    )}
+                  >
+                    <span>Events Review</span>
+                    <span className={cn("px-1.5 py-0.2 rounded-full text-[10px]", eventsNeedsReviewItems.length > 0 ? "bg-[var(--color-cyan-soft)] text-[var(--color-cyan)] font-bold" : "text-[var(--text-faint)]")}>
+                      {n.needsReview}
+                    </span>
+                  </button>
+                </div>
+                <Link
+                  href={newsTab === "trends" ? "/news/review" : "/news/events?view=needs_review"}
+                  className="text-xs text-[var(--color-purple)] hover:opacity-80 inline-flex items-center gap-0.5"
+                >
+                  Open <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            }
+          >
+            <div className="space-y-1 -mx-1 max-h-[280px] overflow-y-auto px-1">
+              {newsTab === "trends" ? (
+                <>
+                  {trendReviewItems.length === 0 ? (
+                    <div className="py-6 text-center text-xs sm:text-sm text-[var(--text-faint)] flex flex-col items-center gap-1.5">
+                      <CheckCircle2 className="w-5 h-5 text-[var(--color-green)]" />
+                      <span>All trends in Trend Review have been triaged.</span>
+                    </div>
+                  ) : (
+                    trendReviewItems.map((t) => (
+                      <Link
+                        key={t.id}
+                        href="/news/review"
+                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[var(--surface-raised)] border border-transparent hover:border-[var(--border)] transition-colors group min-w-0"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-amber-soft)] flex items-center justify-center flex-shrink-0">
+                          <Flame className="w-4 h-4 text-[var(--color-amber)]" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <p className="text-xs sm:text-sm font-semibold text-[var(--text)] truncate" title={t.eventTitle || t.keyword}>
+                              {concatShort(t.eventTitle || t.keyword, 65)}
+                            </p>
+                            {t.country && <span className="badge badge-gray text-[10px] flex-shrink-0">🌍 {t.country}</span>}
+                          </div>
+                          <p className="text-[11px] text-[var(--text-faint)] truncate mt-0.5">
+                            Keyword: <span className="text-[var(--text-muted)]">{concatShort(t.keyword, 32)}</span>
+                            {t.traffic ? ` · ${t.traffic}` : ""}
+                            {t.relevance != null ? ` · Score ${t.relevance}` : ""}
+                            {` · ${formatTimeAgo(t.created_at)}`}
+                          </p>
+                        </div>
+                        <span className="badge badge-amber text-[10px] flex-shrink-0">Needs Approval</span>
+                        <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] flex-shrink-0" />
+                      </Link>
+                    ))
+                  )}
+                </>
+              ) : (
+                <>
+                  {eventsNeedsReviewItems.length === 0 ? (
+                    <div className="py-6 text-center text-xs sm:text-sm text-[var(--text-faint)] flex flex-col items-center gap-1.5">
+                      <CheckCircle2 className="w-5 h-5 text-[var(--color-green)]" />
+                      <span>No unreviewed events waiting in Events queue.</span>
+                    </div>
+                  ) : (
+                    eventsNeedsReviewItems.map((e) => (
+                      <Link
+                        key={e.id}
+                        href={`/news/events/${e.id}`}
+                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[var(--surface-raised)] border border-transparent hover:border-[var(--border)] transition-colors group min-w-0"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-cyan-soft)] flex items-center justify-center flex-shrink-0">
+                          <TrendingUp className="w-4 h-4 text-[var(--color-cyan)]" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs sm:text-sm font-medium text-[var(--text)] truncate" title={e.title}>
+                            {concatShort(e.title, 65)}
+                          </p>
+                          <p className="text-[11px] text-[var(--text-faint)] truncate mt-0.5">
+                            {e.hours != null ? `Golden window: ${Math.round(e.hours)}h left` : "Needs review"}
+                            {e.relevance != null ? ` · Relevance ${e.relevance.toFixed(1)}` : ""}
+                            {` · ${formatTimeAgo(e.created_at)}`}
+                          </p>
+                        </div>
+                        <span className="badge badge-cyan text-[10px] flex-shrink-0">To Review</span>
+                        <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] flex-shrink-0" />
+                      </Link>
+                    ))
+                  )}
+                </>
+              )}
+            </div>
+          </Panel>
         </div>
 
-        <aside className="space-y-4 min-w-0">
+        {/* RIGHT COLUMN (5 cols on XL): Videos Review Queue + Articles Review Queue + Pipeline Health */}
+        <aside className="xl:col-span-5 space-y-5 min-w-0">
+          {/* 1. Videos Review Queue Card (Only items needing review or error fix) */}
           <Panel
-            title="Pipeline Health"
-            icon={<Activity className="w-4 h-4 text-[var(--color-purple)]" />}
-            action={<span className="text-[11px] text-[var(--text-faint)]">{v.avgTurnaroundHours !== null ? `Avg ${v.avgTurnaroundHours.toFixed(1)}h per video` : ""}</span>}
+            title="Videos Action Queue"
+            icon={<Video className="w-4 h-4 text-[var(--color-purple)] flex-shrink-0" />}
+            action={
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="inline-flex rounded-lg border border-[var(--border)] p-0.5 text-[11px]">
+                  <button
+                    onClick={() => setVideoTab("review")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1.5",
+                      videoTab === "review" ? "bg-[var(--surface-raised)] text-[var(--text)] font-semibold" : "text-[var(--text-faint)] hover:text-[var(--text)]"
+                    )}
+                  >
+                    <span>Needs Review</span>
+                    <span className={cn("px-1.5 py-0.2 rounded-full text-[10px]", v.needsReview.length > 0 ? "bg-[var(--color-amber-soft)] text-[var(--color-amber)] font-bold" : "text-[var(--text-faint)]")}>
+                      {v.review}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setVideoTab("errors")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1.5",
+                      videoTab === "errors" ? "bg-[var(--surface-raised)] text-[var(--text)] font-semibold" : "text-[var(--text-faint)] hover:text-[var(--text)]"
+                    )}
+                  >
+                    <span>Errors / Revisions</span>
+                    <span className={cn("px-1.5 py-0.2 rounded-full text-[10px]", videoErrorItems.length > 0 ? "bg-[var(--color-red-soft)] text-[var(--color-red)] font-bold" : "text-[var(--text-faint)]")}>
+                      {v.errors}
+                    </span>
+                  </button>
+                </div>
+                <Link
+                  href={videoTab === "review" ? "/pipeline/videos?view=review" : "/pipeline/videos?view=errors"}
+                  className="text-xs text-[var(--color-purple)] hover:opacity-80 inline-flex items-center gap-0.5"
+                >
+                  All <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            }
+          >
+            <div className="space-y-1 -mx-1 max-h-[260px] overflow-y-auto px-1">
+              {videoTab === "review" ? (
+                <>
+                  {v.needsReview.length === 0 ? (
+                    <div className="py-6 text-center text-xs sm:text-sm text-[var(--text-faint)] flex flex-col items-center gap-1.5">
+                      <CheckCircle2 className="w-5 h-5 text-[var(--color-green)]" />
+                      <span>No videos waiting on your review right now.</span>
+                    </div>
+                  ) : (
+                    v.needsReview.map((x) => (
+                      <Link
+                        key={x.id}
+                        href={`/pipeline/videos/${x.id}`}
+                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[var(--surface-raised)] border border-transparent hover:border-[var(--border)] transition-colors group min-w-0"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-amber-soft)] flex items-center justify-center flex-shrink-0">
+                          <Clock className="w-4 h-4 text-[var(--color-amber)]" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs sm:text-sm font-medium text-[var(--text)] truncate" title={x.title}>
+                            {concatShort(x.title, 54)}
+                          </p>
+                          <p className="text-[11px] text-[var(--text-faint)] truncate mt-0.5">
+                            {x.channel || "Unassigned"} · {x.updated_at ? formatTimeAgo(x.updated_at) : "Waiting for review"}
+                          </p>
+                        </div>
+                        <div className="flex-shrink-0">
+                          <StatusBadge status={x.status as VideoStatus} size="sm" showIcon={false} />
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] flex-shrink-0" />
+                      </Link>
+                    ))
+                  )}
+                </>
+              ) : (
+                <>
+                  {videoErrorItems.length === 0 ? (
+                    <div className="py-6 text-center text-xs sm:text-sm text-[var(--text-faint)] flex flex-col items-center gap-1.5">
+                      <CheckCircle2 className="w-5 h-5 text-[var(--color-green)]" />
+                      <span>Zero video pipeline errors or revisions pending.</span>
+                    </div>
+                  ) : (
+                    videoErrorItems.map((x) => (
+                      <Link
+                        key={x.id}
+                        href={`/pipeline/videos/${x.id}`}
+                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[var(--surface-raised)] border border-transparent hover:border-[var(--border)] transition-colors group min-w-0"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-red-soft)] flex items-center justify-center flex-shrink-0">
+                          <AlertTriangle className="w-4 h-4 text-[var(--color-red)]" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs sm:text-sm font-medium text-[var(--text)] truncate" title={x.title}>
+                            {concatShort(x.title, 54)}
+                          </p>
+                          <p className="text-[11px] text-[var(--color-red)] truncate mt-0.5">
+                            {x.errorSummary ? concatShort(x.errorSummary, 60) : `${x.channel || "Video"} · ${formatTimeAgo(x.updated_at)}`}
+                          </p>
+                        </div>
+                        <div className="flex-shrink-0">
+                          <StatusBadge status={x.status as VideoStatus} size="sm" showIcon={false} />
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] flex-shrink-0" />
+                      </Link>
+                    ))
+                  )}
+                </>
+              )}
+            </div>
+          </Panel>
+
+          {/* 2. Articles Review Queue Card (New) */}
+          <Panel
+            title="Articles Review Queue"
+            icon={<FileText className="w-4 h-4 text-[var(--color-amber)] flex-shrink-0" />}
+            action={
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="inline-flex rounded-lg border border-[var(--border)] p-0.5 text-[11px]">
+                  <button
+                    onClick={() => setArticleTab("review")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1.5",
+                      articleTab === "review" ? "bg-[var(--surface-raised)] text-[var(--text)] font-semibold" : "text-[var(--text-faint)] hover:text-[var(--text)]"
+                    )}
+                  >
+                    <span>Needs Review</span>
+                    <span className={cn("px-1.5 py-0.2 rounded-full text-[10px]", a.reviewReady > 0 ? "bg-[var(--color-amber-soft)] text-[var(--color-amber)] font-bold" : "text-[var(--text-faint)]")}>
+                      {a.reviewReady}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setArticleTab("revisions")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1.5",
+                      articleTab === "revisions" ? "bg-[var(--surface-raised)] text-[var(--text)] font-semibold" : "text-[var(--text-faint)] hover:text-[var(--text)]"
+                    )}
+                  >
+                    <span>Revisions & Media</span>
+                    <span className={cn("px-1.5 py-0.2 rounded-full text-[10px]", a.revisionAndDraftItems.length > 0 ? "bg-[var(--color-purple-soft)] text-[var(--color-purple)] font-bold" : "text-[var(--text-faint)]")}>
+                      {a.revisionAndDraftItems.length}
+                    </span>
+                  </button>
+                </div>
+                <Link href="/pipeline/posts" className="text-xs text-[var(--color-purple)] hover:opacity-80 inline-flex items-center gap-0.5">
+                  All <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            }
+          >
+            <div className="space-y-1 -mx-1 max-h-[260px] overflow-y-auto px-1">
+              {articleTab === "review" ? (
+                <>
+                  {a.reviewItems.length === 0 ? (
+                    <div className="py-6 text-center text-xs sm:text-sm text-[var(--text-faint)] flex flex-col items-center gap-1.5">
+                      <CheckCircle2 className="w-5 h-5 text-[var(--color-green)]" />
+                      <span>No articles waiting for approval right now.</span>
+                    </div>
+                  ) : (
+                    a.reviewItems.map((item) => (
+                      <Link
+                        key={item.id}
+                        href={`/pipeline/posts/${item.id}`}
+                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[var(--surface-raised)] border border-transparent hover:border-[var(--border)] transition-colors group min-w-0"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-amber-soft)] flex items-center justify-center flex-shrink-0">
+                          <FileText className="w-4 h-4 text-[var(--color-amber)]" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs sm:text-sm font-medium text-[var(--text)] truncate" title={item.title}>
+                            {concatShort(item.title, 54)}
+                          </p>
+                          <p className="text-[11px] text-[var(--text-faint)] truncate mt-0.5">
+                            {item.channel || item.category || "Article"} · {formatTimeAgo(item.updated_at)}
+                          </p>
+                        </div>
+                        {item.mediaPendingCount > 0 ? (
+                          <span className="badge badge-amber text-[10px] flex-shrink-0">{item.mediaPendingCount} Media Due</span>
+                        ) : (
+                          <span className="badge badge-amber text-[10px] flex-shrink-0">Review Ready</span>
+                        )}
+                        <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] flex-shrink-0" />
+                      </Link>
+                    ))
+                  )}
+                </>
+              ) : (
+                <>
+                  {a.revisionAndDraftItems.length === 0 ? (
+                    <div className="py-6 text-center text-xs sm:text-sm text-[var(--text-faint)] flex flex-col items-center gap-1.5">
+                      <CheckCircle2 className="w-5 h-5 text-[var(--color-green)]" />
+                      <span>No article revisions or media uploads pending.</span>
+                    </div>
+                  ) : (
+                    a.revisionAndDraftItems.map((item) => {
+                      const st = ARTICLE_STATUS_LABEL[item.status] || { label: item.status, badge: "badge-gray" };
+                      return (
+                        <Link
+                          key={item.id}
+                          href={`/pipeline/posts/${item.id}`}
+                          className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[var(--surface-raised)] border border-transparent hover:border-[var(--border)] transition-colors group min-w-0"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-[var(--color-purple-soft)] flex items-center justify-center flex-shrink-0">
+                            <FileText className="w-4 h-4 text-[var(--color-purple)]" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs sm:text-sm font-medium text-[var(--text)] truncate" title={item.title}>
+                              {concatShort(item.title, 54)}
+                            </p>
+                            <p className="text-[11px] text-[var(--text-faint)] truncate mt-0.5">
+                              {item.channel || item.category || "Article"} · {formatTimeAgo(item.updated_at)}
+                            </p>
+                          </div>
+                          {item.mediaPendingCount > 0 && (
+                            <span className="badge badge-amber text-[10px] flex-shrink-0">{item.mediaPendingCount} Media</span>
+                          )}
+                          <span className={cn("badge text-[10px] flex-shrink-0", st.badge)}>{st.label}</span>
+                          <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] flex-shrink-0" />
+                        </Link>
+                      );
+                    })
+                  )}
+                </>
+              )}
+            </div>
+          </Panel>
+
+          {/* 3. Pipeline Health & Quick Links */}
+          <Panel
+            title="Pipeline Health & Shortcuts"
+            icon={<Activity className="w-4 h-4 text-[var(--color-purple)] flex-shrink-0" />}
+            action={<span className="text-[11px] text-[var(--text-faint)]">{v.avgTurnaroundHours !== null ? `Avg ${v.avgTurnaroundHours.toFixed(1)}h / video` : ""}</span>}
           >
             <div className="grid grid-cols-2 gap-2">
               {SERVICES.map((svc) => {
@@ -667,137 +1045,26 @@ export default function Dashboard() {
                 Running now: {v.activeJob.title}
               </Link>
             )}
-            {v.needsReview.length > 0 && (
-              <div>
-                <SubLabel>Waiting for your review</SubLabel>
-                {v.needsReview.map((x) => (
-                  <Link key={x.id} href={`/pipeline/videos/${x.id}`} className="block text-xs text-[var(--text)] truncate py-0.5 hover:text-[var(--color-purple)]">
-                    • {x.title}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </Panel>
-
-          <Panel title="Quick links" icon={<ArrowRight className="w-4 h-4 text-[var(--color-purple)]" />}>
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="grid grid-cols-3 gap-2 text-xs pt-1">
               {[
-                ["/pipeline/new", "Add video"],
-                ["/pipeline/videos", "All videos"],
-                ["/news/events", "Review news"],
+                ["/news/review", "Trend Gate"],
+                ["/news/events?view=needs_review", "Events Review"],
+                ["/pipeline/posts", "Articles"],
+                ["/pipeline/videos?view=review", "Video Review"],
+                ["/pipeline/new", "Add Video"],
                 ["/schedule", "Timetable"],
               ].map(([href, label]) => (
-                <Link key={href} href={href} className="rounded-lg border border-[var(--border)] px-3 py-2 text-center text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]">
+                <Link
+                  key={href}
+                  href={href}
+                  className="rounded-lg border border-[var(--border)] px-2.5 py-2 text-center text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)] truncate"
+                >
                   {label}
                 </Link>
               ))}
             </div>
           </Panel>
         </aside>
-      </div>
-
-      {/* Activity: videos and news side by side */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <Panel
-          title="Recent Videos"
-          icon={<Zap className="w-4 h-4 text-[var(--color-amber)]" />}
-          action={
-            <Link href="/pipeline/videos" className="text-xs text-[var(--color-purple)] hover:opacity-80 inline-flex items-center gap-1">
-              View all <ChevronRight className="w-3.5 h-3.5" />
-            </Link>
-          }
-        >
-          <div className="space-y-0.5 -mx-1">
-            {v.recent.length === 0 && <p className="text-sm text-[var(--text-faint)] py-4 text-center">No videos yet.</p>}
-            {v.recent.slice(0, 5).map((x) => (
-              <Link key={x.id} href={`/pipeline/videos/${x.id}`} className="flex items-center gap-3 p-2 rounded-xl hover:bg-[var(--surface-raised)] transition-colors group">
-                <div
-                  className={cn(
-                    "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-                    x.hasError ? "bg-[var(--color-red-soft)]" : DONE.has(x.status) ? "bg-[var(--color-green-soft)]" : "bg-[var(--surface-raised)]"
-                  )}
-                >
-                  {x.hasError ? (
-                    <AlertTriangle className="w-4 h-4 text-[var(--color-red)]" />
-                  ) : DONE.has(x.status) ? (
-                    <CheckCircle2 className="w-4 h-4 text-[var(--color-green)]" />
-                  ) : (
-                    <Clock className="w-4 h-4 text-[var(--text-muted)]" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[var(--text)] truncate">{x.title}</p>
-                  <p className="text-[11px] text-[var(--text-faint)] truncate">
-                    {x.channel} · {formatTimeAgo(x.updated_at)}
-                  </p>
-                </div>
-                <div className="hidden min-[420px]:block flex-shrink-0">
-                  <StatusBadge status={x.status as VideoStatus} size="sm" showIcon={false} />
-                </div>
-                <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] flex-shrink-0" />
-              </Link>
-            ))}
-          </div>
-        </Panel>
-
-        <Panel
-          title="News"
-          icon={<Newspaper className="w-4 h-4 text-[var(--color-cyan)]" />}
-          action={
-            <div className="inline-flex rounded-lg border border-[var(--border)] p-0.5 text-[11px]">
-              {([
-                ["urgent", "Time-sensitive"],
-                ["reviewed", "Reviewed"],
-              ] as const).map(([k, label]) => (
-                <button
-                  key={k}
-                  onClick={() => setNewsTab(k)}
-                  className={cn("px-2.5 py-1 rounded-md transition-colors", newsTab === k ? "bg-[var(--surface-raised)] text-[var(--text)] font-semibold" : "text-[var(--text-faint)] hover:text-[var(--text)]")}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          }
-        >
-          <div className="space-y-0.5 -mx-1">
-            {newsTab === "urgent" ? (
-              <>
-                {n.urgent.length === 0 && <p className="text-sm text-[var(--text-faint)] py-4 text-center">Nothing urgent waiting on review.</p>}
-                {n.urgent.map((e) => (
-                  <Link key={e.id} href={`/news/events/${e.id}`} className="flex items-center gap-3 p-2 rounded-xl hover:bg-[var(--surface-raised)] transition-colors group">
-                    <div className="w-8 h-8 rounded-lg bg-[var(--color-amber-soft)] flex items-center justify-center flex-shrink-0">
-                      <Clock className="w-4 h-4 text-[var(--color-amber)]" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-[var(--text)] truncate">{e.title}</p>
-                      <p className="text-[11px] text-[var(--text-faint)]">{e.hours != null ? `Window closes in ${Math.round(e.hours)}h` : "No deadline"}</p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] flex-shrink-0" />
-                  </Link>
-                ))}
-              </>
-            ) : (
-              <>
-                {n.recentlyReviewed.length === 0 && <p className="text-sm text-[var(--text-faint)] py-4 text-center">Nothing reviewed yet.</p>}
-                {n.recentlyReviewed.map((e) => (
-                  <Link key={e.id} href={`/news/events/${e.id}`} className="flex items-center gap-3 p-2 rounded-xl hover:bg-[var(--surface-raised)] transition-colors group">
-                    <div className="w-8 h-8 rounded-lg bg-[var(--color-green-soft)] flex items-center justify-center flex-shrink-0">
-                      {e.toVideo ? <Video className="w-4 h-4 text-[var(--color-green)]" /> : <TrendingUp className="w-4 h-4 text-[var(--color-green)]" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-[var(--text)] truncate">{e.title}</p>
-                      <p className="text-[11px] text-[var(--text-faint)]">
-                        {e.toVideo ? "Turned into a video" : "Reviewed"} · {formatTimeAgo(e.created_at)}
-                      </p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] flex-shrink-0" />
-                  </Link>
-                ))}
-              </>
-            )}
-          </div>
-        </Panel>
       </div>
     </div>
   );
