@@ -27,18 +27,63 @@ export interface WorkspaceSummary {
     review: number;
     done: number;
     liveIssues: number;
-    needsReview: { id: string; title: string; status: string }[];
+    needsReview: { id: string; title: string; channel: string; status: string; updated_at: string }[];
+    errorItems: { id: string; title: string; channel: string; status: string; updated_at: string; errorSummary: string | null }[];
     avgTurnaroundHours: number | null;
     recent: { id: string; title: string; channel: string; status: string; updated_at: string; hasError: boolean }[];
     activeJob: { id: string; title: string; service: string | null } | null;
   };
   news: {
+    trendReviewCount: number;
     needsReview: number;
     paused: number;
     reviewed: number;
     converted: number;
+    trendReviewItems: {
+      id: number;
+      keyword: string;
+      eventTitle: string | null;
+      country: string | null;
+      traffic: string | null;
+      relevance: number | null;
+      created_at: string;
+    }[];
+    eventsNeedsReviewItems: {
+      id: string;
+      title: string;
+      status: string;
+      hours: number | null;
+      relevance: number | null;
+      created_at: string;
+    }[];
     recentlyReviewed: { id: string; title: string; toVideo: boolean; created_at: string }[];
     urgent: { id: string; title: string; hours: number | null }[];
+  };
+  articles: {
+    total: number;
+    reviewReady: number;
+    revisionRequested: number;
+    inProgress: number;
+    published: number;
+    mediaPendingTotal: number;
+    reviewItems: {
+      id: string;
+      title: string;
+      channel: string | null;
+      category: string | null;
+      status: string;
+      mediaPendingCount: number;
+      updated_at: string;
+    }[];
+    revisionAndDraftItems: {
+      id: string;
+      title: string;
+      channel: string | null;
+      category: string | null;
+      status: string;
+      mediaPendingCount: number;
+      updated_at: string;
+    }[];
   };
 }
 
