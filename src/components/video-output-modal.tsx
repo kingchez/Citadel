@@ -26,6 +26,7 @@ export function VideoOutputModal({
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [useDriveIframe, setUseDriveIframe] = useState(false);
 
   const fileId = extractDriveFileId(outputDriveLink);
   // Anything that is not a Google Drive link (e.g. the R2 bucket URL the pipeline now saves for renders) plays directly.
@@ -80,7 +81,7 @@ export function VideoOutputModal({
                   controls
                   autoPlay
                   playsInline
-                  preload="metadata"
+                  preload="auto"
                   className="flex-1 min-h-0 w-full bg-black"
                 />
                 <div className="px-4 py-2 text-[11px] text-[var(--text-faint)] bg-[var(--surface)] border-t border-[var(--border)]">
@@ -89,9 +90,35 @@ export function VideoOutputModal({
                   </a>
                 </div>
               </>
+            ) : fileId && !useDriveIframe ? (
+              <>
+                {/* Stream raw MP4 via /api/drive/[fileId] with range requests & preload="auto" for instant playback and scrubbing. */}
+                <video
+                  key={fileId}
+                  src={`/api/drive/${fileId}`}
+                  controls
+                  autoPlay
+                  playsInline
+                  preload="auto"
+                  onError={() => setUseDriveIframe(true)}
+                  className="flex-1 min-h-0 w-full bg-black"
+                />
+                <div className="px-4 py-2 text-[11px] text-[var(--text-faint)] bg-[var(--surface)] border-t border-[var(--border)] flex items-center justify-between gap-3">
+                  <a href={outputDriveLink} target="_blank" rel="noopener noreferrer" className="text-[var(--color-cyan)] underline">
+                    Open in Drive
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setUseDriveIframe(true)}
+                    className="text-[var(--text-muted)] hover:text-[var(--text)] underline"
+                  >
+                    Switch to Drive preview
+                  </button>
+                </div>
+              </>
             ) : fileId ? (
               <>
-                {/* Google's own player: plays straight from Drive (no proxying through this server, so no size/time limits). */}
+                {/* Fallback: Google's own player */}
                 <iframe
                   key={fileId}
                   src={`https://drive.google.com/file/d/${fileId}/preview`}
@@ -100,11 +127,20 @@ export function VideoOutputModal({
                   allowFullScreen
                   className="flex-1 w-full border-0 bg-black"
                 />
-                <div className="px-4 py-2 text-[11px] text-[var(--text-faint)] bg-[var(--surface)] border-t border-[var(--border)]">
-                  Not loading yet? Drive can take a minute to process a fresh upload.{" "}
-                  <a href={outputDriveLink} target="_blank" rel="noopener noreferrer" className="text-[var(--color-cyan)] underline">
-                    Open in Drive
-                  </a>
+                <div className="px-4 py-2 text-[11px] text-[var(--text-faint)] bg-[var(--surface)] border-t border-[var(--border)] flex items-center justify-between gap-3">
+                  <span>
+                    Not loading yet? Drive can take a minute to process a fresh upload.{" "}
+                    <a href={outputDriveLink} target="_blank" rel="noopener noreferrer" className="text-[var(--color-cyan)] underline">
+                      Open in Drive
+                    </a>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setUseDriveIframe(false)}
+                    className="text-[var(--text-muted)] hover:text-[var(--text)] underline"
+                  >
+                    Use fast native player
+                  </button>
                 </div>
               </>
             ) : (
