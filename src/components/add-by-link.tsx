@@ -6,14 +6,14 @@ import { Loader2, Plus } from "lucide-react";
 import { Choice, Field, OptionalProducts, PriorityField, ScriptAndDirectionFields } from "@/components/add-video-ui";
 import { MediaClipsBuilder } from "@/components/media-clips-builder";
 import type { MediaItem } from "@/lib/news-types";
-import type { DirectionChoice, ScriptChoice } from "@/lib/video-options";
+import type { DirectionChoice, IntroStyleChoice, ScriptChoice } from "@/lib/video-options";
 import { parseTimeToSeconds, formatSeconds } from "@/lib/repurpose-utils";
 import { classifyVideoUrl } from "@/lib/video-source";
 import { MAX_SOURCES } from "@/lib/repurpose-sources";
 import { SUPPORTED_CHANNELS, type SubtitleChoice } from "@/lib/repurpose-types";
 
 type Mode = "repurpose" | "new";
-type IntroMode = "keep_original" | "replace";
+type SingleIntroSource = "keep_original" | "clip_from_video" | "replace";
 type VideoKind = "single" | "merge";
 
 export function AddByLink() {
@@ -29,7 +29,9 @@ export function AddByLink() {
   const [selectedMedia, setSelectedMedia] = useState<MediaItem[]>([]);
   const [videoKind, setVideoKind] = useState<VideoKind>("single");
   const [sourceUrls, setSourceUrls] = useState<string[]>([""]);
-  const [introMode, setIntroMode] = useState<IntroMode>("keep_original");
+  const [introStyle, setIntroStyle] = useState<IntroStyleChoice>("four_clips");
+  const [singleIntroSource, setSingleIntroSource] = useState<SingleIntroSource>("keep_original");
+  const [introClipStart, setIntroClipStart] = useState("");
   const [introUrl, setIntroUrl] = useState("");
   const [introStart, setIntroStart] = useState("");
   const [productsRaw, setProductsRaw] = useState("");
@@ -57,6 +59,7 @@ export function AddByLink() {
 
   const supported = (SUPPORTED_CHANNELS as readonly string[]).includes(channel);
   const startSeconds = useMemo(() => parseTimeToSeconds(introStart), [introStart]);
+  const clipStartSeconds = useMemo(() => parseTimeToSeconds(introClipStart), [introClipStart]);
   const downloadNote = (url: string) => {
     const kind = url.trim() ? classifyVideoUrl(url) : "direct";
     return kind === "direct" ? null : `${kind === "youtube" ? "YouTube" : "TikTok"} link - it will be downloaded automatically before splitting.`;
@@ -69,13 +72,19 @@ export function AddByLink() {
   const setUrlAt = (i: number, v: string) => setSourceUrls((prev) => prev.map((u, idx) => (idx === i ? v : u)));
   const activeUrls = videoKind === "single" ? sourceUrls.slice(0, 1) : sourceUrls;
 
+  const introValid =
+    introStyle === "four_clips" ||
+    singleIntroSource === "keep_original" ||
+    (singleIntroSource === "clip_from_video" && (!introClipStart.trim() || clipStartSeconds !== null)) ||
+    (singleIntroSource === "replace" && !!introUrl.trim() && startSeconds !== null);
+
   const canSubmit =
     supported &&
     !!title.trim() &&
     (mode === "new" ||
       (activeUrls.length >= 1 &&
         activeUrls.every((u) => !!u.trim()) &&
-        (introMode === "keep_original" || (!!introUrl.trim() && startSeconds !== null)))) &&
+        introValid)) &&
     (voiceover || renderMode !== "canva" || (selectedMedia.length > 0 && selectedMedia.every((m) => !!m.description?.trim())));
 
   const submit = async () => {
@@ -83,6 +92,7 @@ export function AddByLink() {
     setError(null);
     setFailedLines([]);
     try {
+      const isExternalReplace = introStyle === "single" && singleIntroSource === "replace";
       const res = await fetch("/api/pipeline/insert", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -103,8 +113,13 @@ export function AddByLink() {
           ...(mode === "repurpose"
             ? {
                 source_video_urls: activeUrls.map((u) => u.trim()),
-                intro_mode: introMode,
-                ...(introMode === "replace" ? { new_intro_url: introUrl, new_intro_start: introStart } : {}),
+                intro_style: introStyle,
+                intro_clip_source: introStyle === "four_clips" ? "random_from_video" : singleIntroSource,
+                ...(introStyle === "single" && singleIntroSource === "clip_from_video" && introClipStart.trim()
+                  ? { intro_clip_start: introClipStart.trim() }
+                  : {}),
+                intro_mode: isExternalReplace ? "replace" : "keep_original",
+                ...(isExternalReplace ? { new_intro_url: introUrl, new_intro_start: introStart } : {}),
               }
             : {}),
         }),
@@ -279,47 +294,97 @@ export function AddByLink() {
                   </div>
                 </Field>
 
-                <Field label="Intro">
-                  <div className="flex gap-2">
-                    <Choice value="keep_original" current={introMode} onSelect={setIntroMode}>
-                      Keep original intro
-                    </Choice>
-                    <Choice value="replace" current={introMode} onSelect={setIntroMode}>
-                      Use another intro
-                    </Choice>
-                  </div>
-                </Field>
-
-                {introMode === "replace" && (
-                  <div className="space-y-4 pl-4 border-l border-[var(--border)]">
-                    <Field label="New intro video link">
-                      <input
-                        className="input-field text-sm font-mono"
-                        value={introUrl}
-                        onChange={(e) => setIntroUrl(e.target.value)}
-                        placeholder="https://…/intro.mp4  or  https://drive.google.com/file/d/…"
-                      />
-                      {downloadNote(introUrl) && <p className="text-xs text-[var(--color-purple)]">{downloadNote(introUrl)}</p>}
-                    </Field>
+                {(voiceover || renderMode === "render") && (
+                  <>
                     <Field
-                      label="Start cutting from"
+                      label="Intro style"
                       hint={
-                        startSeconds !== null
-                          ? `Starts at ${formatSeconds(startSeconds)} in the new intro. The planning agent trims as much as the original intro is long.`
-                          : "Format like 0:13 or 1:05."
+                        introStyle === "four_clips"
+                          ? "The planner will automatically pick 4 engaging product clips from the video for the 2×2 intro grid."
+                          : "Full-screen single intro clip with the same editorial + lime-pill title design."
                       }
                     >
-                      <input
-                        className="input-field text-sm font-mono w-40"
-                        value={introStart}
-                        onChange={(e) => setIntroStart(e.target.value)}
-                        placeholder="0:00"
-                      />
-                      {introStart.trim() && startSeconds === null && (
-                        <p className="text-xs text-[var(--color-red)]">Not a valid time.</p>
-                      )}
+                      <div className="flex gap-2 flex-wrap">
+                        <Choice value="four_clips" current={introStyle} onSelect={setIntroStyle}>
+                          4-clip grid (random from video)
+                        </Choice>
+                        <Choice value="single" current={introStyle} onSelect={setIntroStyle}>
+                          Single clip intro
+                        </Choice>
+                      </div>
                     </Field>
-                  </div>
+
+                    {introStyle === "single" && (
+                      <div className="space-y-4 pl-4 border-l border-[var(--border)]">
+                        <Field label="Single intro source">
+                          <div className="flex gap-2 flex-wrap">
+                            <Choice value="keep_original" current={singleIntroSource} onSelect={setSingleIntroSource}>
+                              Use original intro
+                            </Choice>
+                            <Choice value="clip_from_video" current={singleIntroSource} onSelect={setSingleIntroSource}>
+                              Choose a clip from the video
+                            </Choice>
+                            <Choice value="replace" current={singleIntroSource} onSelect={setSingleIntroSource}>
+                              Add another link to download
+                            </Choice>
+                          </div>
+                        </Field>
+
+                        {singleIntroSource === "clip_from_video" && (
+                          <Field
+                            label="Clip start time in video (optional)"
+                            hint={
+                              clipStartSeconds !== null
+                                ? `Starts at ${formatSeconds(clipStartSeconds)} in the source video.`
+                                : "Format like 0:42, or leave blank for the planner to choose the best clip from the video."
+                            }
+                          >
+                            <input
+                              className="input-field text-sm font-mono w-40"
+                              value={introClipStart}
+                              onChange={(e) => setIntroClipStart(e.target.value)}
+                              placeholder="Optional (e.g. 0:42)"
+                            />
+                            {introClipStart.trim() && clipStartSeconds === null && (
+                              <p className="text-xs text-[var(--color-red)]">Not a valid time.</p>
+                            )}
+                          </Field>
+                        )}
+
+                        {singleIntroSource === "replace" && (
+                          <>
+                            <Field label="New intro video link">
+                              <input
+                                className="input-field text-sm font-mono"
+                                value={introUrl}
+                                onChange={(e) => setIntroUrl(e.target.value)}
+                                placeholder="https://…/intro.mp4  or  https://drive.google.com/file/d/…"
+                              />
+                              {downloadNote(introUrl) && <p className="text-xs text-[var(--color-purple)]">{downloadNote(introUrl)}</p>}
+                            </Field>
+                            <Field
+                              label="Start cutting from"
+                              hint={
+                                startSeconds !== null
+                                  ? `Starts at ${formatSeconds(startSeconds)} in the new intro. The planning agent trims as much as the original intro is long.`
+                                  : "Format like 0:13 or 1:05."
+                              }
+                            >
+                              <input
+                                className="input-field text-sm font-mono w-40"
+                                value={introStart}
+                                onChange={(e) => setIntroStart(e.target.value)}
+                                placeholder="0:00"
+                              />
+                              {introStart.trim() && startSeconds === null && (
+                                <p className="text-xs text-[var(--color-red)]">Not a valid time.</p>
+                              )}
+                            </Field>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             )}

@@ -49,47 +49,7 @@ export interface RepurposeRow {
   created_at: string;
   updated_at: string;
   /** Linked videos row - products live there, not on the repurpose row. */
-  video: { with_product: boolean | null; product_ids: ProductEntry[] | null } | null;
+  video: { with_product: boolean | null; product_ids: ProductEntry[] | null; notes?: unknown } | null;
 }
 
-export const REPURPOSE_STATUS_LABELS: Record<RepurposeStatus, string> = {
-  waiting_merge: "Waiting Merge",
-  pending_download: "Pending Download",
-  downloading: "Downloading",
-  download_error: "Download Failed",
-  pending_split: "Pending Split",
-  splitting: "Splitting",
-  split_error: "Split Error",
-  split_done: "Split Done",
-  waiting_voice_timing: "Waiting Voice Timing",
-  voice_timing_error: "Voice Timing Error",
-  voice_timing_done: "Voice Timing Done",
-  handed_off: "Handed Off",
-  cancelled: "Cancelled",
-};
-
-export const REPURPOSE_STATUS_COLORS: Record<RepurposeStatus, "purple" | "cyan" | "green" | "amber" | "red"> = {
-  waiting_merge: "amber",
-  pending_download: "purple",
-  downloading: "cyan",
-  download_error: "red",
-  pending_split: "purple",
-  splitting: "cyan",
-  split_error: "red",
-  split_done: "green",
-  waiting_voice_timing: "cyan",
-  voice_timing_error: "red",
-  voice_timing_done: "green",
-  handed_off: "green",
-  cancelled: "amber",
-};
-
-export const REPURPOSE_ERROR_STATUSES: RepurposeStatus[] = ["download_error", "split_error", "voice_timing_error"];
-
-/** Where a failed item goes when "Retry" is pressed. */
-export const REPURPOSE_RETRY_TARGET: Partial<Record<RepurposeStatus, RepurposeStatus>> = {
-  download_error: "pending_download",
-  split_error: "pending_split",
-  voice_timing_error: "split_done",
-};
-export const REPURPOSE_FINISHED_STATUSES: RepurposeStatus[] = ["handed_off", "cancelled"];
+export const REPURPOSE_STATUS_LABELS: Record<RepurposeStatus, string> = {\n  waiting_merge: "Waiting Merge",\n  pending_download: "Pending Download",\n  downloading: "Downloading",\n  download_error: "Download Failed",\n  pending_split: "Pending Split",\n  splitting: "Splitting",\n  split_error: "Split Error",\n  split_done: "Split Done",\n  waiting_voice_timing: "Waiting Voice Timing",\n  voice_timing_error: "Voice Timing Error",\n  voice_timing_done: "Voice Timing Done",\n  handed_off: "Handed Off",\n  cancelled: "Cancelled",\n};\n\nexport const REPURPOSE_STATUS_COLORS: Record<RepurposeStatus, "purple" | "cyan" | "green" | "amber" | "red"> = {\n  waiting_merge: "amber",\n  pending_download: "purple",\n  downloading: "cyan",\n  download_error: "red",\n  pending_split: "purple",\n  splitting: "cyan",\n  split_error: "red",\n  split_done: "green",\n  waiting_voice_timing: "cyan",\n  voice_timing_error: "red",\n  voice_timing_done: "green",\n  handed_off: "green",\n  cancelled: "amber",\n};\n\nexport const REPURPOSE_ERROR_STATUSES: RepurposeStatus[] = ["download_error", "split_error", "voice_timing_error"];\n\n/** Where a failed item goes when "Retry" is pressed. */\nexport const REPURPOSE_RETRY_TARGET: Partial<Record<RepurposeStatus, RepurposeStatus>> = {\n  download_error: "pending_download",\n  split_error: "pending_split",\n  voice_timing_error: "split_done",\n};\nexport const REPURPOSE_FINISHED_STATUSES: RepurposeStatus[] = ["handed_off", "cancelled"];

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { Choice, Field, OptionalProducts, PriorityField, ScriptAndDirectionFields } from "@/components/add-video-ui";
 import { MediaClipsBuilder } from "@/components/media-clips-builder";
 import type { MediaItem } from "@/lib/news-types";
-import type { DirectionChoice, ScriptChoice } from "@/lib/video-options";
+import type { DirectionChoice, IntroStyleChoice, ScriptChoice } from "@/lib/video-options";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ProductSearch, addAsins } from "@/components/product-search";
 import { formatSeconds, parseTimeToSeconds } from "@/lib/repurpose-utils";
@@ -19,7 +19,7 @@ import {
   type SourceChannel,
 } from "@/lib/repurpose-channels";
 
-type IntroMode = "keep_original" | "replace";
+type SingleIntroSource = "keep_original" | "clip_from_video" | "replace";
 type ViewMode = "vertical-shorts" | "horizontal-long";
 type AddKind = "single" | "start" | "merge";
 interface MergeTarget {
@@ -292,7 +292,9 @@ function ReviewCard({
   const [voiceover, setVoiceover] = useState(true);
   const [renderMode, setRenderMode] = useState<"canva" | "render">("canva");
   const [selectedMedia, setSelectedMedia] = useState<MediaItem[]>([]);
-  const [introMode, setIntroMode] = useState<IntroMode>("keep_original");
+  const [introStyle, setIntroStyle] = useState<IntroStyleChoice>("four_clips");
+  const [singleIntroSource, setSingleIntroSource] = useState<SingleIntroSource>("keep_original");
+  const [introClipStart, setIntroClipStart] = useState("");
   const [introUrl, setIntroUrl] = useState("");
   const [introStart, setIntroStart] = useState("");
   const [priority, setPriority] = useState(false);
@@ -317,13 +319,19 @@ function ReviewCard({
   const [removeBusy, setRemoveBusy] = useState(false);
 
   const startSeconds = useMemo(() => parseTimeToSeconds(introStart), [introStart]);
+  const clipStartSeconds = useMemo(() => parseTimeToSeconds(introClipStart), [introClipStart]);
   const isMerge = kind === "merge";
   const mergeTarget = isMerge ? pastedId.trim() || targetId : "";
+  const introValid =
+    introStyle === "four_clips" ||
+    singleIntroSource === "keep_original" ||
+    (singleIntroSource === "clip_from_video" && (!introClipStart.trim() || clipStartSeconds !== null)) ||
+    (singleIntroSource === "replace" && !!introUrl.trim() && startSeconds !== null);
   const canSubmit = isMerge
     ? !!url.trim() && !!mergeTarget
     : !!title.trim() &&
       !!url.trim() &&
-      (introMode === "keep_original" || (!!introUrl.trim() && startSeconds !== null)) &&
+      introValid &&
       (voiceover || renderMode !== "canva" || (selectedMedia.length > 0 && selectedMedia.every((m) => !!m.description?.trim())));
   const pickedTarget = targets.find((t) => t.id === targetId);
   const isShort = viewMode === "vertical-shorts";
@@ -401,6 +409,7 @@ function ReviewCard({
     setSubmitting(true);
     setError(null);
     try {
+      const isExternalReplace = introStyle === "single" && singleIntroSource === "replace";
       const res = await fetch("/api/pipeline/insert", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -421,8 +430,13 @@ function ReviewCard({
           ...(kind === "start" ? { hold_for_merge: true } : {}),
           scraped_video_id: video.id,
           source_video_urls: [url.trim(), ...(kind === "start" ? extraUrls.map((u) => u.trim()).filter(Boolean) : [])],
-          intro_mode: introMode,
-          ...(introMode === "replace" ? { new_intro_url: introUrl, new_intro_start: introStart } : {}),
+          intro_style: introStyle,
+          intro_clip_source: introStyle === "four_clips" ? "random_from_video" : singleIntroSource,
+          ...(introStyle === "single" && singleIntroSource === "clip_from_video" && introClipStart.trim()
+            ? { intro_clip_start: introClipStart.trim() }
+            : {}),
+          intro_mode: isExternalReplace ? "replace" : "keep_original",
+          ...(isExternalReplace ? { new_intro_url: introUrl, new_intro_start: introStart } : {}),
         }),
       });
       const data = await res.json();
@@ -645,29 +659,75 @@ function ReviewCard({
 
         {!isMerge && (voiceover || renderMode === "render") && (
           <>
-            <Field label="Intro">
+            <Field
+              label="Intro style"
+              hint={
+                introStyle === "four_clips"
+                  ? "The planner will automatically pick 4 engaging product clips from the video for the 2×2 intro grid."
+                  : "Full-screen single intro clip with the same editorial + lime-pill title design."
+              }
+            >
               <div className="flex gap-2 flex-wrap">
-                <Choice value="keep_original" current={introMode} onSelect={setIntroMode}>
-                  Keep original intro
+                <Choice value="four_clips" current={introStyle} onSelect={setIntroStyle}>
+                  4-clip grid (random from video)
                 </Choice>
-                <Choice value="replace" current={introMode} onSelect={setIntroMode}>
-                  Use another intro
+                <Choice value="single" current={introStyle} onSelect={setIntroStyle}>
+                  Single clip intro
                 </Choice>
               </div>
             </Field>
 
-            {introMode === "replace" && (
+            {introStyle === "single" && (
               <div className="space-y-4 pl-4 border-l border-[var(--border)]">
-                <Field label="New intro video link">
-                  <input className="input-field text-sm font-mono" value={introUrl} onChange={(e) => setIntroUrl(e.target.value)} placeholder="https://…/intro.mp4  or  https://drive.google.com/file/d/…" />
+                <Field label="Single intro source">
+                  <div className="flex gap-2 flex-wrap">
+                    <Choice value="keep_original" current={singleIntroSource} onSelect={setSingleIntroSource}>
+                      Use original intro
+                    </Choice>
+                    <Choice value="clip_from_video" current={singleIntroSource} onSelect={setSingleIntroSource}>
+                      Choose a clip from the video
+                    </Choice>
+                    <Choice value="replace" current={singleIntroSource} onSelect={setSingleIntroSource}>
+                      Add another link to download
+                    </Choice>
+                  </div>
                 </Field>
-                <Field
-                  label="Start cutting from"
-                  hint={startSeconds !== null ? `Starts at ${formatSeconds(startSeconds)} in the new intro. The planning agent trims as much as the original intro is long.` : "Format like 0:13 or 1:05."}
-                >
-                  <input className="input-field text-sm font-mono w-40" value={introStart} onChange={(e) => setIntroStart(e.target.value)} placeholder="0:00" />
-                  {introStart.trim() && startSeconds === null && <p className="text-xs text-[var(--color-red)]">Not a valid time.</p>}
-                </Field>
+
+                {singleIntroSource === "clip_from_video" && (
+                  <Field
+                    label="Clip start time in video (optional)"
+                    hint={
+                      clipStartSeconds !== null
+                        ? `Starts at ${formatSeconds(clipStartSeconds)} in the source video.`
+                        : "Format like 0:42, or leave blank for the planner to choose the best clip from the video."
+                    }
+                  >
+                    <input
+                      className="input-field text-sm font-mono w-40"
+                      value={introClipStart}
+                      onChange={(e) => setIntroClipStart(e.target.value)}
+                      placeholder="Optional (e.g. 0:42)"
+                    />
+                    {introClipStart.trim() && clipStartSeconds === null && (
+                      <p className="text-xs text-[var(--color-red)]">Not a valid time.</p>
+                    )}
+                  </Field>
+                )}
+
+                {singleIntroSource === "replace" && (
+                  <>
+                    <Field label="New intro video link">
+                      <input className="input-field text-sm font-mono" value={introUrl} onChange={(e) => setIntroUrl(e.target.value)} placeholder="https://…/intro.mp4  or  https://drive.google.com/file/d/…" />
+                    </Field>
+                    <Field
+                      label="Start cutting from"
+                      hint={startSeconds !== null ? `Starts at ${formatSeconds(startSeconds)} in the new intro. The planning agent trims as much as the original intro is long.` : "Format like 0:13 or 1:05."}
+                    >
+                      <input className="input-field text-sm font-mono w-40" value={introStart} onChange={(e) => setIntroStart(e.target.value)} placeholder="0:00" />
+                      {introStart.trim() && startSeconds === null && <p className="text-xs text-[var(--color-red)]">Not a valid time.</p>}
+                    </Field>
+                  </>
+                )}
               </div>
             )}
           </>

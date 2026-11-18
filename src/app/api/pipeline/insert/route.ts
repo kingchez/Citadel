@@ -5,7 +5,15 @@ import { addProductsToVideo } from "@/lib/add-products-to-video";
 import { parseTimeToSeconds } from "@/lib/repurpose-utils";
 import { MAX_SOURCES, newSourceItem } from "@/lib/repurpose-sources";
 import { SUPPORTED_CHANNELS, type SubtitleChoice } from "@/lib/repurpose-types";
-import { DIRECTION_VALUES, type DirectionChoice, type ScriptChoice } from "@/lib/video-options";
+import {
+  DIRECTION_VALUES,
+  INTRO_CLIP_SOURCE_VALUES,
+  INTRO_STYLE_VALUES,
+  type DirectionChoice,
+  type IntroClipSourceChoice,
+  type IntroStyleChoice,
+  type ScriptChoice,
+} from "@/lib/video-options";
 import type { MediaItem } from "@/lib/news-types";
 
 const VIDEO_TYPES = ["vertical-shorts", "horizontal-long"];
@@ -65,6 +73,14 @@ export async function POST(request: NextRequest) {
     const renderMode: "render" | "canva" = body?.render_mode === "canva" ? "canva" : (body?.render_mode === "render" ? "render" : (voiceover ? "render" : "canva"));
     const selectedMedia: MediaItem[] = Array.isArray(body?.selected_media) ? body.selected_media : [];
 
+    const introStyle: IntroStyleChoice | null = (INTRO_STYLE_VALUES as readonly string[]).includes(body?.intro_style)
+      ? (body.intro_style as IntroStyleChoice)
+      : null;
+    const introClipSource: IntroClipSourceChoice | null = (INTRO_CLIP_SOURCE_VALUES as readonly string[]).includes(body?.intro_clip_source)
+      ? (body.intro_clip_source as IntroClipSourceChoice)
+      : null;
+    const introClipStartRaw = typeof body?.intro_clip_start === "string" ? body.intro_clip_start.trim() : "";
+
     if (mode !== "new" && mode !== "repurpose") return bad("mode must be 'new' or 'repurpose'.");
     if (!title) return bad("Title is required.");
     if (title.length > 200) return bad("Title is too long (200 characters max).");
@@ -85,8 +101,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Notes = ONLY what King typed. Each instruction is its own item (note_1, note_2, ...), plus the subtitles
-    // choice if he made one. Nothing is added automatically; no notes at all = the field stays empty (null).
+    // Notes = ONLY what King typed + chosen options. Each instruction is its own item (note_1, note_2, ...).
     const notes: Record<string, unknown> = {};
     const instructions: unknown[] = Array.isArray(body?.instructions) ? body.instructions : [];
     let n = 0;
@@ -106,6 +121,20 @@ export async function POST(request: NextRequest) {
       }
       if (changeScript !== "later") notes.change_product_video_script = changeScript;
       if (direction !== "later") notes.product_listing_direction = direction;
+    }
+    if (mode === "repurpose" && (voiceover || renderMode === "render")) {
+      const resolvedStyle: IntroStyleChoice = introStyle ?? (body?.intro_mode === "replace" ? "single" : "four_clips");
+      const resolvedSource: IntroClipSourceChoice =
+        resolvedStyle === "four_clips"
+          ? "random_from_video"
+          : introClipSource ?? (body?.intro_mode === "replace" ? "replace" : "keep_original");
+      notes.intro_style = resolvedStyle;
+      notes.intro_clip_source = resolvedSource;
+      if (resolvedStyle === "single" && resolvedSource === "clip_from_video" && introClipStartRaw) {
+        const clipStartSec = parseTimeToSeconds(introClipStartRaw);
+        if (clipStartSec === null) return bad("Clip start time: use a format like 0:13 or 1:05.");
+        notes.intro_clip_start = introClipStartRaw;
+      }
     }
     const notesOrNull = Object.keys(notes).length > 0 ? notes : null;
 
@@ -164,7 +193,10 @@ export async function POST(request: NextRequest) {
       sources.push(newSourceItem(resolved.url, i));
     }
 
-    const introMode = body?.intro_mode === "replace" ? "replace" : "keep_original";
+    const isExternalIntro =
+      (introStyle === "single" || introStyle === null) &&
+      (body?.intro_mode === "replace" || introClipSource === "replace");
+    const introMode = isExternalIntro ? "replace" : "keep_original";
     let newIntroUrl: string | null = null;
     let newIntroStart: number | null = null;
 

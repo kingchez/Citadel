@@ -9,6 +9,7 @@ import { cn, formatTimeAgo } from "@/lib/utils";
 import { formatSeconds, isClipJob, parseTimeToSeconds } from "@/lib/repurpose-utils";
 import { sourceStage, introStage, type RepurposeSource, type SourceState } from "@/lib/repurpose-sources";
 import { REPURPOSE_ERROR_STATUSES, type RepurposeRow, type RepurposeStatus } from "@/lib/repurpose-types";
+import { readOption } from "@/lib/video-notes";
 
 const CARD_CLASS = "rounded-xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden";
 const TOP_CLASS = "group flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-2 px-4 sm:px-5 py-3.5 sm:py-4 transition-all duration-150";
@@ -178,6 +179,17 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
     }
   };
 
+  const introStyleNote = readOption(item.video?.notes, "intro_style");
+  const introSourceNote = readOption(item.video?.notes, "intro_clip_source");
+  const introLabel =
+    item.intro_mode === "replace" && item.new_intro_start_seconds !== null
+      ? `New intro from ${formatSeconds(Number(item.new_intro_start_seconds))}`
+      : introStyleNote === "four_clips"
+        ? "4-clip grid intro"
+        : introSourceNote === "clip_from_video"
+          ? "Single intro (clip from video)"
+          : "Original intro";
+
   const top = (
     <>
       <div className="flex-1 min-w-full sm:min-w-0">
@@ -187,11 +199,7 @@ function RepurposeCard({ item, onChanged }: { item: RepurposeRow; onChanged: () 
           <span>·</span>
           <span>{sources.length > 1 ? `Merge of ${sources.length} videos` : "Single video"}</span>
           <span>·</span>
-          <span>
-            {item.intro_mode === "replace" && item.new_intro_start_seconds !== null
-              ? `New intro from ${formatSeconds(Number(item.new_intro_start_seconds))}`
-              : "Original intro"}
-          </span>
+          <span>{introLabel}</span>
           {item.video?.with_product && (
             <>
               <span>·</span>
