@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, Info, AlertCircle, Bell, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { formatTimeAgo, formatDate } from "@/lib/utils";
 import type { CitadelNotification } from "@/lib/notifications";
+import { safeLink } from "@/lib/workspace-types";
 
 function getIcon(type: CitadelNotification["type"]) {
   switch (type) {
@@ -30,6 +31,10 @@ function borderColorVar(type: CitadelNotification["type"]) {
 function NotifCard({ notification, read, onMarkRead }: { notification: CitadelNotification; read: boolean; onMarkRead: (id: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const color = borderColorVar(notification.type);
+  const resolvedLink =
+    safeLink(notification.link_url) ??
+    (notification.video_id ? { href: `/pipeline/videos/${notification.video_id}`, external: false } : null);
+  const subtitle = notification.video_title || notification.source_label || "Workspace Alert";
 
   return (
     <div
@@ -46,6 +51,9 @@ function NotifCard({ notification, read, onMarkRead }: { notification: CitadelNo
             <div className="flex items-start justify-between gap-3">
               <h3 className={`font-semibold text-sm ${!read ? "text-[var(--text)]" : "text-[var(--text-muted)]"}`}>
                 {notification.title}
+                {notification.occurrences && notification.occurrences > 1 && (
+                  <span className="ml-2 badge badge-amber text-[10px]">×{notification.occurrences}</span>
+                )}
                 {!read && <span className="ml-2 inline-flex w-2 h-2 rounded-full bg-[var(--color-purple)]" />}
               </h3>
               <span className="text-xs text-[var(--text-faint)] flex-shrink-0">{formatTimeAgo(notification.created_at)}</span>
@@ -53,13 +61,21 @@ function NotifCard({ notification, read, onMarkRead }: { notification: CitadelNo
 
             <p className="mt-1 text-sm text-[var(--text-muted)]">{notification.summary}</p>
 
-            <a
-              href={`/pipeline/videos/${notification.video_id}`}
-              className="inline-flex items-center gap-1.5 mt-2 text-xs text-[var(--color-purple)] hover:opacity-80 font-medium transition-colors"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              {notification.video_title}
-            </a>
+            {resolvedLink ? (
+              <a
+                href={resolvedLink.href}
+                target={resolvedLink.external ? "_blank" : undefined}
+                rel={resolvedLink.external ? "noopener noreferrer" : undefined}
+                className="inline-flex items-center gap-1.5 mt-2 text-xs text-[var(--color-purple)] hover:opacity-80 font-medium transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                {subtitle}
+              </a>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 mt-2 text-xs text-[var(--text-faint)] font-medium">
+                {subtitle}
+              </span>
+            )}
 
             {expanded && notification.detail && (
               <div className="mt-3 p-4 rounded-xl bg-[var(--bg)] border border-[var(--border)]">
