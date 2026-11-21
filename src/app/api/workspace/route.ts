@@ -37,10 +37,10 @@ export async function GET() {
         .select("id, event_title, social_headline, status, golden_window_hours, global_relevance_score, video_id, created_at"),
       supabase
         .from("Trend_Processing")
-        .select("id, trending_keyword, status, country, traffic, created_at, events:events_id(id, event_title, global_relevance_score)")
-        .in("status", ["unprocessed", "needs_review", "processing", "pending"])
+        .select("id, trending_keyword, country, traffic, created_at, events:events_id(id, event_title, global_relevance_score)")
+        .eq("status", "needs_review")
         .order("created_at", { ascending: false })
-        .limit(30),
+        .limit(20),
       supabase
         .from("articles")
         .select("id, title, channel, category, status, media_instructions, created_at, updated_at")
@@ -125,51 +125,35 @@ export async function GET() {
     const rawTrends = (trendsRes.data || []) as unknown as {
       id: number;
       trending_keyword: string | null;
-      status: string;
       country: string | null;
       traffic: string | null;
       created_at: string;
       events: { id?: string; event_title?: string | null; global_relevance_score?: number | null } | { id?: string; event_title?: string | null; global_relevance_score?: number | null }[] | null;
     }[];
 
-    const trendReviewItems = rawTrends
-      .filter((t) => t.status === "needs_review")
-      .map((t) => {
-        const ev = Array.isArray(t.events) ? t.events[0] : t.events;
-        return {
-          id: t.id,
-          keyword: t.trending_keyword || `Trend #${t.id}`,
-          eventTitle: ev?.event_title ?? null,
-          country: t.country ?? null,
-          traffic: t.traffic ?? null,
-          relevance: ev?.global_relevance_score ?? null,
-          created_at: t.created_at,
-        };
-      });
+    const trendReviewItems = rawTrends.map((t) => {
+      const ev = Array.isArray(t.events) ? t.events[0] : t.events;
+      return {
+        id: t.id,
+        keyword: t.trending_keyword || `Trend #${t.id}`,
+        eventTitle: ev?.event_title ?? null,
+        country: t.country ?? null,
+        traffic: t.traffic ?? null,
+        relevance: ev?.global_relevance_score ?? null,
+        created_at: t.created_at,
+      };
+    });
 
-    const newsActiveItems = [
-      ...events
-        .filter((e) => e.status !== "reviewed")
-        .map((e) => ({
-          id: String(e.id),
-          kind: "event" as const,
-          title: e.social_headline || e.event_title || `Event #${e.id}`,
-          status: e.status,
-          subtitle: e.golden_window_hours != null ? `Golden window: ${Math.round(e.golden_window_hours)}h left` : null,
-          created_at: e.created_at,
-        })),
-      ...rawTrends.map((t) => {
-        const ev = Array.isArray(t.events) ? t.events[0] : t.events;
-        return {
-          id: String(t.id),
-          kind: "trend" as const,
-          title: ev?.event_title || t.trending_keyword || `Trend #${t.id}`,
-          status: t.status,
-          subtitle: t.trending_keyword ? `Keyword: ${t.trending_keyword}` : null,
-          created_at: t.created_at,
-        };
-      }),
-    ]
+    const newsActiveItems = events
+      .filter((e) => e.status !== "reviewed")
+      .map((e) => ({
+        id: String(e.id),
+        kind: "event" as const,
+        title: e.social_headline || e.event_title || `Event #${e.id}`,
+        status: e.status,
+        subtitle: e.golden_window_hours != null ? `Golden window: ${Math.round(e.golden_window_hours)}h left` : null,
+        created_at: e.created_at,
+      }))
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 25);
 
