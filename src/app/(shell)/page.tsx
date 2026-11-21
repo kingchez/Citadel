@@ -106,6 +106,16 @@ const SERVICES = [
   { key: "autobrowse", label: "AutoBrowse (media)" },
 ] as const;
 
+const NEWS_STATUS_LABEL: Record<string, { label: string; badge: string }> = {
+  pending: { label: "Pending", badge: "badge-purple" },
+  unprocessed: { label: "Unprocessed", badge: "badge-cyan" },
+  needs_review: { label: "Needs Review", badge: "badge-amber" },
+  processing: { label: "Processing", badge: "badge-amber" },
+  paused: { label: "Paused", badge: "badge-red" },
+  ready: { label: "Ready", badge: "badge-cyan" },
+  scheduled: { label: "Scheduled", badge: "badge-purple" },
+};
+
 const ARTICLE_STATUS_LABEL: Record<string, { label: string; badge: string }> = {
   review_ready: { label: "Ready for Review", badge: "badge-amber" },
   revision_requested: { label: "Revision Requested", badge: "badge-red" },
@@ -252,10 +262,10 @@ export default function Dashboard() {
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState<string | null>(null);
 
-  // Review Card Tabs (strictly items needing attention)
-  const [newsTab, setNewsTab] = useState<"trends" | "events">("trends");
-  const [videoTab, setVideoTab] = useState<"review" | "errors">("review");
-  const [articleTab, setArticleTab] = useState<"review" | "revisions">("review");
+  // Review Card Tabs ("active" = all items on the table currently being worked on)
+  const [newsTab, setNewsTab] = useState<"active" | "trends" | "events">("active");
+  const [videoTab, setVideoTab] = useState<"active" | "review" | "errors">("active");
+  const [articleTab, setArticleTab] = useState<"active" | "review" | "revisions">("active");
 
   // add-todo form
   const [title, setTitle] = useState("");
@@ -417,14 +427,13 @@ export default function Dashboard() {
 
   if (!data) {
     return (
-      <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-4">
-        <div className="h-9 w-72 rounded-lg bg-[var(--surface)] animate-pulse" />
+      <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
+        <div className="h-8 w-48 skeleton rounded-xl" />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-24 rounded-xl bg-[var(--surface)] border border-[var(--border)] animate-pulse" />
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-24 skeleton rounded-2xl" />
           ))}
         </div>
-        {error && <p className="text-sm text-[var(--color-red)]">{error}</p>}
       </div>
     );
   }
@@ -450,10 +459,14 @@ export default function Dashboard() {
     mediaPendingTotal: 0,
     reviewItems: [],
     revisionAndDraftItems: [],
+    activeItems: [],
   };
   const trendReviewItems = n.trendReviewItems ?? [];
   const eventsNeedsReviewItems = n.eventsNeedsReviewItems ?? [];
+  const newsActiveItems = n.activeItems ?? [];
   const videoErrorItems = v.errorItems ?? [];
+  const videoActiveItems = v.activeItems ?? [];
+  const articleActiveItems = a.activeItems ?? [];
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5 overflow-x-hidden">
@@ -660,7 +673,7 @@ export default function Dashboard() {
                                 Done
                               </button>
                             ) : (
-                              <button onClick={() => deleteItem(e.item)} disabled={busy === e.id} aria-label="Delete" className="btn-ghost opacity-0 group-hover:opacity-100 focus:opacity-100 hover:!text-[var(--color-red)] flex-shrink-0">
+                              <button onClick={() => deleteItem(e.item)} disabled={busy === e.id} aria-label="Delete task" className="opacity-0 group-hover:opacity-100 text-[var(--text-faint)] hover:text-[var(--color-red)] p-1 transition-opacity flex-shrink-0">
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
@@ -673,13 +686,25 @@ export default function Dashboard() {
             )}
           </section>
 
-          {/* 3. News Review Card (Moved to Left Column to fill space & show Trend Review + Unreviewed Events) */}
+          {/* 3. News Review Card (All Active + Trend Review + Unreviewed Events) */}
           <Panel
             title="News Review Queue"
             icon={<Newspaper className="w-4 h-4 text-[var(--color-cyan)] flex-shrink-0" />}
             action={
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="inline-flex rounded-lg border border-[var(--border)] p-0.5 text-[11px]">
+                  <button
+                    onClick={() => setNewsTab("active")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1.5",
+                      newsTab === "active" ? "bg-[var(--surface-raised)] text-[var(--text)] font-semibold" : "text-[var(--text-faint)] hover:text-[var(--text)]"
+                    )}
+                  >
+                    <span>In Progress</span>
+                    <span className={cn("px-1.5 py-0.2 rounded-full text-[10px]", newsActiveItems.length > 0 ? "bg-[var(--color-purple-soft)] text-[var(--color-purple)] font-bold" : "text-[var(--text-faint)]")}>
+                      {newsActiveItems.length}
+                    </span>
+                  </button>
                   <button
                     onClick={() => setNewsTab("trends")}
                     className={cn(
@@ -706,7 +731,7 @@ export default function Dashboard() {
                   </button>
                 </div>
                 <Link
-                  href={newsTab === "trends" ? "/news/review" : "/news/events?view=needs_review"}
+                  href={newsTab === "trends" ? "/news/review" : newsTab === "events" ? "/news/events?view=needs_review" : "/news/events"}
                   className="text-xs text-[var(--color-purple)] hover:opacity-80 inline-flex items-center gap-0.5"
                 >
                   Open <ChevronRight className="w-3.5 h-3.5" />
@@ -715,7 +740,43 @@ export default function Dashboard() {
             }
           >
             <div className="space-y-1 -mx-1 max-h-[280px] overflow-y-auto px-1">
-              {newsTab === "trends" ? (
+              {newsTab === "active" ? (
+                <>
+                  {newsActiveItems.length === 0 ? (
+                    <div className="py-6 text-center text-xs sm:text-sm text-[var(--text-faint)] flex flex-col items-center gap-1.5">
+                      <CheckCircle2 className="w-5 h-5 text-[var(--color-green)]" />
+                      <span>No news items currently being worked on.</span>
+                    </div>
+                  ) : (
+                    newsActiveItems.map((item) => {
+                      const st = NEWS_STATUS_LABEL[item.status] || { label: item.status, badge: "badge-gray" };
+                      return (
+                        <Link
+                          key={`${item.kind}-${item.id}`}
+                          href={item.kind === "trend" ? "/news/review" : `/news/events/${item.id}`}
+                          className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[var(--surface-raised)] border border-transparent hover:border-[var(--border)] transition-colors group min-w-0"
+                        >
+                          <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", item.kind === "trend" ? "bg-[var(--color-amber-soft)]" : "bg-[var(--color-cyan-soft)]")}>
+                            {item.kind === "trend" ? <Flame className="w-4 h-4 text-[var(--color-amber)]" /> : <TrendingUp className="w-4 h-4 text-[var(--color-cyan)]" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs sm:text-sm font-medium text-[var(--text)] truncate" title={item.title}>
+                              {concatShort(item.title, 65)}
+                            </p>
+                            <p className="text-[11px] text-[var(--text-faint)] truncate mt-0.5">
+                              {item.kind === "trend" ? "Trend" : "Event"}
+                              {item.subtitle ? ` · ${concatShort(item.subtitle, 40)}` : ""}
+                              {` · ${formatTimeAgo(item.created_at)}`}
+                            </p>
+                          </div>
+                          <span className={cn("badge text-[10px] flex-shrink-0", st.badge)}>{st.label}</span>
+                          <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] flex-shrink-0" />
+                        </Link>
+                      );
+                    })
+                  )}
+                </>
+              ) : newsTab === "trends" ? (
                 <>
                   {trendReviewItems.length === 0 ? (
                     <div className="py-6 text-center text-xs sm:text-sm text-[var(--text-faint)] flex flex-col items-center gap-1.5">
@@ -737,7 +798,7 @@ export default function Dashboard() {
                             <p className="text-xs sm:text-sm font-semibold text-[var(--text)] truncate" title={t.eventTitle || t.keyword}>
                               {concatShort(t.eventTitle || t.keyword, 65)}
                             </p>
-                            {t.country && <span className="badge badge-gray text-[10px] flex-shrink-0">🌍 {t.country}</span>}
+                            {t.country && <span className="badge badge-gray text-[10px] flex-shrink-0">🌐 {t.country}</span>}
                           </div>
                           <p className="text-[11px] text-[var(--text-faint)] truncate mt-0.5">
                             Keyword: <span className="text-[var(--text-muted)]">{concatShort(t.keyword, 32)}</span>
@@ -792,13 +853,25 @@ export default function Dashboard() {
 
         {/* RIGHT COLUMN (5 cols on XL): Videos Review Queue + Articles Review Queue + Pipeline Health */}
         <aside className="xl:col-span-5 space-y-5 min-w-0">
-          {/* 1. Videos Review Queue Card (Only items needing review or error fix) */}
+          {/* 1. Videos Review Queue Card (In Progress + Needs Review + Errors) */}
           <Panel
             title="Videos Action Queue"
             icon={<Video className="w-4 h-4 text-[var(--color-purple)] flex-shrink-0" />}
             action={
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="inline-flex rounded-lg border border-[var(--border)] p-0.5 text-[11px]">
+                  <button
+                    onClick={() => setVideoTab("active")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1.5",
+                      videoTab === "active" ? "bg-[var(--surface-raised)] text-[var(--text)] font-semibold" : "text-[var(--text-faint)] hover:text-[var(--text)]"
+                    )}
+                  >
+                    <span>In Progress</span>
+                    <span className={cn("px-1.5 py-0.2 rounded-full text-[10px]", videoActiveItems.length > 0 ? "bg-[var(--color-purple-soft)] text-[var(--color-purple)] font-bold" : "text-[var(--text-faint)]")}>
+                      {videoActiveItems.length}
+                    </span>
+                  </button>
                   <button
                     onClick={() => setVideoTab("review")}
                     className={cn(
@@ -825,7 +898,7 @@ export default function Dashboard() {
                   </button>
                 </div>
                 <Link
-                  href={videoTab === "review" ? "/pipeline/videos?view=review" : "/pipeline/videos?view=errors"}
+                  href={videoTab === "review" ? "/pipeline/videos?view=review" : videoTab === "errors" ? "/pipeline/videos?view=errors" : "/pipeline/videos"}
                   className="text-xs text-[var(--color-purple)] hover:opacity-80 inline-flex items-center gap-0.5"
                 >
                   All <ChevronRight className="w-3.5 h-3.5" />
@@ -834,7 +907,40 @@ export default function Dashboard() {
             }
           >
             <div className="space-y-1 -mx-1 max-h-[260px] overflow-y-auto px-1">
-              {videoTab === "review" ? (
+              {videoTab === "active" ? (
+                <>
+                  {videoActiveItems.length === 0 ? (
+                    <div className="py-6 text-center text-xs sm:text-sm text-[var(--text-faint)] flex flex-col items-center gap-1.5">
+                      <CheckCircle2 className="w-5 h-5 text-[var(--color-green)]" />
+                      <span>No videos currently being worked on.</span>
+                    </div>
+                  ) : (
+                    videoActiveItems.map((x) => (
+                      <Link
+                        key={x.id}
+                        href={`/pipeline/videos/${x.id}`}
+                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[var(--surface-raised)] border border-transparent hover:border-[var(--border)] transition-colors group min-w-0"
+                      >
+                        <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", x.hasError ? "bg-[var(--color-red-soft)]" : "bg-[var(--color-purple-soft)]")}>
+                          {x.hasError ? <AlertTriangle className="w-4 h-4 text-[var(--color-red)]" /> : <Video className="w-4 h-4 text-[var(--color-purple)]" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs sm:text-sm font-medium text-[var(--text)] truncate" title={x.title}>
+                            {concatShort(x.title, 54)}
+                          </p>
+                          <p className="text-[11px] text-[var(--text-faint)] truncate mt-0.5">
+                            {x.channel || "Unassigned"} · {formatTimeAgo(x.updated_at)}
+                          </p>
+                        </div>
+                        <div className="flex-shrink-0">
+                          <StatusBadge status={x.status as VideoStatus} size="sm" showIcon={false} />
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] flex-shrink-0" />
+                      </Link>
+                    ))
+                  )}
+                </>
+              ) : videoTab === "review" ? (
                 <>
                   {v.needsReview.length === 0 ? (
                     <div className="py-6 text-center text-xs sm:text-sm text-[var(--text-faint)] flex flex-col items-center gap-1.5">
@@ -904,13 +1010,25 @@ export default function Dashboard() {
             </div>
           </Panel>
 
-          {/* 2. Articles Review Queue Card (New) */}
+          {/* 2. Articles Review Queue Card (In Progress + Needs Review + Revisions & Media) */}
           <Panel
             title="Articles Review Queue"
             icon={<FileText className="w-4 h-4 text-[var(--color-amber)] flex-shrink-0" />}
             action={
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="inline-flex rounded-lg border border-[var(--border)] p-0.5 text-[11px]">
+                  <button
+                    onClick={() => setArticleTab("active")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1.5",
+                      articleTab === "active" ? "bg-[var(--surface-raised)] text-[var(--text)] font-semibold" : "text-[var(--text-faint)] hover:text-[var(--text)]"
+                    )}
+                  >
+                    <span>In Progress</span>
+                    <span className={cn("px-1.5 py-0.2 rounded-full text-[10px]", articleActiveItems.length > 0 ? "bg-[var(--color-purple-soft)] text-[var(--color-purple)] font-bold" : "text-[var(--text-faint)]")}>
+                      {articleActiveItems.length}
+                    </span>
+                  </button>
                   <button
                     onClick={() => setArticleTab("review")}
                     className={cn(
@@ -943,7 +1061,44 @@ export default function Dashboard() {
             }
           >
             <div className="space-y-1 -mx-1 max-h-[260px] overflow-y-auto px-1">
-              {articleTab === "review" ? (
+              {articleTab === "active" ? (
+                <>
+                  {articleActiveItems.length === 0 ? (
+                    <div className="py-6 text-center text-xs sm:text-sm text-[var(--text-faint)] flex flex-col items-center gap-1.5">
+                      <CheckCircle2 className="w-5 h-5 text-[var(--color-green)]" />
+                      <span>No articles currently being worked on.</span>
+                    </div>
+                  ) : (
+                    articleActiveItems.map((item) => {
+                      const st = ARTICLE_STATUS_LABEL[item.status] || { label: item.status, badge: "badge-gray" };
+                      return (
+                        <Link
+                          key={item.id}
+                          href={`/pipeline/posts/${item.id}`}
+                          className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[var(--surface-raised)] border border-transparent hover:border-[var(--border)] transition-colors group min-w-0"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-[var(--color-purple-soft)] flex items-center justify-center flex-shrink-0">
+                            <FileText className="w-4 h-4 text-[var(--color-purple)]" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs sm:text-sm font-medium text-[var(--text)] truncate" title={item.title}>
+                              {concatShort(item.title, 54)}
+                            </p>
+                            <p className="text-[11px] text-[var(--text-faint)] truncate mt-0.5">
+                              {item.channel || item.category || "Article"} · {formatTimeAgo(item.updated_at)}
+                            </p>
+                          </div>
+                          {item.mediaPendingCount > 0 && (
+                            <span className="badge badge-amber text-[10px] flex-shrink-0">{item.mediaPendingCount} Media</span>
+                          )}
+                          <span className={cn("badge text-[10px] flex-shrink-0", st.badge)}>{st.label}</span>
+                          <ChevronRight className="w-4 h-4 text-[var(--border-strong)] group-hover:text-[var(--color-purple)] flex-shrink-0" />
+                        </Link>
+                      );
+                    })
+                  )}
+                </>
+              ) : articleTab === "review" ? (
                 <>
                   {a.reviewItems.length === 0 ? (
                     <div className="py-6 text-center text-xs sm:text-sm text-[var(--text-faint)] flex flex-col items-center gap-1.5">
