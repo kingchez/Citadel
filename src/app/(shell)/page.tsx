@@ -262,10 +262,10 @@ export default function Dashboard() {
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState<string | null>(null);
 
-  // Review Card Tabs ("active" = all items on the table currently being worked on)
-  const [newsTab, setNewsTab] = useState<"active" | "trends" | "events">("active");
-  const [videoTab, setVideoTab] = useState<"active" | "review" | "errors">("active");
-  const [articleTab, setArticleTab] = useState<"active" | "review" | "revisions">("active");
+  // Review Card Tabs (Time-sensitive / Needs Review first, In Progress for table items being worked on)
+  const [newsTab, setNewsTab] = useState<"trends" | "events" | "active">("trends");
+  const [videoTab, setVideoTab] = useState<"review" | "errors" | "active">("review");
+  const [articleTab, setArticleTab] = useState<"review" | "revisions" | "active">("review");
 
   // add-todo form
   const [title, setTitle] = useState("");
@@ -686,25 +686,13 @@ export default function Dashboard() {
             )}
           </section>
 
-          {/* 3. News Review Card (All Active + Trend Review + Unreviewed Events) */}
+          {/* 3. News Review Card (Trend Review + Unreviewed Events + Events In Progress) */}
           <Panel
             title="News Review Queue"
             icon={<Newspaper className="w-4 h-4 text-[var(--color-cyan)] flex-shrink-0" />}
             action={
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="inline-flex rounded-lg border border-[var(--border)] p-0.5 text-[11px]">
-                  <button
-                    onClick={() => setNewsTab("active")}
-                    className={cn(
-                      "px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1.5",
-                      newsTab === "active" ? "bg-[var(--surface-raised)] text-[var(--text)] font-semibold" : "text-[var(--text-faint)] hover:text-[var(--text)]"
-                    )}
-                  >
-                    <span>In Progress</span>
-                    <span className={cn("px-1.5 py-0.2 rounded-full text-[10px]", newsActiveItems.length > 0 ? "bg-[var(--color-purple-soft)] text-[var(--color-purple)] font-bold" : "text-[var(--text-faint)]")}>
-                      {newsActiveItems.length}
-                    </span>
-                  </button>
                   <button
                     onClick={() => setNewsTab("trends")}
                     className={cn(
@@ -729,6 +717,18 @@ export default function Dashboard() {
                       {n.needsReview}
                     </span>
                   </button>
+                  <button
+                    onClick={() => setNewsTab("active")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1.5",
+                      newsTab === "active" ? "bg-[var(--surface-raised)] text-[var(--text)] font-semibold" : "text-[var(--text-faint)] hover:text-[var(--text)]"
+                    )}
+                  >
+                    <span>In Progress</span>
+                    <span className={cn("px-1.5 py-0.2 rounded-full text-[10px]", newsActiveItems.length > 0 ? "bg-[var(--color-purple-soft)] text-[var(--color-purple)] font-bold" : "text-[var(--text-faint)]")}>
+                      {newsActiveItems.length}
+                    </span>
+                  </button>
                 </div>
                 <Link
                   href={newsTab === "trends" ? "/news/review" : newsTab === "events" ? "/news/events?view=needs_review" : "/news/events"}
@@ -745,7 +745,7 @@ export default function Dashboard() {
                   {newsActiveItems.length === 0 ? (
                     <div className="py-6 text-center text-xs sm:text-sm text-[var(--text-faint)] flex flex-col items-center gap-1.5">
                       <CheckCircle2 className="w-5 h-5 text-[var(--color-green)]" />
-                      <span>No news items currently being worked on.</span>
+                      <span>No events currently being worked on.</span>
                     </div>
                   ) : (
                     newsActiveItems.map((item) => {
@@ -753,18 +753,18 @@ export default function Dashboard() {
                       return (
                         <Link
                           key={`${item.kind}-${item.id}`}
-                          href={item.kind === "trend" ? "/news/review" : `/news/events/${item.id}`}
+                          href={`/news/events/${item.id}`}
                           className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[var(--surface-raised)] border border-transparent hover:border-[var(--border)] transition-colors group min-w-0"
                         >
-                          <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", item.kind === "trend" ? "bg-[var(--color-amber-soft)]" : "bg-[var(--color-cyan-soft)]")}>
-                            {item.kind === "trend" ? <Flame className="w-4 h-4 text-[var(--color-amber)]" /> : <TrendingUp className="w-4 h-4 text-[var(--color-cyan)]" />}
+                          <div className="w-8 h-8 rounded-lg bg-[var(--color-cyan-soft)] flex items-center justify-center flex-shrink-0">
+                            <TrendingUp className="w-4 h-4 text-[var(--color-cyan)]" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs sm:text-sm font-medium text-[var(--text)] truncate" title={item.title}>
                               {concatShort(item.title, 65)}
                             </p>
                             <p className="text-[11px] text-[var(--text-faint)] truncate mt-0.5">
-                              {item.kind === "trend" ? "Trend" : "Event"}
+                              Event
                               {item.subtitle ? ` · ${concatShort(item.subtitle, 40)}` : ""}
                               {` · ${formatTimeAgo(item.created_at)}`}
                             </p>
@@ -853,25 +853,13 @@ export default function Dashboard() {
 
         {/* RIGHT COLUMN (5 cols on XL): Videos Review Queue + Articles Review Queue + Pipeline Health */}
         <aside className="xl:col-span-5 space-y-5 min-w-0">
-          {/* 1. Videos Review Queue Card (In Progress + Needs Review + Errors) */}
+          {/* 1. Videos Review Queue Card (Needs Review + Errors + In Progress) */}
           <Panel
             title="Videos Action Queue"
             icon={<Video className="w-4 h-4 text-[var(--color-purple)] flex-shrink-0" />}
             action={
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="inline-flex rounded-lg border border-[var(--border)] p-0.5 text-[11px]">
-                  <button
-                    onClick={() => setVideoTab("active")}
-                    className={cn(
-                      "px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1.5",
-                      videoTab === "active" ? "bg-[var(--surface-raised)] text-[var(--text)] font-semibold" : "text-[var(--text-faint)] hover:text-[var(--text)]"
-                    )}
-                  >
-                    <span>In Progress</span>
-                    <span className={cn("px-1.5 py-0.2 rounded-full text-[10px]", videoActiveItems.length > 0 ? "bg-[var(--color-purple-soft)] text-[var(--color-purple)] font-bold" : "text-[var(--text-faint)]")}>
-                      {videoActiveItems.length}
-                    </span>
-                  </button>
                   <button
                     onClick={() => setVideoTab("review")}
                     className={cn(
@@ -894,6 +882,18 @@ export default function Dashboard() {
                     <span>Errors / Revisions</span>
                     <span className={cn("px-1.5 py-0.2 rounded-full text-[10px]", videoErrorItems.length > 0 ? "bg-[var(--color-red-soft)] text-[var(--color-red)] font-bold" : "text-[var(--text-faint)]")}>
                       {v.errors}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setVideoTab("active")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1.5",
+                      videoTab === "active" ? "bg-[var(--surface-raised)] text-[var(--text)] font-semibold" : "text-[var(--text-faint)] hover:text-[var(--text)]"
+                    )}
+                  >
+                    <span>In Progress</span>
+                    <span className={cn("px-1.5 py-0.2 rounded-full text-[10px]", videoActiveItems.length > 0 ? "bg-[var(--color-purple-soft)] text-[var(--color-purple)] font-bold" : "text-[var(--text-faint)]")}>
+                      {videoActiveItems.length}
                     </span>
                   </button>
                 </div>
@@ -1010,25 +1010,13 @@ export default function Dashboard() {
             </div>
           </Panel>
 
-          {/* 2. Articles Review Queue Card (In Progress + Needs Review + Revisions & Media) */}
+          {/* 2. Articles Review Queue Card (Needs Review + Revisions & Media + In Progress) */}
           <Panel
             title="Articles Review Queue"
             icon={<FileText className="w-4 h-4 text-[var(--color-amber)] flex-shrink-0" />}
             action={
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="inline-flex rounded-lg border border-[var(--border)] p-0.5 text-[11px]">
-                  <button
-                    onClick={() => setArticleTab("active")}
-                    className={cn(
-                      "px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1.5",
-                      articleTab === "active" ? "bg-[var(--surface-raised)] text-[var(--text)] font-semibold" : "text-[var(--text-faint)] hover:text-[var(--text)]"
-                    )}
-                  >
-                    <span>In Progress</span>
-                    <span className={cn("px-1.5 py-0.2 rounded-full text-[10px]", articleActiveItems.length > 0 ? "bg-[var(--color-purple-soft)] text-[var(--color-purple)] font-bold" : "text-[var(--text-faint)]")}>
-                      {articleActiveItems.length}
-                    </span>
-                  </button>
                   <button
                     onClick={() => setArticleTab("review")}
                     className={cn(
@@ -1051,6 +1039,18 @@ export default function Dashboard() {
                     <span>Revisions & Media</span>
                     <span className={cn("px-1.5 py-0.2 rounded-full text-[10px]", a.revisionAndDraftItems.length > 0 ? "bg-[var(--color-purple-soft)] text-[var(--color-purple)] font-bold" : "text-[var(--text-faint)]")}>
                       {a.revisionAndDraftItems.length}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setArticleTab("active")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1.5",
+                      articleTab === "active" ? "bg-[var(--surface-raised)] text-[var(--text)] font-semibold" : "text-[var(--text-faint)] hover:text-[var(--text)]"
+                    )}
+                  >
+                    <span>In Progress</span>
+                    <span className={cn("px-1.5 py-0.2 rounded-full text-[10px]", articleActiveItems.length > 0 ? "bg-[var(--color-purple-soft)] text-[var(--color-purple)] font-bold" : "text-[var(--text-faint)]")}>
+                      {articleActiveItems.length}
                     </span>
                   </button>
                 </div>
