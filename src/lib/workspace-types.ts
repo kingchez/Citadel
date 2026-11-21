@@ -29,6 +29,7 @@ export interface WorkspaceSummary {
     liveIssues: number;
     needsReview: { id: string; title: string; channel: string; status: string; updated_at: string }[];
     errorItems: { id: string; title: string; channel: string; status: string; updated_at: string; errorSummary: string | null }[];
+    activeItems?: { id: string; title: string; channel: string; status: string; updated_at: string; hasError: boolean }[];
     avgTurnaroundHours: number | null;
     recent: { id: string; title: string; channel: string; status: string; updated_at: string; hasError: boolean }[];
     activeJob: { id: string; title: string; service: string | null } | null;
@@ -46,6 +47,14 @@ export interface WorkspaceSummary {
       country: string | null;
       traffic: string | null;
       relevance: number | null;
+      created_at: string;
+    }[];
+    activeItems?: {
+      id: string;
+      kind: "event" | "trend";
+      title: string;
+      status: string;
+      subtitle: string | null;
       created_at: string;
     }[];
     eventsNeedsReviewItems: {
@@ -76,6 +85,15 @@ export interface WorkspaceSummary {
       updated_at: string;
     }[];
     revisionAndDraftItems: {
+      id: string;
+      title: string;
+      channel: string | null;
+      category: string | null;
+      status: string;
+      mediaPendingCount: number;
+      updated_at: string;
+    }[];
+    activeItems?: {
       id: string;
       title: string;
       channel: string | null;
