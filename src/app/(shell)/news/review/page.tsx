@@ -45,6 +45,7 @@ interface DraftItem {
   url: string;
   start: string;
   end: string;
+  useFull?: boolean;
   description: string;
 }
 
@@ -68,6 +69,7 @@ const newItem = (type: DraftItem["type"], url: string): DraftItem => ({
   url,
   start: "",
   end: "",
+  useFull: false,
   description: "",
 });
 
@@ -97,7 +99,13 @@ function initialDraft(trend: TrendReview): Draft {
   const media = saved.map((m) =>
     m.type === "image"
       ? { ...newItem("image", m.url), description: m.description || "" }
-      : { ...newItem("clip", m.url), start: formatTimecode(m.start), end: formatTimecode(m.end), description: m.description || "" }
+      : {
+          ...newItem("clip", m.url),
+          start: formatTimecode(m.start),
+          end: m.full && !m.end ? "" : formatTimecode(m.end),
+          useFull: !!m.full,
+          description: m.description || "",
+        }
   );
   const extra = Array.from(new Set(saved.filter((m) => m.type === "clip" && !extracted.has(m.url)).map((m) => m.url)));
   return {
@@ -123,7 +131,7 @@ function playerFor(url: string): { kind: "iframe" | "file" | "link"; src: string
   return { kind: "link", src: url };
 }
 
-function VideoPlayer({ url }: { url: string }) {
+function VideoPlayer({ url, onDuration }: { url: string; onDuration?: (seconds: number) => void }) {
   const player = playerFor(url);
   if (player.kind === "iframe") {
     return (
@@ -138,7 +146,20 @@ function VideoPlayer({ url }: { url: string }) {
     );
   }
   if (player.kind === "file") {
-    return <video src={player.src} controls preload="metadata" className="w-full max-h-72 rounded-lg bg-black" />;
+    return (
+      <video
+        src={player.src}
+        controls
+        preload="metadata"
+        onLoadedMetadata={(e) => {
+          const d = e.currentTarget.duration;
+          if (onDuration && Number.isFinite(d) && d > 0) {
+            onDuration(Math.round(d * 10) / 10);
+          }
+        }}
+        className="w-full max-h-72 rounded-lg bg-black"
+      />
+    );
   }
   return (
     <a
@@ -154,11 +175,17 @@ function VideoPlayer({ url }: { url: string }) {
 }
 
 /** Total running time of the merged video, or null while a clip has no valid window yet. */
-function totalSeconds(media: DraftItem[]): number | null {
+function totalSeconds(media: DraftItem[], durations: Record<string, number>): number | null {
   let total = 0;
   for (const m of media) {
     if (m.type === "image") {
       total += IMAGE_SECONDS;
+      continue;
+    }
+    if (m.useFull) {
+      const end = parseTimecode(m.end) ?? durations[m.url] ?? null;
+      if (end === null || end <= 0) return null;
+      total += end;
       continue;
     }
     const start = parseTimecode(m.start);
@@ -181,6 +208,7 @@ export default function TrendReviewPage() {
   const [linkInput, setLinkInput] = useState("");
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [fetchingTranscripts, setFetchingTranscripts] = useState<Record<string, boolean>>({});
+  const [videoDurations, setVideoDurations] = useState<Record<string, number>>({});
 
   const load = useCallback(() => {
     fetch("/api/news/trends")
@@ -261,6 +289,24 @@ export default function TrendReviewPage() {
     update((d) => (d.media.some((m) => m.type === "image" && m.url === url) ? d : { ...d, media: [...d.media, newItem("image", url)] }));
   const addClip = (url: string) => update((d) => ({ ...d, media: [...d.media, newItem("clip", url)] }));
 
+  const recordDuration = (url: string, seconds: number) => {
+    setVideoDurations((prev) => (prev[url] === seconds ? prev : { ...prev, [url]: seconds }));
+  };
+
+  const toggleFullClip = (item: DraftItem) => {
+    const nextFull = !item.useFull;
+    if (nextFull) {
+      const dur = videoDurations[item.url];
+      editItem(item.id, {
+        useFull: true,
+        start: "0:00",
+        end: dur ? formatTimecode(dur) : "",
+      });
+    } else {
+      editItem(item.id, { useFull: false });
+    }
+  };
+
   const newsItems = extractTrendNewsItems(trend.news_items);
   const extracted = extractTrendVideos(trend.usableVideos);
   const videoList: TrendVideo[] = [
@@ -276,7 +322,7 @@ export default function TrendReviewPage() {
   );
   const thumbCandidates = Array.from(new Set([...draft.thumbs, ...imageCandidates]));
   const labelFor = (url: string) => videoList.find((v) => v.url === url)?.article_title || url;
-  const total = totalSeconds(draft.media);
+  const total = totalSeconds(draft.media, videoDurations);
   const transcriptsMap: Record<string, VideoTranscriptEntry> = trend.events?.usable_video_transcripts || {};
 
   const fetchClipTranscript = async (clipUrl: string) => {
@@ -325,10 +371,22 @@ export default function TrendReviewPage() {
         out.push({ type: "image", url: m.url, ...(m.description.trim() ? { description: m.description.trim() } : {}) });
         continue;
       }
+      if (m.useFull) {
+        const end = parseTimecode(m.end) ?? videoDurations[m.url] ?? 0;
+        out.push({
+          type: "clip",
+          url: m.url,
+          start: 0,
+          end,
+          full: true,
+          ...(m.description.trim() ? { description: m.description.trim() } : {}),
+        });
+        continue;
+      }
       const start = parseTimecode(m.start);
       const end = parseTimecode(m.end);
       if (start === null || end === null || end <= start) {
-        return "Every clip needs a start time before its end time (like 0:12 and 0:25).";
+        return "Every clip needs a start time before its end time (or select Full video).";
       }
       out.push({ type: "clip", url: m.url, start, end, ...(m.description.trim() ? { description: m.description.trim() } : {}) });
     }
@@ -777,7 +835,7 @@ export default function TrendReviewPage() {
                           </button>
                         </div>
 
-                        <VideoPlayer url={m.url} />
+                        <VideoPlayer url={m.url} onDuration={(sec) => recordDuration(m.url, sec)} />
 
                         {transcript && (
                           <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-raised)]/50 p-2.5 space-y-1.5 text-xs">
@@ -818,18 +876,35 @@ export default function TrendReviewPage() {
                           </div>
                         )}
 
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => toggleFullClip(m)}
+                            className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                              m.useFull
+                                ? "border-[var(--color-purple)] bg-[var(--color-purple-soft)] text-[var(--text)] font-semibold"
+                                : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:border-[var(--border-strong)]"
+                            }`}
+                          >
+                            {m.useFull ? "✓ Full video (All)" : "Full video (All)"}
+                          </button>
                           <input
-                            value={m.start}
+                            value={m.useFull ? "0:00" : m.start}
+                            disabled={!!m.useFull}
                             onChange={(e) => editItem(m.id, { start: e.target.value })}
                             placeholder="Start (0:12)"
-                            className="input-field text-sm py-2"
+                            className="input-field text-sm py-2 flex-1 min-w-[100px] disabled:opacity-60"
                           />
                           <input
-                            value={m.end}
+                            value={
+                              m.useFull
+                                ? m.end || (videoDurations[m.url] ? formatTimecode(videoDurations[m.url]) : "End (full)")
+                                : m.end
+                            }
+                            disabled={!!m.useFull}
                             onChange={(e) => editItem(m.id, { end: e.target.value })}
                             placeholder="End (0:25)"
-                            className="input-field text-sm py-2"
+                            className="input-field text-sm py-2 flex-1 min-w-[100px] disabled:opacity-60"
                           />
                         </div>
 
@@ -909,7 +984,7 @@ export default function TrendReviewPage() {
               const count = draft.media.filter((m) => m.type === "clip" && m.url === v.url).length;
               return (
                 <div key={v.url} className="rounded-xl border border-[var(--border)] p-3 space-y-3">
-                  <VideoPlayer url={v.url} />
+                  <VideoPlayer url={v.url} onDuration={(sec) => recordDuration(v.url, sec)} />
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <p className="text-xs text-[var(--text-faint)] truncate max-w-full">
                       {v.article_title || v.url}
