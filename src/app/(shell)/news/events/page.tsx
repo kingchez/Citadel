@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect, Suspense } from "react";
+import { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import type { NewsEvent } from "@/lib/news-types";
 import { EVENT_STATUS_LABELS, EVENT_STATUS_COLORS } from "@/lib/news-types";
 import { formatTimeAgo } from "@/lib/utils";
 import { saveQueue } from "@/lib/news-queue-cache";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import { Search, ChevronRight, Clock, Video, Newspaper, TrendingUp } from "lucide-react";
 
 const TABS = [
@@ -109,7 +110,7 @@ function EventsContent() {
     router.push(qs ? `${pathname}?${qs}` : pathname);
   };
 
-  useEffect(() => {
+  const load = useCallback(() => {
     fetch("/api/news/events")
       .then((r) => r.json())
       .then((data: { events?: NewsEvent[] }) => {
@@ -117,8 +118,15 @@ function EventsContent() {
         setEvents(list);
         saveQueue(list.map((e) => ({ id: e.id, social_headline: e.social_headline, event_title: e.event_title })));
       })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useAutoRefresh(load, 10000);
 
   const filtered = useMemo(() => {
     let list = events.filter((e) => matchesView(e, activeTab));
