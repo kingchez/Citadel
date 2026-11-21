@@ -8,7 +8,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from("Trend_Processing")
-      .select("*, events:events_id(id, event_title, fingerprint, snapshot_summary, global_relevance_score, confidence)")
+      .select("*, events:events_id(id, event_title, fingerprint, snapshot_summary, global_relevance_score, confidence, usable_video_transcripts)")
       .eq("id", id)
       .single();
 
@@ -211,7 +211,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       .update(update)
       .eq("id", id)
       .eq("status", "needs_review")
-      .select("*, events:events_id(id, event_title, fingerprint, snapshot_summary, global_relevance_score, confidence)")
+      .select("*, events:events_id(id, event_title, fingerprint, snapshot_summary, global_relevance_score, confidence, usable_video_transcripts)")
       .single();
 
     if (error) {
