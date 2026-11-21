@@ -73,6 +73,14 @@ const newItem = (type: DraftItem["type"], url: string): DraftItem => ({
   description: "",
 });
 
+const TRANSCRIPT_TIMEOUT_MS = 4 * 60 * 1000;
+
+function isTranscriptStale(t?: VideoTranscriptEntry): boolean {
+  if (!t || t.status !== "processing" || !t.updated_at) return false;
+  const ts = Date.parse(t.updated_at);
+  return Number.isFinite(ts) && Date.now() - ts > TRANSCRIPT_TIMEOUT_MS;
+}
+
 /** Places cursor at the very end when focusing a long explanation textarea. */
 function focusAtEnd(e: React.FocusEvent<HTMLTextAreaElement>) {
   const el = e.currentTarget;
@@ -229,11 +237,11 @@ export default function TrendReviewPage() {
 
   const trend = trends[Math.min(index, trends.length - 1)];
 
-  // Poll the active trend while any of its clip transcripts are still processing.
+  // Poll the active trend while any of its clip transcripts are actively processing (not timed out).
   useEffect(() => {
     if (!trend?.id) return;
     const transcripts = trend.events?.usable_video_transcripts || {};
-    const hasProcessing = Object.values(transcripts).some((t) => t?.status === "processing");
+    const hasProcessing = Object.values(transcripts).some((t) => t?.status === "processing" && !isTranscriptStale(t));
     if (!hasProcessing) return;
 
     const timer = setInterval(async () => {
@@ -357,7 +365,24 @@ export default function TrendReviewPage() {
       );
       showFeedback("Fetching transcript via WhisperX — this page will update automatically.");
     } catch (err) {
-      showFeedback(err instanceof Error ? err.message : "Could not fetch transcript.");
+      const msg = err instanceof Error ? err.message : "Could not fetch transcript.";
+      setTrends((prev) =>
+        prev.map((t) =>
+          t.id === trend.id && t.events
+            ? {
+                ...t,
+                events: {
+                  ...t.events,
+                  usable_video_transcripts: {
+                    ...(t.events.usable_video_transcripts || {}),
+                    [clipUrl]: { status: "error", error: msg, updated_at: new Date().toISOString() },
+                  },
+                },
+              }
+            : t
+        )
+      );
+      showFeedback(msg, 5000);
     } finally {
       setFetchingTranscripts((prev) => ({ ...prev, [clipUrl]: false }));
     }
@@ -798,7 +823,9 @@ export default function TrendReviewPage() {
 
             {draft.media.map((m, i) => {
               const transcript = m.type === "clip" ? transcriptsMap[m.url] : undefined;
-              const isFetching = !!fetchingTranscripts[m.url] || transcript?.status === "processing";
+              const stale = isTranscriptStale(transcript);
+              const effectiveStatus = stale ? "error" : transcript?.status;
+              const isFetching = !!fetchingTranscripts[m.url] || effectiveStatus === "processing";
 
               return (
                 <div key={m.id} className="flex items-start gap-3 rounded-xl border border-[var(--border)] p-3">
@@ -827,37 +854,53 @@ export default function TrendReviewPage() {
                             className="btn-secondary text-xs py-1 px-2.5 inline-flex items-center gap-1.5 disabled:opacity-50"
                           >
                             {isFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
-                            {transcript?.status === "processing"
+                            {effectiveStatus === "processing"
                               ? "Transcribing..."
-                              : transcript?.status === "done"
-                                ? "Refresh Transcript"
-                                : "Fetch Transcript"}
+                              : effectiveStatus === "error"
+                                ? "Retry Transcript"
+                                : effectiveStatus === "done"
+                                  ? "Refresh Transcript"
+                                  : "Fetch Transcript"}
                           </button>
                         </div>
 
                         <VideoPlayer url={m.url} onDuration={(sec) => recordDuration(m.url, sec)} />
 
                         {transcript && (
-                          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-raised)]/50 p-2.5 space-y-1.5 text-xs">
+                          <div
+                            className={`rounded-lg border p-2.5 space-y-1.5 text-xs ${
+                              effectiveStatus === "error"
+                                ? "border-[var(--color-red)]/50 bg-[var(--color-red)]/10"
+                                : "border-[var(--border)] bg-[var(--surface-raised)]/50"
+                            }`}
+                          >
                             <div className="flex items-center justify-between gap-2">
-                              <span className="font-semibold text-[var(--color-purple)] inline-flex items-center gap-1">
+                              <span
+                                className={`font-semibold inline-flex items-center gap-1 ${
+                                  effectiveStatus === "error" ? "text-[var(--color-red)]" : "text-[var(--color-purple)]"
+                                }`}
+                              >
                                 <FileText className="w-3.5 h-3.5" />
-                                Clip Transcript ({transcript.status})
+                                Clip Transcript ({effectiveStatus})
                               </span>
                               {transcript.language && (
                                 <span className="font-mono text-[10px] text-[var(--text-faint)]">{transcript.language}</span>
                               )}
                             </div>
-                            {transcript.status === "processing" && (
+                            {effectiveStatus === "processing" && (
                               <p className="text-[var(--text-muted)]">Downloading, splitting audio, and running WhisperX...</p>
                             )}
-                            {transcript.status === "error" && (
-                              <p className="text-[var(--color-red)]">{transcript.error || "Failed to transcribe clip."}</p>
+                            {effectiveStatus === "error" && (
+                              <p className="text-[var(--color-red)]">
+                                {stale
+                                  ? "Transcription timed out — click Retry Transcript."
+                                  : transcript.error || "Failed to transcribe clip."}
+                              </p>
                             )}
-                            {transcript.status === "empty" && (
+                            {effectiveStatus === "empty" && (
                               <p className="text-[var(--text-muted)]">No spoken audio detected in this clip.</p>
                             )}
-                            {transcript.status === "done" && (
+                            {effectiveStatus === "done" && (
                               <div className="max-h-40 overflow-y-auto space-y-1 pr-1 text-[var(--text-muted)]">
                                 {transcript.segments && transcript.segments.length > 0 ? (
                                   transcript.segments.map((seg, idx) => (
