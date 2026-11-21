@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import type { MediaItem, PostFormat, TrendReview, TrendVideo } from "@/lib/news-types";
+import type { MediaItem, PostFormat, TrendReview, TrendVideo, VideoTranscriptEntry } from "@/lib/news-types";
 import {
   IMAGE_SECONDS,
   extractThumbnailCandidates,
@@ -22,6 +22,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  FileText,
   Fingerprint,
   Globe,
   Image as ImageIcon,
@@ -69,6 +70,20 @@ const newItem = (type: DraftItem["type"], url: string): DraftItem => ({
   end: "",
   description: "",
 });
+
+/** Places cursor at the very end when focusing a long explanation textarea. */
+function focusAtEnd(e: React.FocusEvent<HTMLTextAreaElement>) {
+  const el = e.currentTarget;
+  const len = el.value.length;
+  requestAnimationFrame(() => {
+    try {
+      el.setSelectionRange(len, len);
+      el.scrollTop = el.scrollHeight;
+    } catch {
+      // ignore on unsupported inputs
+    }
+  });
+}
 
 /** Builds the starting draft from whatever was already saved on the trend & linked event. */
 function initialDraft(trend: TrendReview): Draft {
@@ -165,6 +180,7 @@ export default function TrendReviewPage() {
   const [customThumbUrl, setCustomThumbUrl] = useState("");
   const [linkInput, setLinkInput] = useState("");
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [fetchingTranscripts, setFetchingTranscripts] = useState<Record<string, boolean>>({});
 
   const load = useCallback(() => {
     fetch("/api/news/trends")
@@ -184,6 +200,29 @@ export default function TrendReviewPage() {
   };
 
   const trend = trends[Math.min(index, trends.length - 1)];
+
+  // Poll the active trend while any of its clip transcripts are still processing.
+  useEffect(() => {
+    if (!trend?.id) return;
+    const transcripts = trend.events?.usable_video_transcripts || {};
+    const hasProcessing = Object.values(transcripts).some((t) => t?.status === "processing");
+    if (!hasProcessing) return;
+
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/news/trends/${trend.id}`);
+        if (!res.ok) return;
+        const data: { trend?: TrendReview } = await res.json();
+        if (data.trend) {
+          setTrends((prev) => prev.map((t) => (t.id === data.trend!.id ? data.trend! : t)));
+        }
+      } catch {
+        // ignore transient poll errors
+      }
+    }, 4000);
+
+    return () => clearInterval(timer);
+  }, [trend?.id, trend?.events?.usable_video_transcripts]);
 
   if (loading) {
     return <div className="p-4 sm:p-6 max-w-4xl mx-auto text-[var(--text-faint)]">Loading...</div>;
@@ -238,6 +277,45 @@ export default function TrendReviewPage() {
   const thumbCandidates = Array.from(new Set([...draft.thumbs, ...imageCandidates]));
   const labelFor = (url: string) => videoList.find((v) => v.url === url)?.article_title || url;
   const total = totalSeconds(draft.media);
+  const transcriptsMap: Record<string, VideoTranscriptEntry> = trend.events?.usable_video_transcripts || {};
+
+  const fetchClipTranscript = async (clipUrl: string) => {
+    if (!trend.events_id) {
+      showFeedback("This trend has no linked event yet.");
+      return;
+    }
+    setFetchingTranscripts((prev) => ({ ...prev, [clipUrl]: true }));
+    try {
+      const res = await fetch(`/api/news/trends/${trend.id}/transcript`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clip_url: clipUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not start transcript.");
+      setTrends((prev) =>
+        prev.map((t) =>
+          t.id === trend.id && t.events
+            ? {
+                ...t,
+                events: {
+                  ...t.events,
+                  usable_video_transcripts: {
+                    ...(t.events.usable_video_transcripts || {}),
+                    [clipUrl]: { status: "processing", updated_at: new Date().toISOString() },
+                  },
+                },
+              }
+            : t
+        )
+      );
+      showFeedback("Fetching transcript via WhisperX — this page will update automatically.");
+    } catch (err) {
+      showFeedback(err instanceof Error ? err.message : "Could not fetch transcript.");
+    } finally {
+      setFetchingTranscripts((prev) => ({ ...prev, [clipUrl]: false }));
+    }
+  };
 
   /** Turns the rows into validated media items, or an error message. */
   const buildMedia = (): MediaItem[] | string => {
@@ -324,7 +402,7 @@ export default function TrendReviewPage() {
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <h1 className="text-lg font-semibold text-[var(--text)]">Trend Review</h1>
         <div className="flex items-center gap-2">
           <button
@@ -349,6 +427,35 @@ export default function TrendReviewPage() {
         </div>
       </div>
 
+      {/* Quick queue strip so trends with usable video clips are spotted immediately */}
+      {trends.length > 1 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          {trends.map((t, i) => {
+            const clipCount = extractTrendVideos(t.usableVideos).length;
+            const active = i === position;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setIndex(i)}
+                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-colors ${
+                  active
+                    ? "border-[var(--color-purple)] bg-[var(--color-purple-soft)] text-[var(--text)] font-semibold"
+                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:border-[var(--border-strong)]"
+                }`}
+              >
+                <span className="truncate max-w-[140px]">{t.trending_keyword}</span>
+                {clipCount > 0 && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--color-purple)]/20 text-[var(--color-purple)]">
+                    <Video className="w-3 h-3" />
+                    {clipCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {feedback && (
         <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:bottom-6 sm:right-6 z-50 flex items-center gap-3 px-4 sm:px-5 py-3 sm:py-3.5 rounded-xl bg-[var(--color-purple-soft)] border border-[var(--color-purple)]/60 shadow-2xl animate-slide-down max-w-sm">
           <span className="text-sm font-medium text-[var(--text)]">{feedback}</span>
@@ -367,6 +474,16 @@ export default function TrendReviewPage() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {extracted.length > 0 ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--color-purple-soft)] text-[var(--color-purple)] border border-[var(--color-purple)]/30">
+                <Video className="w-3.5 h-3.5" />
+                {extracted.length} {extracted.length === 1 ? "usable clip" : "usable clips"}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs text-[var(--text-faint)] bg-[var(--surface)] border border-[var(--border)]">
+                No clips
+              </span>
+            )}
             {trend.country && (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--surface-raised)] text-[var(--text)] border border-[var(--border)] font-mono">
                 🌍 {trend.country}
@@ -414,6 +531,7 @@ export default function TrendReviewPage() {
               <textarea
                 value={draft.snapshot_summary}
                 onChange={(e) => update((d) => ({ ...d, snapshot_summary: e.target.value }))}
+                onFocus={focusAtEnd}
                 rows={3}
                 placeholder="Event snapshot summary..."
                 className="input-field text-sm py-2 w-full resize-y"
@@ -536,8 +654,8 @@ export default function TrendReviewPage() {
                 draft.format === opt.key
                   ? "border-[var(--color-purple)] bg-[var(--color-purple-soft)]"
                   : "border-[var(--border)] hover:border-[var(--border-strong)]"
-              }`
-            }>
+              }`}
+            >
               <opt.icon className="w-5 h-5 text-[var(--color-purple)]" />
               <span>
                 <span className="block text-sm font-semibold text-[var(--text)]">{opt.label}</span>
@@ -620,70 +738,136 @@ export default function TrendReviewPage() {
               </p>
             )}
 
-            {draft.media.map((m, i) => (
-              <div key={m.id} className="flex items-start gap-3 rounded-xl border border-[var(--border)] p-3">
-                <span className="text-xs font-mono text-[var(--text-faint)] pt-1 w-5">{i + 1}</span>
-                <div className="flex-1 min-w-0 space-y-2">
-                  {m.type === "image" ? (
-                    <div className="flex items-center gap-3">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={m.url} alt="Image in the video" className="h-14 w-20 object-cover rounded-lg flex-shrink-0" />
-                      <input
-                        value={m.description}
-                        onChange={(e) => editItem(m.id, { description: e.target.value })}
-                        placeholder="What does this image show?"
-                        className="input-field text-sm py-2 flex-1"
-                      />
-                    </div>
-                  ) : (
-                    <>
-                      <p className="text-xs text-[var(--text-faint)] truncate">Clip · {labelFor(m.url)}</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          value={m.start}
-                          onChange={(e) => editItem(m.id, { start: e.target.value })}
-                          placeholder="Start (0:12)"
-                          className="input-field text-sm py-2"
-                        />
-                        <input
-                          value={m.end}
-                          onChange={(e) => editItem(m.id, { end: e.target.value })}
-                          placeholder="End (0:25)"
-                          className="input-field text-sm py-2"
-                        />
-                        <input
+            {draft.media.map((m, i) => {
+              const transcript = m.type === "clip" ? transcriptsMap[m.url] : undefined;
+              const isFetching = !!fetchingTranscripts[m.url] || transcript?.status === "processing";
+
+              return (
+                <div key={m.id} className="flex items-start gap-3 rounded-xl border border-[var(--border)] p-3">
+                  <span className="text-xs font-mono text-[var(--text-faint)] pt-1 w-5">{i + 1}</span>
+                  <div className="flex-1 min-w-0 space-y-3">
+                    {m.type === "image" ? (
+                      <div className="space-y-2">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={m.url} alt="Image in the video" className="h-24 w-36 object-cover rounded-lg" />
+                        <textarea
                           value={m.description}
                           onChange={(e) => editItem(m.id, { description: e.target.value })}
-                          placeholder="What happens in this part?"
-                          className="input-field text-sm py-2 col-span-2"
+                          onFocus={focusAtEnd}
+                          rows={2}
+                          placeholder="What does this image show?"
+                          className="input-field text-sm py-2 w-full resize-y"
                         />
                       </div>
-                    </>
-                  )}
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <p className="text-xs text-[var(--text-faint)] truncate max-w-full">Clip · {labelFor(m.url)}</p>
+                          <button
+                            onClick={() => fetchClipTranscript(m.url)}
+                            disabled={isFetching}
+                            className="btn-secondary text-xs py-1 px-2.5 inline-flex items-center gap-1.5 disabled:opacity-50"
+                          >
+                            {isFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                            {transcript?.status === "processing"
+                              ? "Transcribing..."
+                              : transcript?.status === "done"
+                                ? "Refresh Transcript"
+                                : "Fetch Transcript"}
+                          </button>
+                        </div>
+
+                        <VideoPlayer url={m.url} />
+
+                        {transcript && (
+                          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-raised)]/50 p-2.5 space-y-1.5 text-xs">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-semibold text-[var(--color-purple)] inline-flex items-center gap-1">
+                                <FileText className="w-3.5 h-3.5" />
+                                Clip Transcript ({transcript.status})
+                              </span>
+                              {transcript.language && (
+                                <span className="font-mono text-[10px] text-[var(--text-faint)]">{transcript.language}</span>
+                              )}
+                            </div>
+                            {transcript.status === "processing" && (
+                              <p className="text-[var(--text-muted)]">Downloading, splitting audio, and running WhisperX...</p>
+                            )}
+                            {transcript.status === "error" && (
+                              <p className="text-[var(--color-red)]">{transcript.error || "Failed to transcribe clip."}</p>
+                            )}
+                            {transcript.status === "empty" && (
+                              <p className="text-[var(--text-muted)]">No spoken audio detected in this clip.</p>
+                            )}
+                            {transcript.status === "done" && (
+                              <div className="max-h-40 overflow-y-auto space-y-1 pr-1 text-[var(--text-muted)]">
+                                {transcript.segments && transcript.segments.length > 0 ? (
+                                  transcript.segments.map((seg, idx) => (
+                                    <p key={idx} className="leading-relaxed">
+                                      <span className="font-mono text-[10px] text-[var(--color-cyan)] mr-1.5">
+                                        [{formatTimecode(seg.start)}–{formatTimecode(seg.end)}]
+                                      </span>
+                                      {seg.text}
+                                    </p>
+                                  ))
+                                ) : (
+                                  <p>{transcript.text}</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            value={m.start}
+                            onChange={(e) => editItem(m.id, { start: e.target.value })}
+                            placeholder="Start (0:12)"
+                            className="input-field text-sm py-2"
+                          />
+                          <input
+                            value={m.end}
+                            onChange={(e) => editItem(m.id, { end: e.target.value })}
+                            placeholder="End (0:25)"
+                            className="input-field text-sm py-2"
+                          />
+                        </div>
+
+                        <textarea
+                          value={m.description}
+                          onChange={(e) => editItem(m.id, { description: e.target.value })}
+                          onFocus={focusAtEnd}
+                          rows={3}
+                          placeholder="Explain this clip & which parts to use or leave..."
+                          className="input-field text-sm py-2 w-full resize-y"
+                        />
+                      </>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => moveItem(m.id, -1)}
+                      disabled={i === 0}
+                      className="btn-ghost p-1.5 disabled:opacity-30"
+                      aria-label="Move up"
+                    >
+                      <ArrowUp className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => moveItem(m.id, 1)}
+                      disabled={i === draft.media.length - 1}
+                      className="btn-ghost p-1.5 disabled:opacity-30"
+                      aria-label="Move down"
+                    >
+                      <ArrowDown className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => removeItem(m.id)} className="btn-ghost p-1.5 text-[var(--color-red)]" aria-label="Remove">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <button
-                    onClick={() => moveItem(m.id, -1)}
-                    disabled={i === 0}
-                    className="btn-ghost p-1.5 disabled:opacity-30"
-                    aria-label="Move up"
-                  >
-                    <ArrowUp className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => moveItem(m.id, 1)}
-                    disabled={i === draft.media.length - 1}
-                    className="btn-ghost p-1.5 disabled:opacity-30"
-                    aria-label="Move down"
-                  >
-                    <ArrowDown className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => removeItem(m.id)} className="btn-ghost p-1.5 text-[var(--color-red)]" aria-label="Remove">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="card p-4 sm:p-5 space-y-4">
