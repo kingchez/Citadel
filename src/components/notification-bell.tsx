@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Bell, AlertTriangle, Info, AlertCircle } from "lucide-react";
+import { Bell, AlertTriangle, Info, AlertCircle, ExternalLink } from "lucide-react";
 import { cn, formatTimeAgo } from "@/lib/utils";
 import type { CitadelNotification } from "@/lib/notifications";
+import { safeLink } from "@/lib/workspace-types";
 
 function NotificationItem({
   notification,
@@ -27,21 +28,30 @@ function NotificationItem({
     }
   };
 
+  const resolvedLink =
+    safeLink(notification.link_url) ??
+    (notification.video_id ? { href: `/pipeline/videos/${notification.video_id}`, external: false } : null);
+  const subtitle = notification.video_title || notification.source_label || "Workspace Alert";
+
   const handleClick = () => {
     if (!read) onOpen(notification.id);
     setExpanded((e) => !e);
   };
 
   return (
-    <a
-      href={`/pipeline/videos/${notification.video_id}`}
+    <div
       className={cn(
         "relative block p-4 rounded-xl cursor-pointer transition-colors",
         !read ? "bg-[var(--color-purple-soft)]/60 border-l-3 border-[var(--color-purple)]" : "bg-transparent hover:bg-[var(--surface-raised)]"
       )}
-      onClick={(e) => {
-        e.preventDefault();
-        handleClick();
+      onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleClick();
+        }
       }}
     >
       <div className="flex gap-3">
@@ -49,20 +59,39 @@ function NotificationItem({
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <h4 className={cn("font-medium text-sm truncate", !read && "text-[var(--text)]")}>{notification.title}</h4>
-            <span className="text-[10px] text-[var(--text-faint)] flex-shrink-0">{formatTimeAgo(notification.created_at)}</span>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {notification.occurrences && notification.occurrences > 1 && (
+                <span className="text-[10px] font-semibold text-[var(--color-amber)]">×{notification.occurrences}</span>
+              )}
+              <span className="text-[10px] text-[var(--text-faint)]">{formatTimeAgo(notification.created_at)}</span>
+            </div>
           </div>
           <p className="mt-1 text-sm text-[var(--text-muted)] truncate">{notification.summary}</p>
-          <p className="mt-1 text-[11px] text-[var(--text-faint)] font-mono truncate">{notification.video_title}</p>
+          <p className="mt-1 text-[11px] text-[var(--text-faint)] font-mono truncate">{subtitle}</p>
 
-          {expanded && notification.detail && (
-            <div className="mt-3 p-3 rounded-lg bg-[var(--bg)] border border-[var(--border)] animate-fade-in">
-              <p className="text-sm text-[var(--text-muted)] whitespace-pre-wrap">{notification.detail}</p>
+          {expanded && (notification.detail || resolvedLink) && (
+            <div className="mt-3 p-3 rounded-lg bg-[var(--bg)] border border-[var(--border)] animate-fade-in space-y-2">
+              {notification.detail && (
+                <p className="text-sm text-[var(--text-muted)] whitespace-pre-wrap">{notification.detail}</p>
+              )}
+              {resolvedLink && (
+                <a
+                  href={resolvedLink.href}
+                  target={resolvedLink.external ? "_blank" : undefined}
+                  rel={resolvedLink.external ? "noopener noreferrer" : undefined}
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-purple)] hover:opacity-80"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open details</span>
+                </a>
+              )}
             </div>
           )}
         </div>
         {!read && <div className="w-2 h-2 rounded-full bg-[var(--color-purple)] flex-shrink-0 mt-1" />}
       </div>
-    </a>
+    </div>
   );
 }
 
