@@ -13,6 +13,7 @@ import {
   parseTimecode,
 } from "@/lib/news-types";
 import { formatTimeAgo } from "@/lib/utils";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import { ThumbnailLightbox } from "@/components/thumbnail-lightbox";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
@@ -226,6 +227,9 @@ export default function TrendReviewPage() {
     load();
   }, [load]);
 
+  // Keep queue and transcript statuses live without manual browser reloads.
+  useAutoRefresh(load, 8000);
+
   const showFeedback = (msg: string, ms = 3500) => {
     setFeedback(msg);
     setTimeout(() => setFeedback(null), ms);
@@ -354,6 +358,23 @@ export default function TrendReviewPage() {
       return;
     }
     setFetchingTranscripts((prev) => ({ ...prev, [clipUrl]: true }));
+    // Optimistically show Transcribing... immediately before the Drive check returns.
+    setTrends((prev) =>
+      prev.map((t) =>
+        t.id === trend.id && t.events
+          ? {
+              ...t,
+              events: {
+                ...t.events,
+                usable_video_transcripts: {
+                  ...(t.events.usable_video_transcripts || {}),
+                  [clipUrl]: { status: "processing", updated_at: new Date().toISOString() },
+                },
+              },
+            }
+          : t
+      )
+    );
     try {
       const res = await fetch(`/api/news/trends/${trend.id}/transcript`, {
         method: "POST",
@@ -362,22 +383,6 @@ export default function TrendReviewPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not start transcript.");
-      setTrends((prev) =>
-        prev.map((t) =>
-          t.id === trend.id && t.events
-            ? {
-                ...t,
-                events: {
-                  ...t.events,
-                  usable_video_transcripts: {
-                    ...(t.events.usable_video_transcripts || {}),
-                    [clipUrl]: { status: "processing", updated_at: new Date().toISOString() },
-                  },
-                },
-              }
-            : t
-        )
-      );
       showFeedback("Fetching transcript via WhisperX — this page will update automatically.");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Could not fetch transcript.";
