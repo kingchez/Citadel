@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ClipboardPaste,
   ExternalLink,
   FileText,
   Fingerprint,
@@ -72,14 +73,6 @@ const newItem = (type: DraftItem["type"], url: string): DraftItem => ({
   useFull: false,
   description: "",
 });
-
-const TRANSCRIPT_TIMEOUT_MS = 4 * 60 * 1000;
-
-function isTranscriptStale(t?: VideoTranscriptEntry): boolean {
-  if (!t || t.status !== "processing" || !t.updated_at) return false;
-  const ts = Date.parse(t.updated_at);
-  return Number.isFinite(ts) && Date.now() - ts > TRANSCRIPT_TIMEOUT_MS;
-}
 
 /** Places cursor at the very end when focusing a long explanation textarea. */
 function focusAtEnd(e: React.FocusEvent<HTMLTextAreaElement>) {
@@ -216,6 +209,9 @@ export default function TrendReviewPage() {
   const [linkInput, setLinkInput] = useState("");
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [fetchingTranscripts, setFetchingTranscripts] = useState<Record<string, boolean>>({});
+  const [pasteOpenFor, setPasteOpenFor] = useState<Record<string, boolean>>({});
+  const [pasteTextFor, setPasteTextFor] = useState<Record<string, string>>({});
+  const [savingPasteFor, setSavingPasteFor] = useState<Record<string, boolean>>({});
   const [videoDurations, setVideoDurations] = useState<Record<string, number>>({});
 
   const load = useCallback(() => {
@@ -237,25 +233,44 @@ export default function TrendReviewPage() {
 
   const trend = trends[Math.min(index, trends.length - 1)];
 
-  // Poll the active trend while any of its clip transcripts are actively processing (not timed out).
+  // Poll live status (checking DB + WhisperX directly) while any clip is still processing.
   useEffect(() => {
     if (!trend?.id) return;
     const transcripts = trend.events?.usable_video_transcripts || {};
-    const hasProcessing = Object.values(transcripts).some((t) => t?.status === "processing" && !isTranscriptStale(t));
-    if (!hasProcessing) return;
+    const processingUrls = Object.entries(transcripts)
+      .filter(([, t]) => t?.status === "processing")
+      .map(([url]) => url);
+    if (processingUrls.length === 0) return;
 
     const timer = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/news/trends/${trend.id}`);
-        if (!res.ok) return;
-        const data: { trend?: TrendReview } = await res.json();
-        if (data.trend) {
-          setTrends((prev) => prev.map((t) => (t.id === data.trend!.id ? data.trend! : t)));
+      for (const clipUrl of processingUrls) {
+        try {
+          const res = await fetch(`/api/news/trends/${trend.id}/transcript?clip_url=${encodeURIComponent(clipUrl)}`);
+          if (!res.ok) continue;
+          const data: { transcript?: VideoTranscriptEntry | null } = await res.json();
+          if (data.transcript && data.transcript.status !== "processing") {
+            setTrends((prev) =>
+              prev.map((t) =>
+                t.id === trend.id && t.events
+                  ? {
+                      ...t,
+                      events: {
+                        ...t.events,
+                        usable_video_transcripts: {
+                          ...(t.events.usable_video_transcripts || {}),
+                          [clipUrl]: data.transcript!,
+                        },
+                      },
+                    }
+                  : t
+              )
+            );
+          }
+        } catch {
+          // ignore transient poll errors
         }
-      } catch {
-        // ignore transient poll errors
       }
-    }, 4000);
+    }, 5000);
 
     return () => clearInterval(timer);
   }, [trend?.id, trend?.events?.usable_video_transcripts]);
@@ -385,6 +400,43 @@ export default function TrendReviewPage() {
       showFeedback(msg, 5000);
     } finally {
       setFetchingTranscripts((prev) => ({ ...prev, [clipUrl]: false }));
+    }
+  };
+
+  const savePastedTranscript = async (clipUrl: string) => {
+    const text = (pasteTextFor[clipUrl] || "").trim();
+    if (!text) return showFeedback("Paste the transcript text first.");
+    setSavingPasteFor((prev) => ({ ...prev, [clipUrl]: true }));
+    try {
+      const res = await fetch(`/api/news/trends/${trend.id}/transcript`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clip_url: clipUrl, text }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not save transcript.");
+      setTrends((prev) =>
+        prev.map((t) =>
+          t.id === trend.id && t.events
+            ? {
+                ...t,
+                events: {
+                  ...t.events,
+                  usable_video_transcripts: {
+                    ...(t.events.usable_video_transcripts || {}),
+                    [clipUrl]: data.transcript,
+                  },
+                },
+              }
+            : t
+        )
+      );
+      setPasteOpenFor((prev) => ({ ...prev, [clipUrl]: false }));
+      showFeedback("Transcript saved to event.");
+    } catch (err) {
+      showFeedback(err instanceof Error ? err.message : "Could not save transcript.");
+    } finally {
+      setSavingPasteFor((prev) => ({ ...prev, [clipUrl]: false }));
     }
   };
 
@@ -823,9 +875,9 @@ export default function TrendReviewPage() {
 
             {draft.media.map((m, i) => {
               const transcript = m.type === "clip" ? transcriptsMap[m.url] : undefined;
-              const stale = isTranscriptStale(transcript);
-              const effectiveStatus = stale ? "error" : transcript?.status;
+              const effectiveStatus = transcript?.status;
               const isFetching = !!fetchingTranscripts[m.url] || effectiveStatus === "processing";
+              const pasteOpen = !!pasteOpenFor[m.url];
 
               return (
                 <div key={m.id} className="flex items-start gap-3 rounded-xl border border-[var(--border)] p-3">
@@ -848,23 +900,69 @@ export default function TrendReviewPage() {
                       <>
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <p className="text-xs text-[var(--text-faint)] truncate max-w-full">Clip · {labelFor(m.url)}</p>
-                          <button
-                            onClick={() => fetchClipTranscript(m.url)}
-                            disabled={isFetching}
-                            className="btn-secondary text-xs py-1 px-2.5 inline-flex items-center gap-1.5 disabled:opacity-50"
-                          >
-                            {isFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
-                            {effectiveStatus === "processing"
-                              ? "Transcribing..."
-                              : effectiveStatus === "error"
-                                ? "Retry Transcript"
-                                : effectiveStatus === "done"
-                                  ? "Refresh Transcript"
-                                  : "Fetch Transcript"}
-                          </button>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPasteOpenFor((prev) => ({ ...prev, [m.url]: !prev[m.url] }));
+                                if (!pasteTextFor[m.url] && transcript?.text) {
+                                  setPasteTextFor((prev) => ({ ...prev, [m.url]: transcript.text || "" }));
+                                }
+                              }}
+                              className="btn-ghost text-xs py-1 px-2.5 inline-flex items-center gap-1.5 border border-[var(--border)] rounded-lg"
+                            >
+                              <ClipboardPaste className="w-3.5 h-3.5" />
+                              Paste Transcript
+                            </button>
+                            <button
+                              onClick={() => fetchClipTranscript(m.url)}
+                              disabled={isFetching}
+                              className="btn-secondary text-xs py-1 px-2.5 inline-flex items-center gap-1.5 disabled:opacity-50"
+                            >
+                              {isFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                              {effectiveStatus === "processing"
+                                ? "Transcribing..."
+                                : effectiveStatus === "error"
+                                  ? "Retry Transcript"
+                                  : effectiveStatus === "done"
+                                    ? "Refresh Transcript"
+                                    : "Fetch Transcript"}
+                            </button>
+                          </div>
                         </div>
 
                         <VideoPlayer url={m.url} onDuration={(sec) => recordDuration(m.url, sec)} />
+
+                        {pasteOpen && (
+                          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-raised)]/50 p-2.5 space-y-2">
+                            <textarea
+                              value={pasteTextFor[m.url] ?? ""}
+                              onChange={(e) => setPasteTextFor((prev) => ({ ...prev, [m.url]: e.target.value }))}
+                              onFocus={focusAtEnd}
+                              rows={4}
+                              placeholder="Paste YouTube or external transcript here..."
+                              className="input-field text-xs py-2 w-full resize-y"
+                            />
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setPasteOpenFor((prev) => ({ ...prev, [m.url]: false }))}
+                                className="btn-ghost text-xs py-1 px-2.5"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => savePastedTranscript(m.url)}
+                                disabled={!!savingPasteFor[m.url]}
+                                className="btn-secondary text-xs py-1 px-3 inline-flex items-center gap-1.5 disabled:opacity-50"
+                              >
+                                {savingPasteFor[m.url] && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                Save Transcript
+                              </button>
+                            </div>
+                          </div>
+                        )}
 
                         {transcript && (
                           <div
@@ -888,20 +986,18 @@ export default function TrendReviewPage() {
                               )}
                             </div>
                             {effectiveStatus === "processing" && (
-                              <p className="text-[var(--text-muted)]">Downloading, splitting audio, and running WhisperX...</p>
+                              <p className="text-[var(--text-muted)]">
+                                Downloading, splitting audio, and running WhisperX... (checking live status)
+                              </p>
                             )}
                             {effectiveStatus === "error" && (
-                              <p className="text-[var(--color-red)]">
-                                {stale
-                                  ? "Transcription timed out — click Retry Transcript."
-                                  : transcript.error || "Failed to transcribe clip."}
-                              </p>
+                              <p className="text-[var(--color-red)]">{transcript.error || "Failed to transcribe clip."}</p>
                             )}
                             {effectiveStatus === "empty" && (
                               <p className="text-[var(--text-muted)]">No spoken audio detected in this clip.</p>
                             )}
                             {effectiveStatus === "done" && (
-                              <div className="max-h-40 overflow-y-auto space-y-1 pr-1 text-[var(--text-muted)]">
+                              <div className="max-h-40 overflow-y-auto space-y-1 pr-1 text-[var(--text-muted)] whitespace-pre-wrap">
                                 {transcript.segments && transcript.segments.length > 0 ? (
                                   transcript.segments.map((seg, idx) => (
                                     <p key={idx} className="leading-relaxed">
