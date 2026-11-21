@@ -3,13 +3,14 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 
 /** Trends waiting for human review after passing AI Event Normalizer and
  * duplicate check in n8n. Includes the linked event record (event_title,
- * fingerprint, snapshot_summary, global_relevance_score, confidence, batch_id). */
+ * fingerprint, snapshot_summary, global_relevance_score, confidence, batch_id,
+ * usable_video_transcripts). */
 export async function GET() {
   try {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from("Trend_Processing")
-      .select("*, events:events_id(id, event_title, fingerprint, snapshot_summary, global_relevance_score, confidence, batch_id)")
+      .select("*, events:events_id(id, event_title, fingerprint, snapshot_summary, global_relevance_score, confidence, batch_id, usable_video_transcripts)")
       .eq("status", "needs_review")
       .order("created_at", { ascending: false });
 
