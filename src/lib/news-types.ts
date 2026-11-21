@@ -109,17 +109,17 @@ export const EVENT_STATUS_COLORS: Record<EventStatus, "purple" | "cyan" | "green
 
 /** One piece of a video post, in the order it will be used: a still image,
  * or a window (seconds) cut out of a source video. The same source video can
- * appear several times with different windows. `description` is what the reviewer
- * says the image shows or what happens in the clip; captions are written from it. */
+ * appear several times with different windows. `full: true` means use the whole
+ * video from 0:00 to end (for the planning agent to trim as needed). */
 export type MediaItem =
   | { type: "image"; url: string; description?: string }
-  | { type: "clip"; url: string; start: number; end: number; description?: string };
+  | { type: "clip"; url: string; start: number; end: number; full?: boolean; description?: string };
 
 /** How long a still image stays on screen when merged into a video. */
 export const IMAGE_SECONDS = 3;
 
 export function mediaDuration(items: MediaItem[]): number {
-  return items.reduce((sum, m) => sum + (m.type === "image" ? IMAGE_SECONDS : m.end - m.start), 0);
+  return items.reduce((sum, m) => sum + (m.type === "image" ? IMAGE_SECONDS : Math.max(0, m.end - m.start)), 0);
 }
 
 const IMAGE_EXT = /\.(png|jpe?g|webp|gif|avif)(\?|#|$)/i;
