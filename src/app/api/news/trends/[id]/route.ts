@@ -32,8 +32,11 @@ function validMedia(value: unknown): value is MediaItem[] {
       if (!m || typeof m !== "object" || typeof m.url !== "string" || m.url === "") return false;
       if (m.description !== undefined && typeof m.description !== "string") return false;
       if (m.type === "image") return true;
+      if (m.type !== "clip") return false;
+      if (m.full === true) {
+        return typeof m.start === "number" && typeof m.end === "number" && m.start >= 0 && m.end >= 0;
+      }
       return (
-        m.type === "clip" &&
         typeof m.start === "number" &&
         typeof m.end === "number" &&
         m.start >= 0 &&
@@ -117,7 +120,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if ("selected_media" in body) {
       if (!validMedia(body.selected_media)) {
         return NextResponse.json(
-          { error: "Each clip needs a start time before its end time, and every item needs a URL." },
+          { error: "Each clip needs a start time before its end time (or Full video selected), and every item needs a URL." },
           { status: 400 }
         );
       }
