@@ -15,6 +15,21 @@ export interface ArticleContent {
   body?: string;
 }
 
+export interface VideoTranscriptSegment {
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface VideoTranscriptEntry {
+  status: "processing" | "done" | "empty" | "error";
+  language?: string;
+  text?: string;
+  segments?: VideoTranscriptSegment[];
+  error?: string;
+  updated_at?: string;
+}
+
 export interface NewsEvent {
   id: number;
   event_title?: string;
@@ -28,6 +43,7 @@ export interface NewsEvent {
   editorial_metadata?: Record<string, unknown>;
   usablethumbnails?: unknown;
   usablevideos?: unknown;
+  usable_video_transcripts?: Record<string, VideoTranscriptEntry> | null;
   social_headline?: string;
   alt_thumbnail?: string;
   thumbnail?: string;
@@ -134,6 +150,7 @@ export interface TrendEventSummary {
   snapshot_summary?: string | null;
   global_relevance_score?: number | null;
   confidence?: number | null;
+  usable_video_transcripts?: Record<string, VideoTranscriptEntry> | null;
 }
 
 export interface TrendReview {
