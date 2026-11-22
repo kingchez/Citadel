@@ -289,12 +289,26 @@ export default function EventDetailPage({ params }: EventDetailProps) {
       </div>
 
       <div className="card p-4 sm:p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Instagram Caption</label>
+          {savingField && <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--text-faint)]" />}
+        </div>
+        <textarea
+          defaultValue={event.instagram_caption || ""}
+          onBlur={(e) => e.target.value !== (event.instagram_caption || "") && handleFieldBlur({ instagram_caption: e.target.value })}
+          rows={6}
+          className="input-field resize-y text-sm leading-relaxed"
+          placeholder="Instagram caption (shorter full-story format with paragraph breaks)..."
+        />
+      </div>
+
+      <div className="card p-4 sm:p-5 space-y-3">
         <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Snapshot Summary</label>
         <textarea
           defaultValue={event.snapshot_summary || ""}
           onBlur={(e) => e.target.value !== (event.snapshot_summary || "") && handleFieldBlur({ snapshot_summary: e.target.value })}
           rows={3}
-          className="input-field resize-none"
+          className="input-field resize-y"
           placeholder="Quick summary of the event..."
         />
       </div>
@@ -331,7 +345,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
               handleFieldBlur({ article: { ...event.article, body: e.target.value } })
             }
             rows={8}
-            className="input-field resize-none font-mono text-sm"
+            className="input-field resize-y font-mono text-sm"
           />
         </div>
       </div>
