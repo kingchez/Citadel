@@ -33,6 +33,7 @@ import {
   Mic,
   Newspaper,
   Plus,
+  RotateCcw,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -352,38 +353,59 @@ export default function TrendReviewPage() {
   const total = totalSeconds(draft.media, videoDurations);
   const transcriptsMap: Record<string, VideoTranscriptEntry> = trend.events?.usable_video_transcripts || {};
 
-  const fetchClipTranscript = async (clipUrl: string) => {
+  const fetchClipTranscript = async (clipUrl: string, force = false) => {
     if (!trend.events_id) {
       showFeedback("This trend has no linked event yet.");
       return;
     }
     setFetchingTranscripts((prev) => ({ ...prev, [clipUrl]: true }));
-    // Optimistically show Transcribing... immediately before the Drive check returns.
-    setTrends((prev) =>
-      prev.map((t) =>
-        t.id === trend.id && t.events
-          ? {
-              ...t,
-              events: {
-                ...t.events,
-                usable_video_transcripts: {
-                  ...(t.events.usable_video_transcripts || {}),
-                  [clipUrl]: { status: "processing", updated_at: new Date().toISOString() },
+    if (force || transcriptsMap[clipUrl]?.status !== "done") {
+      setTrends((prev) =>
+        prev.map((t) =>
+          t.id === trend.id && t.events
+            ? {
+                ...t,
+                events: {
+                  ...t.events,
+                  usable_video_transcripts: {
+                    ...(t.events.usable_video_transcripts || {}),
+                    [clipUrl]: { status: "processing", updated_at: new Date().toISOString() },
+                  },
                 },
-              },
-            }
-          : t
-      )
-    );
+              }
+            : t
+        )
+      );
+    }
     try {
       const res = await fetch(`/api/news/trends/${trend.id}/transcript`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clip_url: clipUrl }),
+        body: JSON.stringify({ clip_url: clipUrl, force }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not start transcript.");
-      showFeedback("Fetching transcript via WhisperX — this page will update automatically.");
+      if (data.cached && data.transcript) {
+        setTrends((prev) =>
+          prev.map((t) =>
+            t.id === trend.id && t.events
+              ? {
+                  ...t,
+                  events: {
+                    ...t.events,
+                    usable_video_transcripts: {
+                      ...(t.events.usable_video_transcripts || {}),
+                      [clipUrl]: data.transcript,
+                    },
+                  },
+                }
+              : t
+          )
+        );
+        showFeedback("Loaded saved transcript from database.");
+      } else {
+        showFeedback("Fetching transcript via WhisperX — this page will update automatically.");
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Could not fetch transcript.";
       setTrends((prev) =>
@@ -920,7 +942,7 @@ export default function TrendReviewPage() {
                               Paste Transcript
                             </button>
                             <button
-                              onClick={() => fetchClipTranscript(m.url)}
+                              onClick={() => fetchClipTranscript(m.url, false)}
                               disabled={isFetching}
                               className="btn-secondary text-xs py-1 px-2.5 inline-flex items-center gap-1.5 disabled:opacity-50"
                             >
@@ -929,10 +951,20 @@ export default function TrendReviewPage() {
                                 ? "Transcribing..."
                                 : effectiveStatus === "error"
                                   ? "Retry Transcript"
-                                  : effectiveStatus === "done"
-                                    ? "Refresh Transcript"
-                                    : "Fetch Transcript"}
+                                  : "Fetch Transcript"}
                             </button>
+                            {(effectiveStatus === "done" || effectiveStatus === "empty") && (
+                              <button
+                                type="button"
+                                onClick={() => fetchClipTranscript(m.url, true)}
+                                disabled={isFetching}
+                                className="btn-ghost text-xs py-1 px-2.5 inline-flex items-center gap-1.5 border border-[var(--border)] rounded-lg disabled:opacity-50"
+                                title="Re-run WhisperX transcription from scratch"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                                Redo
+                              </button>
+                            )}
                           </div>
                         </div>
 
