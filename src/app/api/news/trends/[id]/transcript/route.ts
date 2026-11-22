@@ -98,6 +98,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { id } = await params;
     const body = await request.json().catch(() => ({}));
     const clipUrl = typeof body.clip_url === "string" ? body.clip_url.trim() : "";
+    const force = body.force === true;
 
     if (!clipUrl) {
       return NextResponse.json({ error: "clip_url is required." }, { status: 400 });
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const supabase = getSupabaseAdmin();
     const { data: trend, error: readErr } = await supabase
       .from("Trend_Processing")
-      .select("id, events_id")
+      .select("id, events_id, events:events_id(id, usable_video_transcripts)")
       .eq("id", id)
       .single();
 
@@ -115,6 +116,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     if (!trend.events_id) {
       return NextResponse.json({ error: "Trend is not linked to an event yet." }, { status: 400 });
+    }
+
+    // If not forced (Redo), return the existing completed transcript from the DB immediately.
+    if (!force) {
+      const eventsObj = trend.events as unknown as {
+        usable_video_transcripts?: Record<string, VideoTranscriptEntry> | null;
+      } | null;
+      const existing = eventsObj?.usable_video_transcripts?.[clipUrl];
+      if (existing && existing.status === "done" && existing.text) {
+        return NextResponse.json({
+          ok: true,
+          cached: true,
+          event_id: trend.events_id,
+          clip_url: clipUrl,
+          transcript: existing,
+        });
+      }
     }
 
     const res = await fetch(CLIP_TRANSCRIPT_WEBHOOK_URL, {
@@ -135,7 +153,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       );
     }
 
-    return NextResponse.json({ ok: true, event_id: trend.events_id, clip_url: clipUrl, ...data });
+    return NextResponse.json({ ok: true, cached: false, event_id: trend.events_id, clip_url: clipUrl, ...data });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Unknown error" },
