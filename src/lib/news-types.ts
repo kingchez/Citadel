@@ -45,6 +45,7 @@ export interface NewsEvent {
   usablevideos?: unknown;
   usable_video_transcripts?: Record<string, VideoTranscriptEntry> | null;
   social_headline?: string;
+  instagram_caption?: string | null;
   alt_thumbnail?: string;
   thumbnail?: string;
   status: EventStatus;
