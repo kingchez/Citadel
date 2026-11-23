@@ -10,10 +10,23 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const supabase = getSupabaseAdmin();
 
+    const { data: current, error: readErr } = await supabase
+      .from("articles")
+      .select("status")
+      .eq("id", id)
+      .single();
+
+    if (readErr || !current) {
+      return NextResponse.json({ error: readErr?.message || "Article not found" }, { status: 404 });
+    }
+
+    // Stage 1 approval (review_ready) -> canva_ready; Stage 2 approval (final_review) -> approved
+    const nextStatus = current.status === "final_review" ? "approved" : "canva_ready";
+
     const { data, error } = await supabase
       .from("articles")
       .update({
-        status: "approved",
+        status: nextStatus,
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
