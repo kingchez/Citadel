@@ -11,7 +11,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("events")
       .select(
-        "id, event_title, snapshot_summary, global_relevance_score, confidence, created_at, article, usablethumbnails, usablevideos, social_headline, alt_thumbnail, thumbnail, status, category_reference, wordpress_posted, is_reviewed, golden_window_hours, video_id, post_format, selected_media, selected_thumbnails, voiceover, batch_id"
+        "id, event_title, snapshot_summary, global_relevance_score, confidence, created_at, article, usablethumbnails, usablevideos, social_headline, alt_thumbnail, thumbnail, status, category_reference, wordpress_posted, is_reviewed, golden_window_hours, video_id, post_format, selected_media, selected_thumbnails, voiceover, batch_id, Thumbnail_GDrive_Url, Thumbnail_GDrive_Id, preferred_templates, canva_template_key, canva_design_version"
       )
       .neq("status", "pending")
       .order("golden_window_hours", { ascending: true, nullsFirst: false })
