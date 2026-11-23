@@ -437,6 +437,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
             )}
           </div>
           <div className="rounded-xl overflow-hidden border border-[var(--border)] bg-black/20 max-w-md">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={event.Thumbnail_GDrive_Url}
               alt="Generated Canva Design"
