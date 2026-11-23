@@ -3,9 +3,12 @@ export type ArticleStatus =
   | "researching"
   | "review_ready"
   | "revision_requested"
+  | "canva_ready"
+  | "final_review"
   | "approved"
   | "publishing"
   | "published"
+  | "scheduled"
   | "archived";
 
 export interface ArticleProduct {
@@ -93,6 +96,10 @@ export interface ArticleRow {
   wordpress_post_id?: number | null;
   wordpress_url?: string | null;
   scheduled_for?: string | null;
+  canva_design_url?: string | null;
+  canva_template_key?: string | null;
+  canva_design_version?: number | null;
+  preferred_templates?: string[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -115,9 +122,12 @@ export const ARTICLE_STATUS_LABELS: Record<ArticleStatus, string> = {
   researching: "Researching",
   review_ready: "Needs Review",
   revision_requested: "Revision Requested",
+  canva_ready: "Canva Ready",
+  final_review: "Final Review",
   approved: "Approved",
   publishing: "Publishing",
   published: "Published",
+  scheduled: "Scheduled",
   archived: "Archived",
 };
 
@@ -128,8 +138,11 @@ export const ARTICLE_STATUS_COLORS: Record<ArticleStatus, ArticleStatusColor> = 
   researching: "cyan",
   review_ready: "amber",
   revision_requested: "red",
+  canva_ready: "cyan",
+  final_review: "amber",
   approved: "purple",
   publishing: "cyan",
   published: "green",
+  scheduled: "purple",
   archived: "gray",
 };
