@@ -1,7 +1,9 @@
 export type EventStatus =
   | "pending"
   | "unprocessed"
+  | "article_ready"
   | "processing"
+  | "final_review"
   | "reviewed"
   | "paused"
   | "ready"
@@ -60,6 +62,11 @@ export interface NewsEvent {
   voiceover?: boolean;
   render_mode?: "render" | "canva" | null;
   batch_id?: string | null;
+  Thumbnail_GDrive_Url?: string | null;
+  Thumbnail_GDrive_Id?: string | null;
+  preferred_templates?: string[] | null;
+  canva_template_key?: string | null;
+  canva_design_version?: number | null;
 }
 
 /** Pulls a flat array of candidate thumbnail URLs out of usablethumbnails,
@@ -87,7 +94,9 @@ export function extractThumbnailCandidates(raw: unknown): string[] {
 export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
   pending: "Pending",
   unprocessed: "Unprocessed",
+  article_ready: "Article Ready",
   processing: "Processing",
+  final_review: "Final Review",
   reviewed: "Reviewed",
   paused: "Paused",
   ready: "Ready",
@@ -97,7 +106,9 @@ export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
 export const EVENT_STATUS_COLORS: Record<EventStatus, "purple" | "cyan" | "green" | "amber" | "red"> = {
   pending: "purple",
   unprocessed: "cyan",
+  article_ready: "cyan",
   processing: "amber",
+  final_review: "amber",
   reviewed: "green",
   paused: "red",
   ready: "cyan",
