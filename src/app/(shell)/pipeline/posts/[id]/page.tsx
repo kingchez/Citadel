@@ -20,6 +20,7 @@ import {
   Check,
   AlertTriangle,
   Maximize2,
+  RotateCcw,
   X,
 } from "lucide-react";
 import { cn, formatTimeAgo } from "@/lib/utils";
@@ -84,10 +85,30 @@ export default function ArticleDetailPage({ params }: ArticleDetailPageProps) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Approval failed");
-      showToast("Article Approved!");
+      showToast(data.article?.status === "canva_ready" ? "Sent to Canva Autofill!" : "Article Approved for Publishing!");
       loadArticle();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Approval failed");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRedoDesign = async () => {
+    if (!article) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/articles/${article.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "canva_ready" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not queue design redo");
+      showToast("Queued Canva design redo!");
+      loadArticle();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Redo failed");
     } finally {
       setActionLoading(false);
     }
@@ -198,18 +219,48 @@ export default function ArticleDetailPage({ params }: ArticleDetailPageProps) {
               Request Revision
             </button>
 
+            {article.status === "final_review" && (
+              <button
+                onClick={handleRedoDesign}
+                disabled={actionLoading}
+                className="btn-secondary text-xs flex items-center gap-1.5 py-2 px-3.5"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Redo Design
+              </button>
+            )}
+
             <button
               onClick={handleApprove}
-              disabled={actionLoading || article.status === "approved" || article.status === "published"}
+              disabled={actionLoading || article.status === "approved" || article.status === "published" || article.status === "scheduled" || article.status === "canva_ready"}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--color-green)] text-white hover:opacity-90 transition-opacity text-xs font-semibold disabled:opacity-40"
             >
               <CheckCircle2 className="w-4 h-4" />
-              {article.status === "approved" || article.status === "published"
+              {article.status === "approved" || article.status === "published" || article.status === "scheduled"
                 ? "Approved"
-                : "Approve & Schedule"}
+                : article.status === "final_review"
+                ? "Approve Final & Publish"
+                : article.status === "canva_ready"
+                ? "Generating Canva..."
+                : "Approve for Canva"}
             </button>
           </div>
         </div>
+
+        {article.canva_design_url && (
+          <div className="p-4 rounded-xl bg-[var(--surface-raised)] border border-[var(--border)] space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-[var(--text)]">
+                Canva Design {article.canva_design_version ? `(v${article.canva_design_version})` : ""}
+              </span>
+              {article.canva_template_key && (
+                <span className="text-[10px] font-mono text-[var(--text-faint)]">{article.canva_template_key}</span>
+              )}
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={article.canva_design_url} alt="Canva Design Preview" className="max-h-64 rounded-lg border border-[var(--border)] object-contain" />
+          </div>
+        )}
 
         {/* Revision Alert Banner */}
         {pendingRevisions.length > 0 && (
