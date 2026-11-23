@@ -12,17 +12,25 @@ import { Search, ChevronRight, Clock, Video, Newspaper, TrendingUp } from "lucid
 
 const TABS = [
   { key: "all", label: "All" },
-  { key: "needs_review", label: "Needs Review" },
+  { key: "final_review", label: "Final Reviews" },
   { key: "reviewed", label: "Reviewed" },
+  { key: "scheduled", label: "Scheduled" },
   { key: "paused", label: "Paused" },
 ];
 
 function matchesView(event: NewsEvent, view: string): boolean {
   switch (view) {
-    case "needs_review":
-      return event.status === "unprocessed" || event.status === "processing";
+    case "final_review":
+      return (
+        event.status === "final_review" ||
+        event.status === "article_ready" ||
+        event.status === "processing" ||
+        event.status === "unprocessed"
+      );
     case "reviewed":
       return event.status === "reviewed";
+    case "scheduled":
+      return event.status === "scheduled";
     case "paused":
       return event.status === "paused";
     default:
@@ -31,7 +39,7 @@ function matchesView(event: NewsEvent, view: string): boolean {
 }
 
 function EventRow({ event }: { event: NewsEvent }) {
-  const color = EVENT_STATUS_COLORS[event.status];
+  const color = EVENT_STATUS_COLORS[event.status] || "cyan";
   return (
     <Link
       href={`/news/events/${event.id}`}
@@ -82,7 +90,7 @@ function EventRow({ event }: { event: NewsEvent }) {
       </div>
 
       <div className="flex-shrink-0 max-sm:ml-7">
-        <span className={`badge badge-${color} text-[10px]`}>{EVENT_STATUS_LABELS[event.status]}</span>
+        <span className={`badge badge-${color} text-[10px]`}>{EVENT_STATUS_LABELS[event.status] || event.status}</span>
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0 max-sm:ml-auto">
@@ -145,8 +153,9 @@ function EventsContent() {
   const tabCounts = useMemo(
     () => ({
       all: events.length,
-      needs_review: events.filter((e) => matchesView(e, "needs_review")).length,
+      final_review: events.filter((e) => matchesView(e, "final_review")).length,
       reviewed: events.filter((e) => matchesView(e, "reviewed")).length,
+      scheduled: events.filter((e) => matchesView(e, "scheduled")).length,
       paused: events.filter((e) => matchesView(e, "paused")).length,
     }),
     [events]
