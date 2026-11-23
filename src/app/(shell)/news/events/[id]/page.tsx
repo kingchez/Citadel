@@ -15,6 +15,7 @@ import {
   TrendingUp,
   CheckCircle2,
   PauseCircle,
+  RotateCcw,
   Video,
   Image as ImageIcon,
   Loader2,
@@ -47,7 +48,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
   // Separate loading flags per action, so clicking a thumbnail doesn't make
   // the "Mark Reviewed" button look like it's loading, and vice versa.
   const [savingThumbnail, setSavingThumbnail] = useState(false);
-  const [savingStatus, setSavingStatus] = useState<"reviewed" | "paused" | null>(null);
+  const [savingStatus, setSavingStatus] = useState<"reviewed" | "paused" | "article_ready" | null>(null);
   const [savingField, setSavingField] = useState(false);
 
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -137,7 +138,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
     setSavingField(false);
   };
 
-  const handleSetStatus = async (status: "reviewed" | "paused") => {
+  const handleSetStatus = async (status: "reviewed" | "paused" | "article_ready") => {
     setSavingStatus(status);
     await patch({ status });
     setSavingStatus(null);
@@ -423,7 +424,40 @@ export default function EventDetailPage({ params }: EventDetailProps) {
         </div>
       </div>
 
+      {event.Thumbnail_GDrive_Url && (
+        <div className="card p-5 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="text-sm font-semibold text-[var(--text)]">
+              Canva Design {event.canva_design_version ? `(v${event.canva_design_version})` : ""}
+            </h2>
+            {event.canva_template_key && (
+              <span className="text-xs font-mono text-[var(--text-faint)] bg-[var(--surface-raised)] px-2 py-0.5 rounded border border-[var(--border)]">
+                {event.canva_template_key}
+              </span>
+            )}
+          </div>
+          <div className="rounded-xl overflow-hidden border border-[var(--border)] bg-black/20 max-w-md">
+            <img
+              src={event.Thumbnail_GDrive_Url}
+              alt="Generated Canva Design"
+              className="w-full h-auto object-contain"
+            />
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-end gap-3 [&>*]:flex-1 sm:[&>*]:flex-none [&>*]:justify-center">
+        {event.status !== "reviewed" && event.status !== "scheduled" && (
+          <button
+            onClick={() => handleSetStatus("article_ready")}
+            disabled={savingStatus !== null}
+            className="btn-secondary flex items-center gap-2 py-2.5 px-5 disabled:opacity-50"
+          >
+            {savingStatus === "article_ready" ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+            Redo Design
+          </button>
+        )}
+
         {event.status === "paused" ? (
           <span className="inline-flex items-center gap-2 py-2.5 px-5 rounded-xl bg-[var(--surface-raised)] border border-[var(--border)] text-sm font-semibold text-[var(--text-faint)]">
             <PauseCircle className="w-4 h-4" />
