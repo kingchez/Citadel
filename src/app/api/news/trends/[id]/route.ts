@@ -149,6 +149,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (typeof body.fingerprint === "string" && body.fingerprint.trim()) {
       eventUpdate.fingerprint = body.fingerprint.trim();
     }
+    if ("preferred_templates" in body) {
+      if (!Array.isArray(body.preferred_templates) || !body.preferred_templates.every((x) => typeof x === "string")) {
+        return NextResponse.json({ error: "preferred_templates must be a list of template keys." }, { status: 400 });
+      }
+      eventUpdate.preferred_templates = body.preferred_templates;
+    }
 
     if (body.status === "approved") {
       const format = (update.post_format ?? current.post_format) as string | null;
