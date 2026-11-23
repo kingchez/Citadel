@@ -21,6 +21,7 @@ import { ArticleStatusBadge } from "@/components/article-status-badge";
 const TABS = [
   { key: "all", label: "All Articles" },
   { key: "review", label: "Needs Review" },
+  { key: "final_review", label: "Final Reviews" },
   { key: "revisions", label: "Revisions" },
   { key: "published", label: "Published" },
 ];
@@ -45,10 +46,12 @@ function matchesArticleView(article: ArticleRow, view: string): boolean {
   switch (view) {
     case "review":
       return article.status === "review_ready";
+    case "final_review":
+      return article.status === "final_review" || article.status === "canva_ready";
     case "revisions":
       return article.status === "revision_requested";
     case "published":
-      return article.status === "published";
+      return article.status === "published" || article.status === "scheduled";
     default:
       return true;
   }
@@ -73,6 +76,7 @@ function ArticleRowItem({ article }: { article: ArticleRow }) {
       {/* Thumbnail Preview */}
       <div className="w-16 h-10 sm:w-20 sm:h-12 rounded-lg overflow-hidden bg-[var(--surface-raised)] border border-[var(--border)] flex-shrink-0 flex items-center justify-center relative">
         {article.thumbnail_drive_file_id ? (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={`https://drive.google.com/thumbnail?id=${article.thumbnail_drive_file_id}&sz=w400`}
             alt={article.title}
@@ -194,8 +198,9 @@ function ArticlesContent() {
     () => ({
       all: articles.length,
       review: articles.filter((a) => a.status === "review_ready").length,
+      final_review: articles.filter((a) => matchesArticleView(a, "final_review")).length,
       revisions: articles.filter((a) => a.status === "revision_requested").length,
-      published: articles.filter((a) => a.status === "published").length,
+      published: articles.filter((a) => matchesArticleView(a, "published")).length,
     }),
     [articles]
   );
