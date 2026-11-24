@@ -64,7 +64,7 @@ function emptyForm(purpose: TemplatePurpose): Form {
     labels: [newLabel(0)],
     duration: "2",
     width: "1080",
-    height: "1920",
+    height: purpose === "social" ? "800" : "1920",
     active: false,
     notes: "",
     usage_count: 0,
@@ -100,7 +100,7 @@ function formFromTemplate(t: CanvaTemplate): Form {
     })),
     duration: t.duration_seconds ? String(t.duration_seconds) : "2",
     width: String(t.media_width || 1080),
-    height: String(t.media_height || 1920),
+    height: String(t.media_height || (t.purpose === "social" ? 800 : 1920)),
     active: t.active,
     notes: t.notes || "",
     usage_count: t.usage_count || 0,
@@ -326,6 +326,7 @@ export default function TemplatesPage() {
                     onClick={() =>
                       patch({
                         purpose: p,
+                        height: !form.key ? (p === "social" ? "800" : "1920") : form.height,
                         slots: form.slots.map((s) => ({ ...s, kind: p === "social" ? "image" : s.kind })),
                       })
                     }
@@ -384,18 +385,16 @@ export default function TemplatesPage() {
               </div>
             </div>
 
-            {form.purpose === "video" && (
-              <div className="grid grid-cols-2 gap-3">
-                <label className="space-y-1">
-                  <span className="text-xs text-[var(--text-faint)]">Media width</span>
-                  <input value={form.width} onChange={(e) => patch({ width: e.target.value })} className="input-field text-sm py-2 w-full" inputMode="numeric" />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs text-[var(--text-faint)]">Media height</span>
-                  <input value={form.height} onChange={(e) => patch({ height: e.target.value })} className="input-field text-sm py-2 w-full" inputMode="numeric" />
-                </label>
-              </div>
-            )}
+            <div className="grid grid-cols-2 gap-3 sm:col-span-2 max-w-sm">
+              <label className="space-y-1">
+                <span className="text-xs text-[var(--text-faint)]">Media width (px)</span>
+                <input value={form.width} onChange={(e) => patch({ width: e.target.value })} className="input-field text-sm py-2 w-full" inputMode="numeric" />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs text-[var(--text-faint)]">Media height (px)</span>
+                <input value={form.height} onChange={(e) => patch({ height: e.target.value })} className="input-field text-sm py-2 w-full" inputMode="numeric" />
+              </label>
+            </div>
           </div>
 
           {hasSlotsEditor && (
@@ -561,7 +560,7 @@ export default function TemplatesPage() {
                   <span className={`badge ${t.active ? "badge-green" : "badge-red"}`}>{t.active ? "Active" : "Off"}</span>
                 </div>
                 <p className="text-xs text-[var(--text-faint)]">
-                  {(t.slots || []).length} media · {(t.labels || []).length} text{(t.labels || []).length === 1 ? "" : "s"}
+                  {(t.slots || []).length} media ({t.media_width || 1080}×{t.media_height || 800}) · {(t.labels || []).length} text{(t.labels || []).length === 1 ? "" : "s"}
                   {t.duration_seconds ? ` · ${t.duration_seconds}s` : ""} · used {t.usage_count}×
                 </p>
               </div>
