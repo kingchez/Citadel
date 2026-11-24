@@ -21,12 +21,7 @@ const TABS = [
 function matchesView(event: NewsEvent, view: string): boolean {
   switch (view) {
     case "final_review":
-      return (
-        event.status === "final_review" ||
-        event.status === "article_ready" ||
-        event.status === "processing" ||
-        event.status === "unprocessed"
-      );
+      return event.status === "final_review";
     case "reviewed":
       return event.status === "reviewed";
     case "scheduled":
