@@ -150,7 +150,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       eventUpdate.fingerprint = body.fingerprint.trim();
     }
     if ("preferred_templates" in body) {
-      if (!Array.isArray(body.preferred_templates) || !body.preferred_templates.every((x) => typeof x === "string")) {
+      if (!Array.isArray(body.preferred_templates) || !body.preferred_templates.every((x: unknown) => typeof x === "string")) {
         return NextResponse.json({ error: "preferred_templates must be a list of template keys." }, { status: 400 });
       }
       eventUpdate.preferred_templates = body.preferred_templates;
