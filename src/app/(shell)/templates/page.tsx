@@ -26,8 +26,8 @@ interface Form {
   label: string;
   purpose: TemplatePurpose;
   role: "scene" | "intro" | "outro";
-  category: string;
-  newCategory: string;
+  channels: string[];
+  newChannel: string;
   brand: string;
   slots: FormSlot[];
   labels: FormLabel[];
@@ -40,7 +40,6 @@ interface Form {
   last_used_at: string | null;
 }
 
-const NEW_CATEGORY = "__new__";
 const DEFAULT_LEVELS = ["h1", "h2", "h3"];
 
 function newLabel(index: number): FormLabel {
@@ -58,8 +57,8 @@ function emptyForm(purpose: TemplatePurpose): Form {
     label: "",
     purpose,
     role: "scene",
-    category: "All",
-    newCategory: "",
+    channels: ["All"],
+    newChannel: "",
     brand: "",
     slots: [newSlot(0, purpose)],
     labels: [newLabel(0)],
@@ -73,14 +72,22 @@ function emptyForm(purpose: TemplatePurpose): Form {
   };
 }
 
+function normalizeTemplateChannels(t: CanvaTemplate): string[] {
+  if (Array.isArray(t.channel) && t.channel.length > 0) return t.channel;
+  if (typeof (t as unknown as { channel?: unknown }).channel === "string") {
+    return [((t as unknown as { channel: string }).channel || "All").trim() || "All"];
+  }
+  return ["All"];
+}
+
 function formFromTemplate(t: CanvaTemplate): Form {
   return {
     key: t.key,
     label: t.label,
     purpose: t.purpose,
     role: t.role === "intro" || t.role === "outro" ? t.role : "scene",
-    category: t.category || "All",
-    newCategory: "",
+    channels: normalizeTemplateChannels(t),
+    newChannel: "",
     brand: t.brand_template_id || "",
     slots: (t.slots || []).map((s) => ({ field: s.field, kind: s.kind, seconds: s.seconds ? String(s.seconds) : "" })),
     labels: (t.labels || []).map((l) => ({
@@ -103,11 +110,12 @@ function formFromTemplate(t: CanvaTemplate): Form {
 
 function toPayload(f: Form) {
   const hasSlots = f.purpose === "social" || f.role === "scene";
+  const channel = f.channels.length > 0 ? f.channels : ["All"];
   return {
     label: f.label,
     purpose: f.purpose,
     role: f.purpose === "social" ? "post" : f.role,
-    category: f.category === NEW_CATEGORY ? f.newCategory.trim() : f.category,
+    channel,
     brand_template_id: f.brand,
     slots: hasSlots
       ? f.slots.map((s) =>
@@ -132,7 +140,7 @@ function toPayload(f: Form) {
 
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState<CanvaTemplate[]>([]);
-  const [categories, setCategories] = useState<string[]>(["All"]);
+  const [channels, setChannels] = useState<string[]>(["All", "News"]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | TemplatePurpose>("all");
   const [form, setForm] = useState<Form | null>(null);
@@ -142,9 +150,9 @@ export default function TemplatesPage() {
   const load = useCallback(() => {
     fetch("/api/templates")
       .then((r) => r.json())
-      .then((data: { templates?: CanvaTemplate[]; categories?: string[] }) => {
+      .then((data: { templates?: CanvaTemplate[]; channels?: string[] }) => {
         setTemplates(data.templates || []);
-        setCategories(data.categories || ["All"]);
+        setChannels(data.channels || ["All", "News"]);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -164,6 +172,31 @@ export default function TemplatesPage() {
     setForm((f) => (f ? { ...f, slots: f.slots.map((s, j) => (j === i ? { ...s, ...changes } : s)) } : f));
   const editLabel = (i: number, changes: Partial<FormLabel>) =>
     setForm((f) => (f ? { ...f, labels: f.labels.map((l, j) => (j === i ? { ...l, ...changes } : l)) } : f));
+
+  const toggleChannel = (ch: string) => {
+    setForm((f) => {
+      if (!f) return f;
+      if (ch === "All") {
+        return { ...f, channels: ["All"] };
+      }
+      const withoutAll = f.channels.filter((c) => c !== "All");
+      const exists = withoutAll.includes(ch);
+      const next = exists ? withoutAll.filter((c) => c !== ch) : [...withoutAll, ch];
+      return { ...f, channels: next.length > 0 ? next : ["All"] };
+    });
+  };
+
+  const addCustomChannel = () => {
+    if (!form) return;
+    const raw = form.newChannel.trim();
+    if (!raw) return;
+    if (!channels.includes(raw)) {
+      setChannels((prev) => [...prev, raw]);
+    }
+    const withoutAll = form.channels.filter((c) => c !== "All");
+    const next = withoutAll.includes(raw) ? withoutAll : [...withoutAll, raw];
+    patch({ channels: next.length > 0 ? next : [raw], newChannel: "" });
+  };
 
   const save = async () => {
     if (!form) return;
@@ -317,21 +350,39 @@ export default function TemplatesPage() {
               </label>
             )}
 
-            <label className="space-y-1">
-              <span className="text-xs text-[var(--text-faint)]">Category it serves</span>
-              <select value={form.category} onChange={(e) => patch({ category: e.target.value })} className="input-field text-sm py-2 w-full">
-                {categories.map((c) => (
-                  <option key={c} value={c}>
-                    {c === "All" ? "All categories" : c}
-                  </option>
-                ))}
-                {!categories.includes(form.category) && form.category !== NEW_CATEGORY && <option value={form.category}>{form.category}</option>}
-                <option value={NEW_CATEGORY}>+ Add a new category…</option>
-              </select>
-              {form.category === NEW_CATEGORY && (
-                <input value={form.newCategory} onChange={(e) => patch({ newCategory: e.target.value })} className="input-field text-sm py-2 w-full mt-2" placeholder="New category name" />
-              )}
-            </label>
+            <div className="space-y-2 sm:col-span-2">
+              <span className="text-xs text-[var(--text-faint)]">Channels it serves (pick All, News, or one/more channels)</span>
+              <div className="flex flex-wrap gap-1.5">
+                {Array.from(new Set([...channels, ...form.channels])).map((c) => {
+                  const selected = form.channels.includes(c);
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => toggleChannel(c)}
+                      className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                        selected
+                          ? "border-[var(--color-purple)] bg-[var(--color-purple-soft)] text-[var(--text)] font-medium"
+                          : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]"
+                      }`}
+                    >
+                      {c === "All" ? "All channels" : c}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-2 max-w-sm">
+                <input
+                  value={form.newChannel}
+                  onChange={(e) => patch({ newChannel: e.target.value })}
+                  className="input-field text-xs py-1.5 flex-1"
+                  placeholder="Add another channel name…"
+                />
+                <button type="button" onClick={addCustomChannel} className="btn-secondary text-xs py-1.5 px-3">
+                  Add
+                </button>
+              </div>
+            </div>
 
             {form.purpose === "video" && (
               <div className="grid grid-cols-2 gap-3">
@@ -493,26 +544,33 @@ export default function TemplatesPage() {
       )}
 
       <div className="space-y-3">
-        {shown.map((t) => (
-          <div key={t.key} className="card p-4 flex items-start justify-between gap-3 flex-wrap">
-            <div className="min-w-0 space-y-1">
-              <p className="text-sm font-semibold text-[var(--text)]">{t.label}</p>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="badge badge-purple">{t.purpose === "video" ? "Video" : "Social"}</span>
-                {t.role !== "post" && <span className="badge badge-cyan">{t.role}</span>}
-                <span className="badge badge-amber">{t.category === "All" ? "All categories" : t.category}</span>
-                <span className={`badge ${t.active ? "badge-green" : "badge-red"}`}>{t.active ? "Active" : "Off"}</span>
+        {shown.map((t) => {
+          const tChannels = normalizeTemplateChannels(t);
+          return (
+            <div key={t.key} className="card p-4 flex items-start justify-between gap-3 flex-wrap">
+              <div className="min-w-0 space-y-1">
+                <p className="text-sm font-semibold text-[var(--text)]">{t.label}</p>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="badge badge-purple">{t.purpose === "video" ? "Video" : "Social"}</span>
+                  {t.role !== "post" && <span className="badge badge-cyan">{t.role}</span>}
+                  {tChannels.map((ch) => (
+                    <span key={ch} className="badge badge-amber">
+                      {ch === "All" ? "All channels" : ch}
+                    </span>
+                  ))}
+                  <span className={`badge ${t.active ? "badge-green" : "badge-red"}`}>{t.active ? "Active" : "Off"}</span>
+                </div>
+                <p className="text-xs text-[var(--text-faint)]">
+                  {(t.slots || []).length} media · {(t.labels || []).length} text{(t.labels || []).length === 1 ? "" : "s"}
+                  {t.duration_seconds ? ` · ${t.duration_seconds}s` : ""} · used {t.usage_count}×
+                </p>
               </div>
-              <p className="text-xs text-[var(--text-faint)]">
-                {(t.slots || []).length} media · {(t.labels || []).length} text{(t.labels || []).length === 1 ? "" : "s"}
-                {t.duration_seconds ? ` · ${t.duration_seconds}s` : ""} · used {t.usage_count}×
-              </p>
+              <button onClick={() => setForm(formFromTemplate(t))} className="btn-secondary text-sm py-1.5 px-4">
+                Edit
+              </button>
             </div>
-            <button onClick={() => setForm(formFromTemplate(t))} className="btn-secondary text-sm py-1.5 px-4">
-              Edit
-            </button>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
