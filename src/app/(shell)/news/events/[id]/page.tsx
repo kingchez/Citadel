@@ -144,8 +144,13 @@ export default function EventDetailPage({ params }: EventDetailProps) {
 
   const handleSetStatus = async (status: "reviewed" | "paused" | "article_ready") => {
     setSavingStatus(status);
-    await patch({ status });
+    const ok = await patch({ status });
     setSavingStatus(null);
+    if (ok) {
+      if (status === "article_ready") showFeedback("Queued for Canva design redo — generating new design...");
+      else if (status === "reviewed") showFeedback("Marked as reviewed!");
+      else if (status === "paused") showFeedback("Event paused.");
+    }
   };
 
   const handleConvert = async () => {
@@ -231,6 +236,12 @@ export default function EventDetailPage({ params }: EventDetailProps) {
           </div>
         )}
       </div>
+
+      {feedback && (
+        <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:bottom-6 sm:right-6 z-50 flex items-center gap-3 px-4 sm:px-5 py-3 sm:py-3.5 rounded-xl bg-[var(--color-purple-soft)] border border-[var(--color-purple)]/60 shadow-2xl animate-slide-down max-w-sm">
+          <span className="text-sm font-medium text-[var(--text)]">{feedback}</span>
+        </div>
+      )}
 
       {(hasCanvaDesign || event.status === "final_review") && (
         <div className="flex items-center gap-1 p-1.5 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-fit max-w-full">
@@ -342,12 +353,6 @@ export default function EventDetailPage({ params }: EventDetailProps) {
           )}
         </div>
       </div>
-
-      {feedback && (
-        <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:bottom-6 sm:right-6 z-50 flex items-center gap-3 px-4 sm:px-5 py-3 sm:py-3.5 rounded-xl bg-[var(--color-purple-soft)] border border-[var(--color-purple)]/60 shadow-2xl animate-slide-down max-w-sm">
-          <span className="text-sm font-medium text-[var(--text)]">{feedback}</span>
-        </div>
-      )}
 
       <div className="card p-4 sm:p-5 space-y-3">
         <div className="flex items-center justify-between">
@@ -501,7 +506,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-3 [&>*]:flex-1 sm:[&>*]:flex-none [&>*]:justify-center">
-        {event.status !== "reviewed" && event.status !== "scheduled" && (
+        {event.status === "final_review" && (
           <button
             onClick={() => handleSetStatus("article_ready")}
             disabled={savingStatus !== null}
@@ -510,6 +515,13 @@ export default function EventDetailPage({ params }: EventDetailProps) {
             {savingStatus === "article_ready" ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
             Redo Design
           </button>
+        )}
+
+        {(event.status === "article_ready" || event.status === "processing") && (
+          <span className="inline-flex items-center gap-2 py-2.5 px-5 rounded-xl bg-[var(--color-amber-soft)] border border-[var(--color-amber)]/40 text-sm font-semibold text-[var(--color-amber)]">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            {event.status === "processing" ? "Generating Canva Design..." : "Queued for Canva Redo"}
+          </span>
         )}
 
         {event.status === "paused" ? (
