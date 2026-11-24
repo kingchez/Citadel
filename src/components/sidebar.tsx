@@ -20,6 +20,7 @@ import {
   FolderKanban,
   Newspaper,
   Inbox,
+  Eye,
   ListChecks,
   LayoutTemplate,
   Plus,
@@ -67,6 +68,7 @@ const PROJECTS: ProjectDef[] = [
     items: [
       { label: "All Articles", href: "/pipeline/posts", icon: Grid },
       { label: "Needs Review", href: "/pipeline/posts?view=review", icon: ClipboardCheck, countKey: "article.review" },
+      { label: "Final Reviews", href: "/pipeline/posts?view=final_review", icon: Eye, countKey: "article.finalReview" },
       { label: "Revisions", href: "/pipeline/posts?view=revisions", icon: AlertTriangle, countKey: "article.revisions" },
       { label: "Published", href: "/pipeline/posts?view=published", icon: CheckCircle, countKey: "article.published" },
       { label: "Weekly Topics", href: "/pipeline/posts/topics", icon: Sparkles },
@@ -79,7 +81,7 @@ const PROJECTS: ProjectDef[] = [
     items: [
       { label: "Trend Review", href: "/news/review", icon: ListChecks, countKey: "news.trendReview" },
       { label: "All Events", href: "/news/events", icon: Grid },
-      { label: "Needs Review", href: "/news/events?view=needs_review", icon: Inbox, countKey: "news.needsReview" },
+      { label: "Final Reviews", href: "/news/events?view=final_review", icon: Inbox, countKey: "news.finalReview" },
       { label: "Reviewed", href: "/news/events?view=reviewed", icon: CheckCircle, countKey: "news.reviewed" },
     ],
   },
@@ -127,6 +129,7 @@ export function Sidebar() {
         setCounts((prev) => ({
           ...prev,
           "article.review": arts.filter((a) => a.status === "review_ready").length,
+          "article.finalReview": arts.filter((a) => a.status === "final_review").length,
           "article.revisions": arts.filter((a) => a.status === "revision_requested").length,
           "article.published": arts.filter((a) => a.status === "published").length,
         }));
@@ -154,7 +157,7 @@ export function Sidebar() {
         const events = data.events || [];
         setCounts((prev) => ({
           ...prev,
-          "news.needsReview": events.filter((e) => e.status === "unprocessed" || e.status === "processing").length,
+          "news.finalReview": events.filter((e) => e.status === "final_review").length,
           "news.reviewed": events.filter((e) => e.status === "reviewed").length,
         }));
       })
@@ -175,8 +178,8 @@ export function Sidebar() {
     const [path, query] = href.split("?");
     if (pathname !== path) return false;
     if (!query) return !searchParams.get("view");
-    const view = new URLSearchParams(query).get("view");
-    return searchParams.get("view") === view;
+    const targetView = new URLSearchParams(query).get("view");
+    return searchParams.get("view") === targetView;
   };
 
   const handleLogout = async () => {
@@ -189,18 +192,17 @@ export function Sidebar() {
 
   return (
     <>
-      <div
-        className={cn("fixed inset-0 z-40 bg-black/60 md:hidden transition-opacity duration-200", navOpen ? "opacity-100" : "opacity-0 pointer-events-none")}
-        onClick={closeNav}
-        aria-hidden="true"
-      />
+      {navOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
+          onClick={closeNav}
+          aria-hidden="true"
+        />
+      )}
+
       <aside
-        onClick={(e) => {
-          if ((e.target as HTMLElement).closest("a")) closeNav();
-        }}
         className={cn(
-          "fixed left-0 top-0 h-dvh w-64 max-w-[85vw] bg-[var(--bg)] border-r border-[var(--border)] flex flex-col overflow-y-auto z-50 md:z-40",
-          "transition-transform duration-200 ease-out md:translate-x-0",
+          "fixed top-0 left-0 z-50 h-dvh w-64 bg-[var(--surface)] border-r border-[var(--border)] flex flex-col transition-transform duration-200 md:translate-x-0",
           navOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -208,152 +210,129 @@ export function Sidebar() {
           <Link href="/" className="flex items-center gap-3" aria-label="Citadel Dashboard">
             <div className="relative p-2 rounded-xl bg-[var(--color-purple-soft)] glow-purple">
               <Castle className="w-6 h-6 text-[var(--color-purple)]" />
-              <div className="absolute inset-0 rounded-xl bg-[var(--color-purple)]/30 blur-xl animate-pulse-glow" />
             </div>
             <div>
-              <span className="text-xl font-bold tracking-widest text-[var(--text)]">CITADEL</span>
-              <span className="text-[10px] text-[var(--text-faint)] uppercase tracking-wider block mt-0.5">
-                Command Center
-              </span>
+              <span className="text-lg font-bold tracking-tight text-[var(--text)]">Citadel</span>
+              <p className="text-[11px] text-[var(--text-faint)]">Content & Automation</p>
             </div>
           </Link>
         </div>
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto" aria-label="Main navigation">
           <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)]">
-            Workspace
+            Command Center
           </div>
 
           <Link
             href="/"
             className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-150 sidebar-item",
+              "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
               pathname === "/"
-                ? "bg-[var(--surface-raised)] text-[var(--text)] border-l-2 border-[var(--color-purple)]"
-                : "text-[var(--text)] hover:bg-[var(--surface-raised)]"
+                ? "bg-[var(--color-purple-soft)] text-[var(--text)] glow-purple"
+                : "text-[var(--text-muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--text)]"
             )}
-            aria-current={pathname === "/" ? "page" : undefined}
           >
-            <LayoutDashboard className="w-4.5 h-4.5 text-[var(--color-purple)] flex-shrink-0" />
-            <span className="flex-1 truncate">Dashboard</span>
+            <LayoutDashboard className={cn("w-4 h-4", pathname === "/" && "text-[var(--color-purple)]")} />
+            <span>Dashboard</span>
           </Link>
 
           <Link
             href="/schedule"
             className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-150 sidebar-item",
-              pathname.startsWith("/schedule")
-                ? "bg-[var(--surface-raised)] text-[var(--text)] border-l-2 border-[var(--color-purple)]"
-                : "text-[var(--text)] hover:bg-[var(--surface-raised)]"
+              "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
+              pathname === "/schedule"
+                ? "bg-[var(--color-purple-soft)] text-[var(--text)] glow-purple"
+                : "text-[var(--text-muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--text)]"
             )}
-            aria-current={pathname.startsWith("/schedule") ? "page" : undefined}
           >
-            <CalendarClock className="w-4.5 h-4.5 text-[var(--color-purple)] flex-shrink-0" />
-            <span className="flex-1 truncate">Schedule</span>
+            <CalendarClock className={cn("w-4 h-4", pathname === "/schedule" && "text-[var(--color-purple)]")} />
+            <span>Schedule</span>
           </Link>
 
           <Link
             href="/templates"
             className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-150 sidebar-item",
-              pathname.startsWith("/templates")
-                ? "bg-[var(--surface-raised)] text-[var(--text)] border-l-2 border-[var(--color-purple)]"
-                : "text-[var(--text)] hover:bg-[var(--surface-raised)]"
+              "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
+              pathname === "/templates"
+                ? "bg-[var(--color-purple-soft)] text-[var(--text)] glow-purple"
+                : "text-[var(--text-muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--text)]"
             )}
-            aria-current={pathname.startsWith("/templates") ? "page" : undefined}
           >
-            <LayoutTemplate className="w-4.5 h-4.5 text-[var(--color-purple)] flex-shrink-0" />
-            <span className="flex-1 truncate">Templates</span>
+            <LayoutTemplate className={cn("w-4 h-4", pathname === "/templates" && "text-[var(--color-purple)]")} />
+            <span>Templates</span>
           </Link>
 
-          <div className="pl-1 space-y-1">
-            <div className="flex items-center gap-2 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)]">
-              <FolderKanban className="w-3.5 h-3.5" />
-              Projects
-            </div>
-
-            {PROJECTS.map((project) => {
-              const ProjectIcon = project.icon;
-              const expanded = expandedProjects.includes(project.key);
-              return (
-                <div key={project.key} className="space-y-0.5">
-                  <button
-                    type="button"
-                    onClick={() => toggleProject(project.key)}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-raised)] transition-all duration-150"
-                    aria-expanded={expanded}
-                  >
-                    <ProjectIcon className="w-4.5 h-4.5 text-[var(--color-purple)] flex-shrink-0" />
-                    <span className="flex-1 text-left truncate">{project.label}</span>
-                    <ChevronDown
-                      className={cn(
-                        "w-4 h-4 text-[var(--text-faint)] transition-transform duration-200",
-                        expanded && "rotate-180"
-                      )}
-                    />
-                  </button>
-
-                  {expanded && (
-                    <div className="pl-3 space-y-0.5 animate-slide-down border-l border-[var(--border)] ml-4">
-                      {project.items.map((item) => {
-                        const active = isActive(item.href);
-                        const Icon = item.icon;
-                        const count = item.countKey ? counts[item.countKey] : undefined;
-                        return (
-                          <Link
-                            key={item.href}
-                            href={item.href}
-                            className={cn(
-                              "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 sidebar-item",
-                              active
-                                ? "bg-[var(--surface-raised)] text-[var(--text)] border-l-2 border-[var(--color-purple)] -ml-px"
-                                : "text-[var(--text-muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--text)]"
-                            )}
-                            aria-current={active ? "page" : undefined}
-                          >
-                            <Icon className={cn("w-4 h-4 flex-shrink-0", active && "text-[var(--color-purple)]")} />
-                            <span className="flex-1 truncate">{item.label}</span>
-                            {!!count && (
-                              <span
-                                className={cn(
-                                  "badge text-[10px] px-2 py-0.5",
-                                  active ? "badge-purple" : "badge-gray"
-                                )}
-                              >
-                                {count}
-                              </span>
-                            )}
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            <div className="px-3 py-2.5 rounded-xl bg-[var(--surface-raised)]/50 border border-[var(--border)] text-center text-xs text-[var(--text-faint)] mt-2">
-              More projects will appear here
-            </div>
+          <div className="px-2 pt-4 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] flex items-center gap-1.5">
+            <FolderKanban className="w-3 h-3" />
+            Pipelines
           </div>
+
+          {PROJECTS.map((project) => {
+            const expanded = expandedProjects.includes(project.key);
+            const ProjectIcon = project.icon;
+            return (
+              <div key={project.key} className="space-y-0.5">
+                <button
+                  onClick={() => toggleProject(project.key)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-raised)] transition-colors"
+                >
+                  <ProjectIcon className="w-4.5 h-4.5 text-[var(--color-purple)] flex-shrink-0" />
+                  <span className="flex-1 text-left truncate">{project.label}</span>
+                  <ChevronDown
+                    className={cn("w-4 h-4 text-[var(--text-faint)] transition-transform duration-150", expanded && "rotate-180")}
+                  />
+                </button>
+
+                {expanded && (
+                  <div className="pl-4 space-y-0.5">
+                    {project.items.map((item) => {
+                      const active = isActive(item.href);
+                      const Icon = item.icon;
+                      const count = item.countKey ? counts[item.countKey] : undefined;
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className={cn(
+                            "flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150",
+                            active
+                              ? "bg-[var(--color-purple-soft)] text-[var(--text)]"
+                              : "text-[var(--text-muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--text)]"
+                          )}
+                        >
+                          <Icon className={cn("w-4 h-4 flex-shrink-0", active && "text-[var(--color-purple)]")} />
+                          <span className="flex-1 truncate">{item.label}</span>
+                          {!!count && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[var(--color-purple)] text-white min-w-[18px] text-center">
+                              {count}
+                            </span>
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
-        <div className="p-3 border-t border-[var(--border)] space-y-2">
+        <div className="p-3 border-t border-[var(--border)] space-y-1">
           <button
             onClick={() => setTheme(isDark ? "light" : "dark")}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--text)] transition-all duration-150"
             aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
           >
-            {isDark ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
-            <span>{isDark ? "Dark Mode" : "Light Mode"}</span>
+            {isDark ? <Sun className="w-4 h-4 text-[var(--color-amber)]" /> : <Moon className="w-4 h-4 text-[var(--color-purple)]" />}
+            <span>{isDark ? "Light Mode" : "Dark Mode"}</span>
           </button>
 
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--color-red-soft)] hover:text-[var(--color-red)] border border-transparent hover:border-[var(--color-red)]/30 transition-all duration-150"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--color-red-soft)] hover:text-[var(--color-red)] transition-all duration-150"
           >
-            <LogOut className="w-5 h-5" />
-            <span>Logout</span>
+            <LogOut className="w-4 h-4" />
+            <span>Sign Out</span>
           </button>
         </div>
       </aside>
