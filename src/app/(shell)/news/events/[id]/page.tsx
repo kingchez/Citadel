@@ -60,6 +60,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
   const [convertRenderMode, setConvertRenderMode] = useState<"canva" | "render">("canva");
   const [converting, setConverting] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [activeSection, setActiveSection] = useState<"template" | "details">("details");
 
   const loadEvent = useCallback(() => {
     fetch(`/api/news/events/${id}`)
@@ -75,6 +76,9 @@ export default function EventDetailPage({ params }: EventDetailProps) {
           setEvent(data.event);
           setConvertVoiceover(data.event.voiceover ?? true);
           setConvertRenderMode(data.event.render_mode || "canva");
+          if (data.event.Thumbnail_GDrive_Id || data.event.Thumbnail_GDrive_Url) {
+            setActiveSection("template");
+          }
         }
       })
       .finally(() => setLoading(false));
@@ -193,6 +197,10 @@ export default function EventDetailPage({ params }: EventDetailProps) {
     new Set([...extractThumbnailCandidates(event.usablethumbnails), event.alt_thumbnail].filter((v): v is string => !!v))
   );
   const lightboxImages = Array.from(new Set([event.thumbnail, ...thumbCandidates].filter((v): v is string => !!v)));
+  const hasCanvaDesign = Boolean(event.Thumbnail_GDrive_Id || event.Thumbnail_GDrive_Url);
+  const canvaPreviewSrc = event.Thumbnail_GDrive_Id
+    ? `/api/drive/${encodeURIComponent(event.Thumbnail_GDrive_Id)}`
+    : event.Thumbnail_GDrive_Url || "";
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
@@ -224,6 +232,71 @@ export default function EventDetailPage({ params }: EventDetailProps) {
         )}
       </div>
 
+      {(hasCanvaDesign || event.status === "final_review") && (
+        <div className="flex items-center gap-1 p-1.5 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-fit max-w-full">
+          <button
+            type="button"
+            onClick={() => setActiveSection("template")}
+            className={`tab flex items-center gap-2 ${activeSection === "template" ? "tab-active" : ""}`}
+          >
+            Canva Template
+            {event.canva_design_version ? (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeSection === "template" ? "bg-white/20 text-white" : "bg-[var(--border)] text-[var(--text-faint)]"}`}>
+                v{event.canva_design_version}
+              </span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSection("details")}
+            className={`tab ${activeSection === "details" ? "tab-active" : ""}`}
+          >
+            Article &amp; Details
+          </button>
+        </div>
+      )}
+
+      {activeSection === "template" && (
+        <div className="card p-4 sm:p-6 space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="badge badge-cyan">{EVENT_STATUS_LABELS[event.status]}</span>
+              <h2 className="text-base font-semibold text-[var(--text)]">
+                Canva Design {event.canva_design_version ? `(v${event.canva_design_version})` : ""}
+              </h2>
+            </div>
+            {event.canva_template_key && (
+              <span className="text-xs font-mono text-[var(--text-faint)] bg-[var(--surface-raised)] px-2 py-0.5 rounded border border-[var(--border)]">
+                {event.canva_template_key}
+              </span>
+            )}
+          </div>
+
+          {event.social_headline && (
+            <p className="text-sm text-[var(--text-muted)]">{event.social_headline}</p>
+          )}
+
+          {hasCanvaDesign ? (
+            <div className="rounded-xl overflow-hidden border border-[var(--border)] bg-black/20 max-w-lg">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={canvaPreviewSrc}
+                alt="Generated Canva Design"
+                className="w-full h-auto object-contain"
+              />
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-[var(--border)] p-8 text-center text-sm text-[var(--text-faint)]">
+              {event.post_format === "video"
+                ? "This is a video event — no Canva template design is generated for video posts."
+                : "No Canva design has been generated for this event yet."}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeSection === "details" && (
+      <>
       <div className="card p-4 sm:p-6 space-y-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex-1 min-w-0">
@@ -424,27 +497,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
         </div>
       </div>
 
-      {event.Thumbnail_GDrive_Url && (
-        <div className="card p-5 space-y-3">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <h2 className="text-sm font-semibold text-[var(--text)]">
-              Canva Design {event.canva_design_version ? `(v${event.canva_design_version})` : ""}
-            </h2>
-            {event.canva_template_key && (
-              <span className="text-xs font-mono text-[var(--text-faint)] bg-[var(--surface-raised)] px-2 py-0.5 rounded border border-[var(--border)]">
-                {event.canva_template_key}
-              </span>
-            )}
-          </div>
-          <div className="rounded-xl overflow-hidden border border-[var(--border)] bg-black/20 max-w-md">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={event.Thumbnail_GDrive_Url}
-              alt="Generated Canva Design"
-              className="w-full h-auto object-contain"
-            />
-          </div>
-        </div>
+      </>
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-3 [&>*]:flex-1 sm:[&>*]:flex-none [&>*]:justify-center">
