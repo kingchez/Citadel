@@ -2,27 +2,44 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { cleanTemplateInput, makeTemplateKey } from "@/lib/news-templates";
 
-/** Every template (video and social) plus the category choices for the form dropdown. */
+/** Every template (video and social) plus the channel choices for the form. */
 export async function GET() {
   try {
     const supabase = getSupabaseAdmin();
-    const [templates, categories] = await Promise.all([
+    const [templates, voices] = await Promise.all([
       supabase.from("canva_templates").select("*").order("purpose").order("role").order("label"),
-      supabase.from("categories").select("name"),
+      supabase.from("voices").select("channel").order("channel"),
     ]);
 
     if (templates.error) {
       return NextResponse.json({ error: templates.error.message }, { status: 500 });
     }
 
-    // "All" first, then the pipeline's categories, then any category already used on a template
-    const names = new Set<string>();
-    for (const c of categories.data || []) if (c.name) names.add(c.name as string);
-    for (const t of templates.data || []) if (t.category && t.category !== "All") names.add(t.category as string);
+    // "All" and "News" first, then the pipeline's channels, then any channel already used on a template
+    const names = new Set<string>(["News"]);
+    for (const v of voices.data || []) {
+      const ch = typeof v.channel === "string" ? v.channel.trim() : "";
+      if (ch && ch.toUpperCase() !== "NULL" && ch !== "All") names.add(ch);
+    }
+    for (const t of templates.data || []) {
+      const chs = Array.isArray(t.channel) ? t.channel : typeof t.channel === "string" ? [t.channel] : [];
+      for (const ch of chs) {
+        if (typeof ch === "string" && ch.trim() && ch.trim() !== "All") {
+          names.add(ch.trim());
+        }
+      }
+    }
+
+    const sorted = Array.from(names).sort((a, b) => {
+      if (a === "News") return -1;
+      if (b === "News") return 1;
+      return a.localeCompare(b);
+    });
+    const channels = ["All", ...sorted];
 
     return NextResponse.json({
       templates: templates.data,
-      categories: ["All", ...Array.from(names).sort((a, b) => a.localeCompare(b))],
+      channels,
     });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
