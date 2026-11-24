@@ -6,7 +6,7 @@ export interface TemplateInput {
   label: string;
   purpose: TemplatePurpose;
   role: TemplateRole;
-  category: string;
+  channel: string[];
   brand_template_id: string;
   slots: TemplateSlot[];
   labels: TemplateLabel[];
@@ -52,7 +52,25 @@ export function cleanTemplateInput(body: unknown): TemplateInput | string {
     return "Choose scene, intro or outro for a video template.";
   }
 
-  const category = typeof b.category === "string" && b.category.trim() ? b.category.trim() : "All";
+  let channel: string[] = [];
+  if (Array.isArray(b.channel)) {
+    channel = Array.from(
+      new Set(
+        b.channel
+          .map((x: unknown) => (typeof x === "string" ? x.trim() : ""))
+          .filter(Boolean)
+      )
+    );
+  } else if (typeof b.channel === "string" && b.channel.trim()) {
+    channel = [b.channel.trim()];
+  } else if (typeof b.category === "string" && b.category.trim()) {
+    channel = [b.category.trim()];
+  }
+  if (channel.length === 0) channel = ["All"];
+  if (channel.includes("All") && channel.length > 1) {
+    channel = ["All"];
+  }
+
   const brand = typeof b.brand_template_id === "string" ? b.brand_template_id.trim() : "";
   const active = b.active === true;
   if (active && !brand) return "Add the Canva template ID before turning the template on.";
@@ -121,5 +139,5 @@ export function cleanTemplateInput(body: unknown): TemplateInput | string {
 
   const notes = typeof b.notes === "string" && b.notes.trim() ? b.notes.trim() : null;
 
-  return { label, purpose, role, category, brand_template_id: brand, slots, labels, duration_seconds: duration, media_width: width, media_height: height, active, notes };
+  return { label, purpose, role, channel, brand_template_id: brand, slots, labels, duration_seconds: duration, media_width: width, media_height: height, active, notes };
 }
