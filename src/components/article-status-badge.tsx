@@ -8,9 +8,12 @@ import {
   Search,
   ClipboardCheck,
   MessageSquareWarning,
+  Sparkles,
+  Eye,
   CheckCircle2,
   Send,
   Globe,
+  Clock,
   Archive,
 } from "lucide-react";
 
@@ -19,9 +22,12 @@ const statusIcons: Record<ArticleStatus, React.ElementType> = {
   researching: Search,
   review_ready: ClipboardCheck,
   revision_requested: MessageSquareWarning,
+  canva_ready: Sparkles,
+  final_review: Eye,
   approved: CheckCircle2,
   publishing: Send,
   published: Globe,
+  scheduled: Clock,
   archived: Archive,
 };
 
