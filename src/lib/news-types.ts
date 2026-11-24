@@ -342,8 +342,8 @@ export interface CanvaTemplate {
   label: string;
   purpose: TemplatePurpose;
   role: TemplateRole;
-  /** "All" or one category. */
-  category: string;
+  /** ["All"], ["News"], or one/more channel names this template serves. */
+  channel: string[];
   brand_template_id: string;
   slots: TemplateSlot[];
   labels: TemplateLabel[];
