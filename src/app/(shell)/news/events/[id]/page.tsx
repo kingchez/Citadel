@@ -519,7 +519,11 @@ export default function EventDetailPage({ params }: EventDetailProps) {
 
         {(event.status === "article_ready" || event.status === "processing") && (
           <span className="inline-flex items-center gap-2 py-2.5 px-5 rounded-xl bg-[var(--color-amber-soft)] border border-[var(--color-amber)]/40 text-sm font-semibold text-[var(--color-amber)]">
-            <Loader2 className="w-4 h-4 animate-spin" />
+            {event.status === "processing" ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Clock className="w-4 h-4" />
+            )}
             {event.status === "processing" ? "Generating Canva Design..." : "Queued for Canva Redo"}
           </span>
         )}
