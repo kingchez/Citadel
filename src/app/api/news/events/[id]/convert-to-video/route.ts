@@ -15,7 +15,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const { id } = await params;
     const body = await request.json().catch(() => ({}));
-    const channel: string = body?.channel || "The Daily Signal";
+    const channel: string = body?.channel || "Viral Notes";
     const videoType: string = body?.video_type || "vertical-shorts";
 
     const supabase = getSupabaseAdmin();
