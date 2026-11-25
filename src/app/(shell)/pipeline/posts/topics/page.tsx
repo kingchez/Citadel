@@ -17,7 +17,7 @@ import type { ContentTopicRow } from "@/lib/article-types";
 
 const CHANNELS = [
   "Viral Shop",
-  "The Daily Signal",
+  "Viral Notes",
   "Capital Code",
   "Pure Pulse",
   "Insight Within",
