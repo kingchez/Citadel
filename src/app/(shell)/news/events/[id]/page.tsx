@@ -34,7 +34,7 @@ function formatBadgeText(event: NewsEvent): string {
 }
 
 const CHANNELS = [
-  "Pure Pulse", "Capital Code", "Insight Within", "Reel Talk", "The Daily Signal", "Curious Atlas",
+  "Pure Pulse", "Capital Code", "Insight Within", "Reel Talk", "Viral Notes", "Curious Atlas",
   "Taste the World", "Wild & Whiskered", "Game Point", "Full Throttle", "Viral Shop", "Flow Nation",
 ];
 
@@ -54,7 +54,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [customThumbUrl, setCustomThumbUrl] = useState("");
   const [showConvert, setShowConvert] = useState(false);
-  const [convertChannel, setConvertChannel] = useState("The Daily Signal");
+  const [convertChannel, setConvertChannel] = useState("Viral Notes");
   const [convertType, setConvertType] = useState<"vertical-shorts" | "horizontal-long">("vertical-shorts");
   const [convertVoiceover, setConvertVoiceover] = useState(true);
   const [convertRenderMode, setConvertRenderMode] = useState<"canva" | "render">("canva");
