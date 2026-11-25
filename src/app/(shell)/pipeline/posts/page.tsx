@@ -29,7 +29,7 @@ const TABS = [
 const CHANNELS = [
   "All Channels",
   "Viral Shop",
-  "The Daily Signal",
+  "Viral Notes",
   "Capital Code",
   "Pure Pulse",
   "Insight Within",
