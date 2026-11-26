@@ -131,6 +131,7 @@ function EventsContent() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [alertError, setAlertError] = useState<string | null>(null);
+  const [dismissedErrorAt, setDismissedErrorAt] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const setActiveTab = (tab: string) => {
@@ -183,10 +184,16 @@ function EventsContent() {
     [readyBatchId, highlightReels]
   );
 
+  const isStaleProcessing = useMemo(() => {
+    if (activeReel?.status !== "processing" || !activeReel.updated_at) return false;
+    return Date.now() - new Date(activeReel.updated_at).getTime() > 4 * 60 * 1000;
+  }, [activeReel]);
+
   const triggerHighlightReel = async () => {
     if (!readyBatchId || submitting) return;
     setSubmitting(true);
     setAlertError(null);
+    setDismissedErrorAt(null);
     setPreviewOpen(false);
     try {
       const res = await fetch("/api/news/events/highlight", {
@@ -222,9 +229,17 @@ function EventsContent() {
     }
   };
 
-  const isProcessing = submitting || activeReel?.status === "processing";
+  const isProcessing = submitting || (activeReel?.status === "processing" && !isStaleProcessing);
   const isVideoReady = activeReel?.status === "ready" && Boolean(activeReel.drive_file_id);
   const isApproved = activeReel?.status === "approved";
+
+  const visibleError =
+    alertError ||
+    (activeReel?.status === "failed" && dismissedErrorAt !== activeReel.updated_at
+      ? activeReel.error_message || "Highlight reel generation failed."
+      : isStaleProcessing && dismissedErrorAt !== activeReel?.updated_at
+      ? "Highlight reel timed out while rendering. Click Generate Highlight Reel to retry."
+      : null);
 
   const handleButtonClick = () => {
     if (!readyBatchId || isProcessing) return;
@@ -311,15 +326,18 @@ function EventsContent() {
         </button>
       </div>
 
-      {(alertError || activeReel?.status === "failed") && (
+      {visibleError && (
         <div className="flex items-start justify-between gap-3 p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs sm:text-sm">
           <div className="flex items-start gap-2.5">
             <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-            <span>{alertError || activeReel?.error_message || "Highlight reel generation failed."}</span>
+            <span>{visibleError}</span>
           </div>
           <button
             type="button"
-            onClick={() => setAlertError(null)}
+            onClick={() => {
+              setAlertError(null);
+              if (activeReel?.updated_at) setDismissedErrorAt(activeReel.updated_at);
+            }}
             className="text-red-400 hover:text-red-200"
             aria-label="Dismiss alert"
           >
