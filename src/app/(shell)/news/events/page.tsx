@@ -8,7 +8,7 @@ import { EVENT_STATUS_LABELS, EVENT_STATUS_COLORS } from "@/lib/news-types";
 import { formatTimeAgo } from "@/lib/utils";
 import { saveQueue } from "@/lib/news-queue-cache";
 import { useAutoRefresh } from "@/lib/use-auto-refresh";
-import { Search, ChevronRight, Clock, Video, Newspaper, TrendingUp } from "lucide-react";
+import { Search, ChevronRight, Clock, Video, Newspaper, TrendingUp, Film, Loader2, Check } from "lucide-react";
 
 const TABS = [
   { key: "all", label: "All" },
@@ -104,6 +104,8 @@ function EventsContent() {
   const [search, setSearch] = useState("");
   const [events, setEvents] = useState<NewsEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [highlightState, setHighlightState] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [highlightMsg, setHighlightMsg] = useState<string>("");
 
   const setActiveTab = (tab: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -130,6 +132,48 @@ function EventsContent() {
   }, [load]);
 
   useAutoRefresh(load, 10000);
+
+  const { readyBatchId, maxStaticCount } = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const e of events) {
+      if (e.batch_id && e.status === "scheduled" && e.post_format === "static") {
+        counts.set(e.batch_id, (counts.get(e.batch_id) || 0) + 1);
+      }
+    }
+    let foundBatch: string | null = null;
+    let maxCount = 0;
+    for (const [batchId, count] of counts.entries()) {
+      if (count > maxCount) maxCount = count;
+      if (!foundBatch && count >= 8) {
+        foundBatch = batchId;
+      }
+    }
+    return { readyBatchId: foundBatch, maxStaticCount: maxCount };
+  }, [events]);
+
+  const triggerHighlightReel = async () => {
+    if (!readyBatchId || highlightState === "running") return;
+    setHighlightState("running");
+    setHighlightMsg("");
+    try {
+      const res = await fetch("/api/news/events/highlight", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batch_id: readyBatchId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "Failed to trigger highlight reel");
+      }
+      setHighlightState("done");
+      setHighlightMsg(`Triggered for ${readyBatchId}`);
+      setTimeout(() => setHighlightState("idle"), 5000);
+    } catch (err) {
+      setHighlightState("error");
+      setHighlightMsg(err instanceof Error ? err.message : "Failed");
+      setTimeout(() => setHighlightState("idle"), 5000);
+    }
+  };
 
   const filtered = useMemo(() => {
     let list = events.filter((e) => matchesView(e, activeTab));
@@ -158,12 +202,56 @@ function EventsContent() {
 
   return (
     <div className="p-4 sm:p-6 space-y-5 max-w-6xl mx-auto">
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-[var(--text)] flex items-center gap-3">
-          <Newspaper className="w-7 h-7 text-[var(--color-cyan)]" />
-          News Events
-        </h1>
-        <p className="mt-1 text-sm text-[var(--text-faint)]">{events.length} total events</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-[var(--text)] flex items-center gap-3">
+            <Newspaper className="w-7 h-7 text-[var(--color-cyan)]" />
+            News Events
+          </h1>
+          <p className="mt-1 text-sm text-[var(--text-faint)]">{events.length} total events</p>
+        </div>
+
+        <div className="flex flex-col items-start sm:items-end gap-1">
+          <button
+            type="button"
+            disabled={!readyBatchId || highlightState === "running"}
+            onClick={triggerHighlightReel}
+            title={
+              readyBatchId
+                ? `Generate 9-slide News Highlight Reel for batch ${readyBatchId}`
+                : `Requires 8 scheduled static events in the same batch (${maxStaticCount}/8 ready)`
+            }
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 border ${
+              readyBatchId
+                ? "bg-[var(--color-purple)] hover:opacity-90 text-white border-transparent shadow-sm cursor-pointer"
+                : "bg-[var(--surface)] text-[var(--text-faint)] border-[var(--border)] opacity-50 cursor-not-allowed"
+            }`}
+          >
+            {highlightState === "running" ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : highlightState === "done" ? (
+              <Check className="w-4 h-4" />
+            ) : (
+              <Film className="w-4 h-4" />
+            )}
+            {highlightState === "running"
+              ? "Generating Highlight..."
+              : highlightState === "done"
+              ? "Highlight Reel Started"
+              : readyBatchId
+              ? "Generate Highlight Reel"
+              : `Highlight Reel (${maxStaticCount}/8)`}
+          </button>
+          {highlightMsg && (
+            <span
+              className={`text-[11px] ${
+                highlightState === "error" ? "text-red-400" : "text-[var(--color-green)]"
+              }`}
+            >
+              {highlightMsg}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center gap-1 p-1.5 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-fit max-w-full scroll-x">
