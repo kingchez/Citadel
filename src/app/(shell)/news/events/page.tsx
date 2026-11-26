@@ -8,7 +8,31 @@ import { EVENT_STATUS_LABELS, EVENT_STATUS_COLORS } from "@/lib/news-types";
 import { formatTimeAgo } from "@/lib/utils";
 import { saveQueue } from "@/lib/news-queue-cache";
 import { useAutoRefresh } from "@/lib/use-auto-refresh";
-import { Search, ChevronRight, Clock, Video, Newspaper, TrendingUp, Film, Loader2, Check } from "lucide-react";
+import {
+  Search,
+  ChevronRight,
+  Clock,
+  Video,
+  Newspaper,
+  TrendingUp,
+  Film,
+  Loader2,
+  Check,
+  AlertTriangle,
+  Play,
+  RotateCcw,
+  X,
+  ExternalLink,
+} from "lucide-react";
+
+interface HighlightReel {
+  batch_id: string;
+  status: "processing" | "ready" | "approved" | "failed";
+  drive_file_id: string | null;
+  drive_url: string | null;
+  error_message: string | null;
+  updated_at: string;
+}
 
 const TABS = [
   { key: "all", label: "All" },
@@ -103,9 +127,11 @@ function EventsContent() {
   const activeTab = searchParams.get("view") || "all";
   const [search, setSearch] = useState("");
   const [events, setEvents] = useState<NewsEvent[]>([]);
+  const [highlightReels, setHighlightReels] = useState<HighlightReel[]>([]);
   const [loading, setLoading] = useState(true);
-  const [highlightState, setHighlightState] = useState<"idle" | "running" | "done" | "error">("idle");
-  const [highlightMsg, setHighlightMsg] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
+  const [alertError, setAlertError] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const setActiveTab = (tab: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -118,9 +144,10 @@ function EventsContent() {
   const load = useCallback(() => {
     fetch("/api/news/events")
       .then((r) => r.json())
-      .then((data: { events?: NewsEvent[] }) => {
+      .then((data: { events?: NewsEvent[]; highlightReels?: HighlightReel[] }) => {
         const list = data.events || [];
         setEvents(list);
+        setHighlightReels(data.highlightReels || []);
         saveQueue(list.map((e) => ({ id: e.id, social_headline: e.social_headline, event_title: e.event_title })));
       })
       .catch(() => {})
@@ -151,28 +178,61 @@ function EventsContent() {
     return { readyBatchId: foundBatch, maxStaticCount: maxCount };
   }, [events]);
 
+  const activeReel = useMemo(
+    () => (readyBatchId ? highlightReels.find((r) => r.batch_id === readyBatchId) || null : null),
+    [readyBatchId, highlightReels]
+  );
+
   const triggerHighlightReel = async () => {
-    if (!readyBatchId || highlightState === "running") return;
-    setHighlightState("running");
-    setHighlightMsg("");
+    if (!readyBatchId || submitting) return;
+    setSubmitting(true);
+    setAlertError(null);
+    setPreviewOpen(false);
     try {
       const res = await fetch("/api/news/events/highlight", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ batch_id: readyBatchId }),
+        body: JSON.stringify({ batch_id: readyBatchId, action: "trigger" }),
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) {
         throw new Error(data.error || "Failed to trigger highlight reel");
       }
-      setHighlightState("done");
-      setHighlightMsg(`Triggered for ${readyBatchId}`);
-      setTimeout(() => setHighlightState("idle"), 5000);
+      load();
     } catch (err) {
-      setHighlightState("error");
-      setHighlightMsg(err instanceof Error ? err.message : "Failed");
-      setTimeout(() => setHighlightState("idle"), 5000);
+      setAlertError(err instanceof Error ? err.message : "Highlight reel failed");
+    } finally {
+      setSubmitting(false);
     }
+  };
+
+  const approveHighlightReel = async () => {
+    if (!readyBatchId || submitting) return;
+    setSubmitting(true);
+    try {
+      await fetch("/api/news/events/highlight", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batch_id: readyBatchId, action: "approve" }),
+      });
+      setPreviewOpen(false);
+      load();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const isProcessing = submitting || activeReel?.status === "processing";
+  const isVideoReady = activeReel?.status === "ready" && Boolean(activeReel.drive_file_id);
+  const isApproved = activeReel?.status === "approved";
+
+  const handleButtonClick = () => {
+    if (!readyBatchId || isProcessing) return;
+    if (isVideoReady) {
+      setPreviewOpen(true);
+      return;
+    }
+    triggerHighlightReel();
   };
 
   const filtered = useMemo(() => {
@@ -211,48 +271,62 @@ function EventsContent() {
           <p className="mt-1 text-sm text-[var(--text-faint)]">{events.length} total events</p>
         </div>
 
-        <div className="flex flex-col items-start sm:items-end gap-1">
+        <button
+          type="button"
+          disabled={!readyBatchId || isProcessing}
+          onClick={handleButtonClick}
+          title={
+            !readyBatchId
+              ? `Requires 8 scheduled static events in the same batch (${maxStaticCount}/8 ready)`
+              : isVideoReady
+              ? "Click to preview the generated News Highlight Reel"
+              : `Generate 9-slide News Highlight Reel for batch ${readyBatchId}`
+          }
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 border ${
+            isVideoReady
+              ? "bg-[var(--color-green)] hover:opacity-90 text-black border-transparent shadow-sm cursor-pointer"
+              : readyBatchId && !isProcessing
+              ? "bg-[var(--color-purple)] hover:opacity-90 text-white border-transparent shadow-sm cursor-pointer"
+              : "bg-[var(--surface)] text-[var(--text-faint)] border-[var(--border)] opacity-60 cursor-not-allowed"
+          }`}
+        >
+          {isProcessing ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : isVideoReady ? (
+            <Play className="w-4 h-4 fill-current" />
+          ) : isApproved ? (
+            <Check className="w-4 h-4" />
+          ) : (
+            <Film className="w-4 h-4" />
+          )}
+          {isProcessing
+            ? "Rendering Highlight..."
+            : isVideoReady
+            ? "Highlight Reel Ready · Preview"
+            : isApproved
+            ? "Highlight Approved (Regenerate)"
+            : readyBatchId
+            ? "Generate Highlight Reel"
+            : `Highlight Reel (${maxStaticCount}/8)`}
+        </button>
+      </div>
+
+      {(alertError || activeReel?.status === "failed") && (
+        <div className="flex items-start justify-between gap-3 p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs sm:text-sm">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+            <span>{alertError || activeReel?.error_message || "Highlight reel generation failed."}</span>
+          </div>
           <button
             type="button"
-            disabled={!readyBatchId || highlightState === "running"}
-            onClick={triggerHighlightReel}
-            title={
-              readyBatchId
-                ? `Generate 9-slide News Highlight Reel for batch ${readyBatchId}`
-                : `Requires 8 scheduled static events in the same batch (${maxStaticCount}/8 ready)`
-            }
-            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 border ${
-              readyBatchId
-                ? "bg-[var(--color-purple)] hover:opacity-90 text-white border-transparent shadow-sm cursor-pointer"
-                : "bg-[var(--surface)] text-[var(--text-faint)] border-[var(--border)] opacity-50 cursor-not-allowed"
-            }`}
+            onClick={() => setAlertError(null)}
+            className="text-red-400 hover:text-red-200"
+            aria-label="Dismiss alert"
           >
-            {highlightState === "running" ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : highlightState === "done" ? (
-              <Check className="w-4 h-4" />
-            ) : (
-              <Film className="w-4 h-4" />
-            )}
-            {highlightState === "running"
-              ? "Generating Highlight..."
-              : highlightState === "done"
-              ? "Highlight Reel Started"
-              : readyBatchId
-              ? "Generate Highlight Reel"
-              : `Highlight Reel (${maxStaticCount}/8)`}
+            <X className="w-4 h-4" />
           </button>
-          {highlightMsg && (
-            <span
-              className={`text-[11px] ${
-                highlightState === "error" ? "text-red-400" : "text-[var(--color-green)]"
-              }`}
-            >
-              {highlightMsg}
-            </span>
-          )}
         </div>
-      </div>
+      )}
 
       <div className="flex items-center gap-1 p-1.5 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-fit max-w-full scroll-x">
         {TABS.map((tab) => {
@@ -303,6 +377,73 @@ function EventsContent() {
           filtered.map((event) => <EventRow key={event.id} event={event} />)
         )}
       </div>
+
+      {previewOpen && activeReel?.drive_file_id && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl bg-[var(--surface)] border border-[var(--border-strong)] shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--border)]">
+              <div>
+                <h2 className="text-sm font-bold text-[var(--text)]">News Highlight Reel Preview</h2>
+                <p className="text-[11px] text-[var(--text-faint)] font-mono">{activeReel.batch_id}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewOpen(false)}
+                className="p-1.5 rounded-lg text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-raised)]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-black flex justify-center">
+              <video
+                src={`/api/drive/${activeReel.drive_file_id}`}
+                controls
+                autoPlay
+                playsInline
+                className="w-full max-h-[65vh] rounded-xl"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-t border-[var(--border)] bg-[var(--surface-raised)]">
+              {activeReel.drive_url ? (
+                <a
+                  href={activeReel.drive_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-[var(--text-faint)] hover:text-[var(--text)]"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Open in Drive
+                </a>
+              ) : (
+                <span />
+              )}
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={triggerHighlightReel}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border border-[var(--border-strong)] text-[var(--text)] hover:bg-[var(--surface)] cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Redo
+                </button>
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={approveHighlightReel}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-[var(--color-green)] text-black hover:opacity-90 cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  Keep It
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
