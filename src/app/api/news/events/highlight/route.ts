@@ -5,18 +5,34 @@ const HIGHLIGHT_WEBHOOK_URL =
   process.env.N8N_NEWS_HIGHLIGHT_WEBHOOK_URL ||
   "https://n8n.viralnotely.com/webhook/news-highlight-video";
 
-/** Triggers the on-demand n8n News Highlight Reel workflow for a batch_id
- * once at least 8 scheduled static events exist in that batch. */
+/** Triggers or approves the on-demand News Highlight Reel for a batch_id.
+ * Surfaces Drive health-check errors or workflow errors immediately. */
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json().catch(() => ({}))) as { batch_id?: string };
+    const body = (await req.json().catch(() => ({}))) as {
+      batch_id?: string;
+      action?: "trigger" | "approve";
+    };
     const batchId = body.batch_id?.trim();
+    const action = body.action || "trigger";
 
     if (!batchId) {
       return NextResponse.json({ error: "batch_id is required" }, { status: 400 });
     }
 
     const supabase = getSupabaseAdmin();
+
+    if (action === "approve") {
+      const { error } = await supabase
+        .from("news_highlight_reels")
+        .update({ status: "approved", updated_at: new Date().toISOString() })
+        .eq("batch_id", batchId);
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      return NextResponse.json({ ok: true, status: "approved", batch_id: batchId });
+    }
+
     const { count, error } = await supabase
       .from("events")
       .select("id", { count: "exact", head: true })
@@ -41,15 +57,28 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({ batch_id: batchId }),
     });
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
+    const payload = (await res.json().catch(() => null)) as {
+      ok?: boolean;
+      error?: string;
+      needsDriveReconnect?: boolean;
+      status?: string;
+    } | null;
+
+    if (!res.ok || payload?.ok === false) {
       return NextResponse.json(
-        { error: `n8n webhook error (${res.status}): ${text || res.statusText}` },
-        { status: 502 }
+        {
+          error: payload?.error || `n8n webhook error (${res.status})`,
+          needsDriveReconnect: Boolean(payload?.needsDriveReconnect),
+        },
+        { status: res.status >= 400 ? res.status : 502 }
       );
     }
 
-    return NextResponse.json({ ok: true, batch_id: batchId });
+    return NextResponse.json({
+      ok: true,
+      status: payload?.status || "processing",
+      batch_id: batchId,
+    });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Unknown error" },
