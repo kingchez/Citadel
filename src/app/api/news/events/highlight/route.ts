@@ -6,7 +6,8 @@ const HIGHLIGHT_WEBHOOK_URL =
   "https://n8n.viralnotely.com/webhook/news-highlight-video";
 
 /** Triggers or approves the on-demand News Highlight Reel for a batch_id.
- * Surfaces Drive health-check errors or workflow errors immediately. */
+ * On trigger/redo, resets batch_highlight_done = false on the batch's events
+ * and surfaces Drive/workflow errors immediately. */
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json().catch(() => ({}))) as {
@@ -51,6 +52,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Reset batch_highlight_done = false so Redo / re-runs can process the batch
+    const { error: resetErr } = await supabase
+      .from("events")
+      .update({ batch_highlight_done: false })
+      .eq("batch_id", batchId)
+      .eq("status", "scheduled")
+      .eq("post_format", "static");
+
+    if (resetErr) {
+      return NextResponse.json({ error: resetErr.message }, { status: 500 });
+    }
+
     const res = await fetch(HIGHLIGHT_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -65,9 +78,22 @@ export async function POST(req: NextRequest) {
     } | null;
 
     if (!res.ok || payload?.ok === false) {
+      const errMsg = payload?.error || `n8n webhook error (${res.status})`;
+      await supabase
+        .from("news_highlight_reels")
+        .upsert(
+          {
+            batch_id: batchId,
+            status: "failed",
+            error_message: errMsg,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "batch_id" }
+        );
+
       return NextResponse.json(
         {
-          error: payload?.error || `n8n webhook error (${res.status})`,
+          error: errMsg,
           needsDriveReconnect: Boolean(payload?.needsDriveReconnect),
         },
         { status: res.status >= 400 ? res.status : 502 }
