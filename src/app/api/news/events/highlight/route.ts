@@ -6,8 +6,10 @@ const HIGHLIGHT_WEBHOOK_URL =
   "https://n8n.viralnotely.com/webhook/news-highlight-video";
 
 /** Triggers or approves the on-demand News Highlight Reel for a batch_id.
- * On trigger/redo, resets batch_highlight_done = false on the batch's events
- * and surfaces Drive/workflow errors immediately. */
+ * On trigger/redo:
+ * 1. Registers any previous Drive video in media_to_delete for future cleanup.
+ * 2. Resets batch_highlight_done = false on the batch's events.
+ * 3. Calls the n8n webhook and surfaces Drive/workflow errors immediately. */
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json().catch(() => ({}))) as {
@@ -50,6 +52,22 @@ export async function POST(req: NextRequest) {
         { error: `Batch ${batchId} has ${count ?? 0}/8 scheduled static events` },
         { status: 400 }
       );
+    }
+
+    // If a previous Drive video exists for this batch (Redo), queue it in media_to_delete
+    const { data: existingReel } = await supabase
+      .from("news_highlight_reels")
+      .select("drive_file_id")
+      .eq("batch_id", batchId)
+      .maybeSingle();
+
+    if (existingReel?.drive_file_id) {
+      await supabase.from("media_to_delete").insert({
+        video_id: null,
+        storage: "drive",
+        file_ref: existingReel.drive_file_id,
+        reason: "highlight_redo",
+      });
     }
 
     // Reset batch_highlight_done = false so Redo / re-runs can process the batch
