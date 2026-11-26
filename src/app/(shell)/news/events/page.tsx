@@ -128,6 +128,7 @@ function EventsContent() {
   const [search, setSearch] = useState("");
   const [events, setEvents] = useState<NewsEvent[]>([]);
   const [highlightReels, setHighlightReels] = useState<HighlightReel[]>([]);
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [alertError, setAlertError] = useState<string | null>(null);
@@ -161,23 +162,37 @@ function EventsContent() {
 
   useAutoRefresh(load, 10000);
 
-  const { readyBatchId, maxStaticCount } = useMemo(() => {
+  const { readyBatches, maxStaticCount } = useMemo(() => {
     const counts = new Map<string, number>();
     for (const e of events) {
       if (e.batch_id && e.status === "scheduled" && e.post_format === "static") {
         counts.set(e.batch_id, (counts.get(e.batch_id) || 0) + 1);
       }
     }
-    let foundBatch: string | null = null;
+    const eligible: string[] = [];
     let maxCount = 0;
     for (const [batchId, count] of counts.entries()) {
       if (count > maxCount) maxCount = count;
-      if (!foundBatch && count >= 8) {
-        foundBatch = batchId;
+      if (count >= 8) {
+        eligible.push(batchId);
       }
     }
-    return { readyBatchId: foundBatch, maxStaticCount: maxCount };
-  }, [events]);
+    // Sort unapproved batches first so approved batches automatically yield the queue
+    const reelMap = new Map(highlightReels.map((r) => [r.batch_id, r]));
+    eligible.sort((a, b) => {
+      const aApproved = reelMap.get(a)?.status === "approved" ? 1 : 0;
+      const bApproved = reelMap.get(b)?.status === "approved" ? 1 : 0;
+      return aApproved - bApproved;
+    });
+    return { readyBatches: eligible, maxStaticCount: maxCount };
+  }, [events, highlightReels]);
+
+  const readyBatchId = useMemo(() => {
+    if (selectedBatchId && readyBatches.includes(selectedBatchId)) {
+      return selectedBatchId;
+    }
+    return readyBatches[0] || null;
+  }, [selectedBatchId, readyBatches]);
 
   const activeReel = useMemo(
     () => (readyBatchId ? highlightReels.find((r) => r.batch_id === readyBatchId) || null : null),
@@ -223,6 +238,11 @@ function EventsContent() {
         body: JSON.stringify({ batch_id: readyBatchId, action: "approve" }),
       });
       setPreviewOpen(false);
+      // Advance selection to next unapproved batch if available
+      const nextUnapproved = readyBatches.find(
+        (b) => b !== readyBatchId && highlightReels.find((r) => r.batch_id === b)?.status !== "approved"
+      );
+      if (nextUnapproved) setSelectedBatchId(nextUnapproved);
       load();
     } finally {
       setSubmitting(false);
@@ -286,44 +306,64 @@ function EventsContent() {
           <p className="mt-1 text-sm text-[var(--text-faint)]">{events.length} total events</p>
         </div>
 
-        <button
-          type="button"
-          disabled={!readyBatchId || isProcessing}
-          onClick={handleButtonClick}
-          title={
-            !readyBatchId
-              ? `Requires 8 scheduled static events in the same batch (${maxStaticCount}/8 ready)`
-              : isVideoReady
-              ? "Click to preview the generated News Highlight Reel"
-              : `Generate 9-slide News Highlight Reel for batch ${readyBatchId}`
-          }
-          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 border ${
-            isVideoReady
-              ? "bg-[var(--color-green)] hover:opacity-90 text-black border-transparent shadow-sm cursor-pointer"
-              : readyBatchId && !isProcessing
-              ? "bg-[var(--color-purple)] hover:opacity-90 text-white border-transparent shadow-sm cursor-pointer"
-              : "bg-[var(--surface)] text-[var(--text-faint)] border-[var(--border)] opacity-60 cursor-not-allowed"
-          }`}
-        >
-          {isProcessing ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : isVideoReady ? (
-            <Play className="w-4 h-4 fill-current" />
-          ) : isApproved ? (
-            <Check className="w-4 h-4" />
-          ) : (
-            <Film className="w-4 h-4" />
+        <div className="flex items-center gap-2 flex-wrap">
+          {readyBatches.length > 1 && (
+            <select
+              value={readyBatchId || ""}
+              onChange={(e) => setSelectedBatchId(e.target.value)}
+              className="px-3 py-2.5 rounded-xl text-xs font-mono bg-[var(--surface)] text-[var(--text)] border border-[var(--border)] focus:outline-none"
+              aria-label="Select ready batch"
+            >
+              {readyBatches.map((b) => {
+                const st = highlightReels.find((r) => r.batch_id === b)?.status;
+                return (
+                  <option key={b} value={b}>
+                    {b} {st ? `(${st})` : "(pending)"}
+                  </option>
+                );
+              })}
+            </select>
           )}
-          {isProcessing
-            ? "Rendering Highlight..."
-            : isVideoReady
-            ? "Highlight Reel Ready · Preview"
-            : isApproved
-            ? "Highlight Approved (Regenerate)"
-            : readyBatchId
-            ? "Generate Highlight Reel"
-            : `Highlight Reel (${maxStaticCount}/8)`}
-        </button>
+
+          <button
+            type="button"
+            disabled={!readyBatchId || isProcessing}
+            onClick={handleButtonClick}
+            title={
+              !readyBatchId
+                ? `Requires 8 scheduled static events in the same batch (${maxStaticCount}/8 ready)`
+                : isVideoReady
+                ? "Click to preview the generated News Highlight Reel"
+                : `Generate 9-slide News Highlight Reel for batch ${readyBatchId}`
+            }
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 border ${
+              isVideoReady
+                ? "bg-[var(--color-green)] hover:opacity-90 text-black border-transparent shadow-sm cursor-pointer"
+                : readyBatchId && !isProcessing
+                ? "bg-[var(--color-purple)] hover:opacity-90 text-white border-transparent shadow-sm cursor-pointer"
+                : "bg-[var(--surface)] text-[var(--text-faint)] border-[var(--border)] opacity-60 cursor-not-allowed"
+            }`}
+          >
+            {isProcessing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : isVideoReady ? (
+              <Play className="w-4 h-4 fill-current" />
+            ) : isApproved ? (
+              <Check className="w-4 h-4" />
+            ) : (
+              <Film className="w-4 h-4" />
+            )}
+            {isProcessing
+              ? "Rendering Highlight..."
+              : isVideoReady
+              ? "Highlight Reel Ready · Preview"
+              : isApproved
+              ? "Highlight Approved (Regenerate)"
+              : readyBatchId
+              ? "Generate Highlight Reel"
+              : `Highlight Reel (${maxStaticCount}/8)`}
+          </button>
+        </div>
       </div>
 
       {visibleError && (
