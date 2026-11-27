@@ -21,6 +21,8 @@ import {
   Loader2,
   ExternalLink,
   Maximize2,
+  Play,
+  X,
 } from "lucide-react";
 
 interface EventDetailProps {
@@ -61,6 +63,9 @@ export default function EventDetailPage({ params }: EventDetailProps) {
   const [converting, setConverting] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [activeSection, setActiveSection] = useState<"template" | "details">("details");
+  const [showVideoOutput, setShowVideoOutput] = useState(false);
+  const [revisionNotes, setRevisionNotes] = useState("");
+  const [submittingRevision, setSubmittingRevision] = useState(false);
 
   const loadEvent = useCallback(() => {
     fetch(`/api/news/events/${id}`)
@@ -76,6 +81,7 @@ export default function EventDetailPage({ params }: EventDetailProps) {
           setEvent(data.event);
           setConvertVoiceover(data.event.voiceover ?? true);
           setConvertRenderMode(data.event.render_mode || "canva");
+          setRevisionNotes(data.event.canva_video_revision_notes || "");
           if (data.event.Thumbnail_GDrive_Id || data.event.Thumbnail_GDrive_Url) {
             setActiveSection("template");
           }
@@ -150,6 +156,20 @@ export default function EventDetailPage({ params }: EventDetailProps) {
       if (status === "article_ready") showFeedback("Queued for Canva design redo — generating new design...");
       else if (status === "reviewed") showFeedback("Marked as reviewed!");
       else if (status === "paused") showFeedback("Event paused.");
+    }
+  };
+
+  const handleSubmitRevision = async () => {
+    if (!event) return;
+    setSubmittingRevision(true);
+    const ok = await patch({
+      canva_video_revision_notes: revisionNotes.trim() || null,
+      status: "reviewed",
+    });
+    setSubmittingRevision(false);
+    if (ok) {
+      setShowVideoOutput(false);
+      showFeedback("Revision saved & queued for Canva News Video Agent.");
     }
   };
 
@@ -342,6 +362,15 @@ export default function EventDetailPage({ params }: EventDetailProps) {
               <Video className="w-4 h-4" />
               View Video
             </Link>
+          ) : event.post_format === "video" && (event.canva_video_drive_id || event.canva_video_drive_url) ? (
+            <button
+              type="button"
+              onClick={() => setShowVideoOutput(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--color-green-soft)] text-[var(--color-green)] border border-[var(--color-green)]/30 hover:bg-[var(--color-green)] hover:text-white transition-all text-sm font-semibold cursor-pointer"
+            >
+              <Play className="w-4 h-4 fill-current" />
+              View Output
+            </button>
           ) : (
             <button
               onClick={() => setShowConvert(true)}
@@ -677,6 +706,84 @@ export default function EventDetailPage({ params }: EventDetailProps) {
             </pre>
           </div>
         </details>
+      )}
+      {showVideoOutput && event && (event.canva_video_drive_id || event.canva_video_drive_url) && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-sm"
+          onClick={() => setShowVideoOutput(false)}
+        >
+          <div
+            className="card w-full max-w-md overflow-hidden border border-[var(--border-strong)] shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--border)]">
+              <div>
+                <h3 className="text-sm font-bold text-[var(--text)]">Canva News Video Output</h3>
+                <p className="text-[11px] text-[var(--text-faint)] font-mono">Event #{event.id}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowVideoOutput(false)}
+                className="p-1.5 rounded-lg text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-raised)]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {event.canva_video_drive_id && (
+              <div className="p-4 bg-black flex justify-center">
+                <video
+                  src={`/api/drive/${encodeURIComponent(event.canva_video_drive_id)}`}
+                  controls
+                  autoPlay
+                  playsInline
+                  className="w-full max-h-[55vh] rounded-xl"
+                />
+              </div>
+            )}
+
+            <div className="p-4 sm:p-5 space-y-3 bg-[var(--surface-raised)] border-t border-[var(--border)]">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                  Revision / Correction Notes (for Redo)
+                </label>
+                <textarea
+                  value={revisionNotes}
+                  onChange={(e) => setRevisionNotes(e.target.value)}
+                  rows={3}
+                  placeholder="Describe what to fix (e.g., trim scene 2, rewrite script, unmute scene 1)..."
+                  className="input-field resize-y text-sm"
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-1">
+                {event.canva_video_drive_url ? (
+                  <a
+                    href={event.canva_video_drive_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-[var(--text-faint)] hover:text-[var(--text)]"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Open in Drive
+                  </a>
+                ) : (
+                  <span />
+                )}
+
+                <button
+                  type="button"
+                  disabled={submittingRevision}
+                  onClick={handleSubmitRevision}
+                  className="btn-primary inline-flex items-center gap-1.5 py-2 px-4 text-xs font-semibold disabled:opacity-50"
+                >
+                  {submittingRevision ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                  Redo &amp; Submit Revision
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
