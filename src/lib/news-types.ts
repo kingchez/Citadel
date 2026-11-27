@@ -67,6 +67,9 @@ export interface NewsEvent {
   preferred_templates?: string[] | null;
   canva_template_key?: string | null;
   canva_design_version?: number | null;
+  canva_video_drive_id?: string | null;
+  canva_video_drive_url?: string | null;
+  canva_video_revision_notes?: string | null;
 }
 
 /** Pulls a flat array of candidate thumbnail URLs out of usablethumbnails,
